@@ -1,0 +1,26 @@
+name: foldable_scaffold
+resolution: workspace
+description: >-
+  Two-pane Scaffold for foldables, tablets and desktop: resizable divider,
+  animated pane switching, and instant pane changes while pages slide.
+version: 0.1.0
+repository: https://github.com/kunboy1608/foldable_scaffold/tree/main/packages/foldable_scaffold
+
+environment:
+  sdk: ^3.13.2
+  flutter: ">=3.47.2"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  material_ui: ^1.1.0
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+
+topics:
+  - foldable
+  - responsive
+  - layout

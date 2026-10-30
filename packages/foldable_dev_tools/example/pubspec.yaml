@@ -1,0 +1,20 @@
+name: foldable_dev_tools_example
+description: Demo of the foldable_dev_tools package.
+publish_to: none
+
+environment:
+  sdk: ^3.13.2
+  flutter: ">=3.47.2"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  foldable_dev_tools: ^0.1.0
+  foldable_router: ^0.1.0
+  foldable_scaffold: ^0.1.0
+  material_ui: ^1.1.0
+
+flutter:
+  uses-material-design: true
+
+resolution: workspace

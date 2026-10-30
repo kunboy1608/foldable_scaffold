@@ -1,0 +1,41 @@
+name: foldable_scaffold_workspace
+publish_to: none
+
+environment:
+  sdk: ^3.13.7
+
+workspace:
+  - packages/foldable_router
+  - packages/foldable_scaffold
+  - packages/foldable_dev_tools
+
+dev_dependencies:
+  melos: ^8.10.0
+
+melos:
+  repository: https://github.com/OWNER/foldable_scaffold # TODO: set real URL
+
+  scripts:
+    analyze:
+      description: Run flutter analyze in every package.
+      run: melos exec -c 5 -- flutter analyze --fatal-infos
+
+    format:
+      description: Format all Dart code.
+      run: dart format .
+
+    format:check:
+      description: Check formatting without changing files.
+      run: dart format --set-exit-if-changed .
+
+    test:
+      description: Run flutter test in packages that have a test directory.
+      run: melos exec -c 4 --dir-exists=test -- flutter test
+
+    clean:
+      description: Run flutter clean in every package.
+      run: melos exec -c 4 -- flutter clean
+
+    upgrade:
+      description: Upgrade dependencies in the workspace.
+      run: flutter pub upgrade

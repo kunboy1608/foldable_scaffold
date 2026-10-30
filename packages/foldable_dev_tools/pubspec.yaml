@@ -1,0 +1,29 @@
+name: foldable_dev_tools
+resolution: workspace
+description: >-
+  In-app dev overlay for foldable_router and foldable_scaffold: simulate
+  window sizes and hinges, inspect the pane layout, log navigation and slow
+  animations down.
+version: 0.1.0
+repository: https://github.com/kunboy1608/foldable_scaffold/tree/main/packages/foldable_dev_tools
+
+environment:
+  sdk: ^3.13.2
+  flutter: ">=3.47.2"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  foldable_router: ^0.1.0
+  foldable_scaffold: ^0.1.0
+  material_ui: ^1.1.0
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+
+topics:
+  - foldable
+  - devtools
+  - debugging
