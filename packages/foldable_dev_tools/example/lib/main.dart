@@ -1,7 +1,3 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-
 import 'package:foldable_dev_tools/foldable_dev_tools.dart';
 import 'package:foldable_router/foldable_router.dart';
 import 'package:foldable_scaffold/foldable_scaffold.dart';
@@ -82,6 +78,7 @@ final _delegate = FoldableRouterDelegate(
         bodyBuilder: (_, _) =>
             Stack(children: [const FoldablePaneLayoutObserver(), body]),
         secondaryBodyBuilder: (_, _) => secondaryBody,
+        hasSecondaryBody: secondaryBody != null,
       );
     },
   ),

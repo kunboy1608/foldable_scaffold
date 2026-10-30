@@ -118,6 +118,7 @@ final delegate = FoldableRouterDelegate(
     builder: (context, body, secondaryBody) => FoldableScaffold(
       bodyBuilder: (_, _) => body,
       secondaryBodyBuilder: (_, _) => secondaryBody,
+      hasSecondaryBody: secondaryBody != null,
       primaryNavigationBuilder: (context, constraints, padding) =>
           NavigationRail(
             selectedIndex: router.currentIndex,

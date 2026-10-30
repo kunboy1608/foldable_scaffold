@@ -1,7 +1,3 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-
 import 'package:foldable_core/foldable_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -60,6 +56,7 @@ typedef FoldableNavigatorBuilder =
 ///   builder: (context, body, secondaryBody) => FoldableScaffold(
 ///     bodyBuilder: (_, _) => body,
 ///     secondaryBodyBuilder: (_, _) => secondaryBody,
+///     hasSecondaryBody: secondaryBody != null,
 ///     primaryNavigationBuilder: (context, constraints, padding) =>
 ///         NavigationRail(
 ///           selectedIndex: _controller.currentIndex,

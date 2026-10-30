@@ -1,6 +1,4 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
+import 'dart:async';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:foldable_router/foldable_router.dart';
@@ -91,6 +89,12 @@ void main() {
       expect(path.match(Uri.parse('/record')), isNull);
       expect(path.match(Uri.parse('/other/42')), isNull);
       expect(path.match(Uri.parse('/record/42/extra')), isNull);
+    });
+
+    test('decodes percent-encoded segments', () {
+      const path = FoldablePath('/record/:id');
+
+      expect(path.match(Uri.parse('/record/a%20b'))?.string('id'), 'a b');
     });
 
     test('matches a root path', () {
@@ -226,6 +230,72 @@ void main() {
         router.resolve(const _DetailRoute(), context: context),
         isA<_HomeRoute>(),
       );
+    });
+
+    testWidgets('an async redirect is not skipped when the caller is gone', (
+      tester,
+    ) async {
+      final key = GlobalKey();
+      late BuildContext rootContext;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (c) {
+              rootContext = c;
+              return SizedBox(key: key);
+            },
+          ),
+        ),
+      );
+      final callerContext = key.currentContext!;
+      final redirected = Completer<FoldableRoute?>();
+      final router = FoldableRouter(
+        config: FoldableRouterConfig(
+          roots: const [_HomeRoute(), _SecondRoute()],
+          matcher: _match,
+          notFound: _NotFoundRoute.new,
+          redirect: (context, state) =>
+              state.route is _DetailRoute ? redirected.future : null,
+        ),
+      )..rootContextOf = () => rootContext;
+      addTearDown(router.dispose);
+
+      final result = router.resolve(
+        const _DetailRoute(),
+        context: callerContext,
+      );
+      // The page that navigated leaves while the redirect is running.
+      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
+      router.rootContextOf = null;
+      redirected.complete(const _HomeRoute());
+
+      expect(await result, isNull);
+    });
+
+    testWidgets('go before the first build waits for a context', (
+      tester,
+    ) async {
+      final router = _router();
+      addTearDown(router.dispose);
+
+      router.goLocation('/second');
+      expect(router.currentIndex, 0);
+
+      late BuildContext context;
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Builder(
+            builder: (c) {
+              context = c;
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+      router.rootContextOf = () => context;
+      await tester.pump();
+
+      expect(router.currentIndex, 1);
     });
   });
 }

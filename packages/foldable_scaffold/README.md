@@ -46,10 +46,11 @@ class _MailScreenState extends State<MailScreen> {
           ),
         ],
       ),
-      secondaryBodyBuilder: (context, constraints) => _message == null
-          ? null
-          : Center(child: Text(_message!)),
-      // A null secondary builder hides the second pane.
+      hasSecondaryBody: _message != null,
+      secondaryBodyBuilder: (context, constraints) =>
+          Center(child: Text(_message ?? '')),
+      // hasSecondaryBody: false hides the second pane. Without it, the scaffold
+      // calls the builder an extra time to see whether it returns null.
       onSecondBodyClose: (didPop, _) => setState(() => _message = null),
     );
   }

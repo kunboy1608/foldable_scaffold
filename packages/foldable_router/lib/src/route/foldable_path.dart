@@ -1,7 +1,3 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-
 import 'route_query.dart';
 
 /// A path pattern like `/record/:id`, for `FoldableRouterConfig.matcher`.
@@ -26,10 +22,15 @@ class FoldablePath {
 
   /// The parameters of [uri], or null when [uri] does not match [pattern].
   ///
-  /// Path segments are read with the same names as in the pattern.
+  /// Path segments are read with the same names as in the pattern, and are
+  /// percent-decoded.
   RouteQuery? match(Uri uri) {
     final patternSegments = _segments(pattern);
-    final uriSegments = _segments(uri.path);
+    // `pathSegments` is already percent-decoded: `/record/a%20b` gives `a b`.
+    final uriSegments = [
+      for (final segment in uri.pathSegments)
+        if (segment.isNotEmpty) segment,
+    ];
     if (patternSegments.length != uriSegments.length) return null;
 
     final values = <String, String>{...uri.queryParameters};

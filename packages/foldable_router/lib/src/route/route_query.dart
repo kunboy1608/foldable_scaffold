@@ -1,7 +1,3 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-
 /// Query parameters of a deep link. Only primitive values are supported:
 /// string, int, double and bool.
 class RouteQuery {

@@ -1,7 +1,3 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-
 import 'package:flutter/foundation.dart';
 import 'package:foldable_core/foldable_core.dart';
 import 'package:material_ui/material_ui.dart';
@@ -43,6 +39,7 @@ class FoldableScaffold extends StatefulWidget {
     this.paneTransition,
     this.topNavigationBuilder,
     this.secondaryBodyBuilder,
+    this.hasSecondaryBody,
     this.primaryNavigationBuilder,
     this.bottomNavigationBuilder,
     this.onSecondBodyClose,
@@ -95,7 +92,20 @@ class FoldableScaffold extends StatefulWidget {
 
   /// Builds the secondary body pane, or returns null when there is nothing to
   /// show there.
+  ///
+  /// Without [hasSecondaryBody], the scaffold calls it once per build just to
+  /// find out whether it returns null, with the scaffold size, and again to
+  /// build the pane with the pane constraints. Set [hasSecondaryBody] to avoid
+  /// the extra call.
   final BoxConstraintsNullableWidgetBuilder? secondaryBodyBuilder;
+
+  /// Whether there is a secondary body to show.
+  ///
+  /// When set, [secondaryBodyBuilder] is only called to build the pane, once
+  /// per layout, and never to probe for null. When null, the scaffold probes
+  /// the builder on every build, so the builder must be cheap and free of side
+  /// effects.
+  final bool? hasSecondaryBody;
 
   /// Builds the navigation shown at the start of the row (a [NavigationRail],
   /// usually). Hidden when there is no room for it.
@@ -217,14 +227,16 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
             ? _minWidthNavigation + padding.left
             : 0.0;
         final hasSecondaryBody =
-            widget.secondaryBodyBuilder?.call(
-              context,
-              BoxConstraints(
-                maxWidth: scaffoldWidth,
-                maxHeight: kToolbarHeight,
-              ),
-            ) !=
-            null;
+            widget.secondaryBodyBuilder != null &&
+            (widget.hasSecondaryBody ??
+                widget.secondaryBodyBuilder!(
+                      context,
+                      BoxConstraints(
+                        maxWidth: scaffoldWidth,
+                        maxHeight: scaffoldConstraints.maxHeight,
+                      ),
+                    ) !=
+                    null);
 
         return PopScope(
           canPop: !hasSecondaryBody,

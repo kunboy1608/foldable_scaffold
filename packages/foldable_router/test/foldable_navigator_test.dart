@@ -108,6 +108,7 @@ Widget _phoneApp(FoldableNavigatorController controller) {
       builder: (context, body, secondary) => FoldableScaffold(
         bodyBuilder: (_, _) => body,
         secondaryBodyBuilder: (_, _) => secondary,
+        hasSecondaryBody: secondary != null,
       ),
     ),
   );

@@ -1,7 +1,3 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-
 import 'package:foldable_router/foldable_router.dart';
 import 'package:foldable_scaffold/foldable_scaffold.dart';
 import 'package:material_ui/material_ui.dart';
@@ -156,6 +152,7 @@ Widget _buildShell(BuildContext context) {
         ),
         bodyBuilder: (_, _) => body,
         secondaryBodyBuilder: (_, _) => secondaryBody,
+        hasSecondaryBody: secondaryBody != null,
         primaryNavigationBuilder: (context, constraints, padding) {
           return NavigationRail(
             selectedIndex: _router.currentIndex,

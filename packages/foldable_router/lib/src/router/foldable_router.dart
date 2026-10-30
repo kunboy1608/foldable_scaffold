@@ -1,7 +1,3 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-
 import 'dart:async';
 
 import 'package:material_ui/material_ui.dart';
@@ -165,7 +161,12 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   ///
   /// Returns the final route right away while every redirect is synchronous,
   /// and a [Future] as soon as one of them returns one.
-  FutureOr<FoldableRoute> resolve(
+  ///
+  /// The result is null when the navigation is abandoned: an asynchronous
+  /// redirect finished after [context] and the router's navigator were gone,
+  /// so the redirect chain cannot continue. The caller must not show the
+  /// original route then, it may be the very route a redirect guards.
+  FutureOr<FoldableRoute?> resolve(
     FoldableRoute route, {
     required BuildContext context,
     Uri? uri,
@@ -173,7 +174,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
     return _resolve(context, route, 0, uri ?? Uri.parse(route.location));
   }
 
-  FutureOr<FoldableRoute> _resolve(
+  FutureOr<FoldableRoute?> _resolve(
     BuildContext context,
     FoldableRoute current,
     int step,
@@ -192,9 +193,12 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
     if (next is Future<FoldableRoute?>) {
       return next.then((value) {
         if (value == null) return current;
-        // The page that started the navigation may be gone by now.
-        if (!context.mounted) return current;
-        return _resolve(context, value, step + 1, uri);
+        // The page that started the navigation may be gone by now: continue
+        // with the router's navigator, or abandon the navigation. Returning
+        // [current] here would skip the redirect that was just decided.
+        final live = context.mounted ? context : rootContextOf?.call();
+        if (live == null || !live.mounted) return null;
+        return _resolve(live, value, step + 1, uri);
       });
     }
     return next == null ? current : _resolve(context, next, step + 1, uri);
@@ -253,22 +257,27 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
     final context = callerContext ?? rootContextOf?.call();
     if (context == null) {
       // No BuildContext yet, as when a link is handled before the first build:
-      // try again on the next frame.
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (navigation == _navigations) {
-          _resolveAndApply(navigation, route, parent, callerContext, uri);
+      // try again on the next frame. Post-frame callbacks do not schedule a
+      // frame, so ask for one or the retry could wait forever.
+      WidgetsBinding.instance
+        ..addPostFrameCallback((_) {
+          if (navigation == _navigations) {
+            _resolveAndApply(navigation, route, parent, callerContext, uri);
+          }
+        })
+        ..scheduleFrame();
+      return;
+    }
+    final target = resolve(route, context: context, uri: uri);
+    if (target is Future<FoldableRoute?>) {
+      target.then((resolved) {
+        if (resolved != null && navigation == _navigations) {
+          apply(resolved, parent: parent);
         }
       });
       return;
     }
-    final target = resolve(route, context: context, uri: uri);
-    if (target is Future<FoldableRoute>) {
-      target.then((resolved) {
-        if (navigation == _navigations) apply(resolved, parent: parent);
-      });
-      return;
-    }
-    apply(target, parent: parent);
+    if (target != null) apply(target, parent: parent);
   }
 
   /// Shows [target] at the position of [parent] (default: the branch root),

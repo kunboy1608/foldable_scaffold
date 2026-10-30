@@ -1,7 +1,3 @@
-// Copyright 2013 The Flutter Authors. All rights reserved.
-// Use of this source code is governed by a BSD-style license that can be
-// found in the LICENSE file.
-
 import 'package:foldable_scaffold/foldable_scaffold.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -70,6 +66,7 @@ class _ScaffoldExampleState extends State<ScaffoldExample> {
             ],
           );
         },
+        hasSecondaryBody: _message != null,
         secondaryBodyBuilder: (context, constraints) {
           final message = _message;
           if (message == null) return null;
