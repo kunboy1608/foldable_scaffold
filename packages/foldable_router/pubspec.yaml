@@ -2,8 +2,8 @@ name: foldable_router
 resolution: workspace
 description: >-
   Router for foldable apps: one page stack per branch (tab), Cupertino page
-  slides, swipe back, deep links, redirects and guards, on top of
-  foldable_scaffold.
+  slides, swipe back, deep links, redirects and guards. Works with
+  foldable_scaffold without depending on it.
 version: 0.1.0
 repository: https://github.com/kunboy1608/foldable_scaffold/tree/main/packages/foldable_router
 
@@ -14,10 +14,11 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  foldable_scaffold: ^0.1.0
+  foldable_core: ^0.1.0
   material_ui: ^1.1.0
 
 dev_dependencies:
+  foldable_scaffold: ^0.1.0
   flutter_lints: ^6.0.0
   flutter_test:
     sdk: flutter

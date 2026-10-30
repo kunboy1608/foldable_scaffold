@@ -5,6 +5,6 @@
 /// Two-pane Scaffold for foldables, tablets and desktop.
 library;
 
-export 'src/foldable_motion.dart';
-export 'src/foldable_pane_transition.dart';
+export 'package:foldable_core/foldable_core.dart';
+
 export 'src/foldable_scaffold.dart';

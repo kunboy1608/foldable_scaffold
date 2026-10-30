@@ -5,7 +5,6 @@
 import 'dart:math' as math;
 
 import 'package:foldable_router/foldable_router.dart';
-import 'package:foldable_scaffold/foldable_scaffold.dart';
 import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 

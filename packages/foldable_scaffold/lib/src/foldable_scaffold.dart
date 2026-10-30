@@ -3,10 +3,8 @@
 // found in the LICENSE file.
 
 import 'package:flutter/foundation.dart';
+import 'package:foldable_core/foldable_core.dart';
 import 'package:material_ui/material_ui.dart';
-
-import 'foldable_motion.dart';
-import 'foldable_pane_transition.dart';
 
 /// A [Scaffold] with two panes: a body and a secondary body.
 ///
@@ -465,40 +463,18 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
   }
 }
 
-/// Exposes the layout mode of the nearest [FoldableScaffold] to its bodies.
-class FoldableScaffoldScope extends InheritedWidget {
-  const FoldableScaffoldScope({
-    required this.canSplit,
-    required super.child,
-    super.key,
-  });
-
-  /// Whether the scaffold is wide enough to show body and secondary body
-  /// side by side.
-  final bool canSplit;
-
-  /// The closest [FoldableScaffoldScope], if any.
-  static FoldableScaffoldScope? maybeOf(BuildContext context) =>
-      context.dependOnInheritedWidgetOfExactType<FoldableScaffoldScope>();
-
-  @override
-  bool updateShouldNotify(FoldableScaffoldScope oldWidget) =>
-      canSplit != oldWidget.canSplit;
-}
-
 /// Builds a widget with the constraints of a pane. Returning null hides the
 /// pane.
-typedef BoxConstraintsNullableWidgetBuilder = Widget? Function(
-  BuildContext context,
-  BoxConstraints constraints,
-);
+typedef BoxConstraintsNullableWidgetBuilder =
+    Widget? Function(BuildContext context, BoxConstraints constraints);
 
 /// Builds the navigation shown at the start of the scaffold row.
-typedef PrimaryNavigationBuilder = Widget Function(
-  BuildContext context,
-  BoxConstraints constraints,
-  EdgeInsets padding,
-);
+typedef PrimaryNavigationBuilder =
+    Widget Function(
+      BuildContext context,
+      BoxConstraints constraints,
+      EdgeInsets padding,
+    );
 
 /// Builds a [PreferredSizeWidget] with the scaffold width.
 typedef PreferredSizeBoxConstraintsWidgetBuilder =
@@ -509,33 +485,6 @@ typedef PreferredSizeBoxConstraintsWidgetBuilder =
 
 /// Builds a widget, or returns null.
 typedef NullableWidgetBuilder = Widget? Function(BuildContext context);
-
-/// Which panes of the enclosing [FoldableScaffold] are shown, based on the
-/// target layout (not the animated one).
-class FoldablePaneLayout extends InheritedWidget {
-  const FoldablePaneLayout({
-    required this.primaryVisible,
-    required this.secondaryVisible,
-    required super.child,
-    super.key,
-  });
-
-  /// Whether the body pane is shown.
-  final bool primaryVisible;
-
-  /// Whether the secondary body pane is shown.
-  final bool secondaryVisible;
-
-  /// The layout of the enclosing [FoldableScaffold], if any.
-  static FoldablePaneLayout? maybeOf(BuildContext context) {
-    return context.dependOnInheritedWidgetOfExactType<FoldablePaneLayout>();
-  }
-
-  @override
-  bool updateShouldNotify(FoldablePaneLayout oldWidget) =>
-      primaryVisible != oldWidget.primaryVisible ||
-      secondaryVisible != oldWidget.secondaryVisible;
-}
 
 enum _PaneSlot { primary, divider, secondary }
 

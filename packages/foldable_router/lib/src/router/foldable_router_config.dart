@@ -17,10 +17,11 @@ typedef FoldableRouteMatcher = FoldableRoute? Function(Uri uri);
 typedef FoldableRouteFactory = FoldableRoute Function(Uri uri);
 
 /// A global redirect, like go_router's top-level `redirect`.
-typedef FoldableRedirect = FutureOr<FoldableRoute?> Function(
-  BuildContext context,
-  FoldableRouteState state,
-);
+typedef FoldableRedirect =
+    FutureOr<FoldableRoute?> Function(
+      BuildContext context,
+      FoldableRouteState state,
+    );
 
 /// The branch a route belongs to, or null when it is not a branch root.
 typedef FoldableBranchOf = int? Function(FoldableRoute route);

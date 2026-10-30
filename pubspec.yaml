@@ -5,9 +5,13 @@ environment:
   sdk: ^3.10.0
 
 workspace:
+  - packages/foldable_core
   - packages/foldable_router
   - packages/foldable_scaffold
   - packages/foldable_dev_tools
+  - packages/foldable_router/example
+  - packages/foldable_scaffold/example
+  - packages/foldable_dev_tools/example
 
 dev_dependencies:
   melos: ^8.10.0

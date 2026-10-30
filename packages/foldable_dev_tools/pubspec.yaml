@@ -15,7 +15,6 @@ dependencies:
   flutter:
     sdk: flutter
   foldable_router: ^0.1.0
-  foldable_scaffold: ^0.1.0
   material_ui: ^1.1.0
 
 dev_dependencies:

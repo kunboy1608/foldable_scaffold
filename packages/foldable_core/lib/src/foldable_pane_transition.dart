@@ -3,15 +3,15 @@
 // found in the LICENSE file.
 
 import 'package:flutter/foundation.dart';
-import 'package:material_ui/material_ui.dart';
+import 'package:flutter/widgets.dart';
 
-/// Whether pages are sliding right now, so [FoldableScaffold] switches the
+/// Whether pages are sliding right now, so `FoldableScaffold` switches the
 /// visible pane instantly instead of animating the pane resize on top of the
 /// slide.
 ///
 /// `FoldableNavigator` (in `foldable_router`) provides this scope around the
 /// widget its builder returns, so a `FoldableScaffold` built there picks the
-/// signal up without wiring. Use [FoldableScaffold.paneTransition] to supply
+/// signal up without wiring. Use `FoldableScaffold.paneTransition` to supply
 /// your own signal instead.
 class FoldablePaneTransitionScope
     extends InheritedNotifier<ValueListenable<bool>> {

@@ -3,8 +3,11 @@
 // found in the LICENSE file.
 
 /// Router for foldable apps: one page stack per branch, page slides, swipe
-/// back, deep links and redirects, on top of `foldable_scaffold`.
+/// back, deep links and redirects. Works with `foldable_scaffold`, but does not
+/// depend on it.
 library;
+
+export 'package:foldable_core/foldable_core.dart';
 
 export 'src/foldable_navigator.dart';
 export 'src/foldable_navigator_controller.dart';

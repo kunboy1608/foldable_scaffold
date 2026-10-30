@@ -1,0 +1,26 @@
+name: foldable_core
+resolution: workspace
+description: >-
+  Shared signals of the foldable packages: pane layout, page transition state
+  and animation scaling. Lets foldable_scaffold and foldable_router work
+  together without depending on each other.
+version: 0.1.0
+repository: https://github.com/kunboy1608/foldable_scaffold/tree/main/packages/foldable_core
+
+environment:
+  sdk: ^3.10.0
+  flutter: '>=3.38.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+dev_dependencies:
+  flutter_lints: ^6.0.0
+  flutter_test:
+    sdk: flutter
+
+topics:
+  - foldable
+  - responsive
+  - layout

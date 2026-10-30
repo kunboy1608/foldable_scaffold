@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:foldable_scaffold/foldable_scaffold.dart';
+import 'package:foldable_core/foldable_core.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:material_ui/material_ui.dart';
@@ -14,11 +14,8 @@ export 'foldable_navigator_controller.dart';
 export 'foldable_page.dart';
 
 /// Builds the scaffold around the two panes of a [FoldableNavigator].
-typedef FoldableNavigatorBuilder = Widget Function(
-  BuildContext context,
-  Widget body,
-  Widget? secondaryBody,
-);
+typedef FoldableNavigatorBuilder =
+    Widget Function(BuildContext context, Widget body, Widget? secondaryBody);
 
 /// Page stacks for a two-pane scaffold, driven by a
 /// [FoldableNavigatorController].
