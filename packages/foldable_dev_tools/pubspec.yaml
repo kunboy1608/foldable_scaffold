@@ -8,8 +8,8 @@ version: 0.1.0
 repository: https://github.com/kunboy1608/foldable_scaffold/tree/main/packages/foldable_dev_tools
 
 environment:
-  sdk: ^3.13.2
-  flutter: ">=3.47.2"
+  sdk: ^3.10.0
+  flutter: '>=3.38.0'
 
 dependencies:
   flutter:

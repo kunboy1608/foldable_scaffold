@@ -3,8 +3,8 @@ description: Demo of the foldable_dev_tools package.
 publish_to: none
 
 environment:
-  sdk: ^3.13.2
-  flutter: ">=3.47.2"
+  sdk: ^3.10.0
+  flutter: '>=3.38.0'
 
 dependencies:
   flutter:

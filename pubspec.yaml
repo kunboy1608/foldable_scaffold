@@ -2,7 +2,7 @@ name: foldable_scaffold_workspace
 publish_to: none
 
 environment:
-  sdk: ^3.13.7
+  sdk: ^3.10.0
 
 workspace:
   - packages/foldable_router
@@ -13,7 +13,7 @@ dev_dependencies:
   melos: ^8.10.0
 
 melos:
-  repository: https://github.com/OWNER/foldable_scaffold # TODO: set real URL
+  repository: https://github.com/kunboy1608/foldable_scaffold
 
   scripts:
     analyze:
