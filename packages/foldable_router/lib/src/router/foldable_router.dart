@@ -74,14 +74,24 @@ mixin FoldableRouterBase on Listenable {
 /// [FoldableRouterConfig.redirect]), so the URL and the login state stay in
 /// charge of what a navigation actually shows.
 class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
-  FoldableRouter({required this.config})
+  FoldableRouter({required this.config, this.allowEmptyRoots = false})
     : _observers = List.of(config.observers),
-      _controller = _createController(config) {
+      _controller = _createController(config, allowEmptyRoots) {
     _controller.addListener(notifyListeners);
   }
 
   /// The app description of this router.
   final FoldableRouterConfig config;
+
+  /// Whether [FoldableRouterConfig.roots] may be empty.
+  ///
+  /// A router without roots starts with an empty stack: the first navigation
+  /// fills it. Use it with a [FoldableStackNavigator]; a
+  /// [FoldableSplitNavigator] needs a page in every branch.
+  ///
+  /// [FoldableSessionRouter] sets it for `FoldableNavigatorKind.stack`
+  /// sessions, so a stack session does not need a dummy root.
+  final bool allowEmptyRoots;
 
   final FoldableNavigatorController _controller;
   final List<FoldableRouterObserver> _observers;
@@ -98,7 +108,16 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
 
   static FoldableNavigatorController _createController(
     FoldableRouterConfig config,
+    bool allowEmptyRoots,
   ) {
+    if (config.roots.isEmpty) {
+      assert(
+        allowEmptyRoots,
+        'Needs at least one root route in FoldableRouterConfig.roots. Only a '
+        'stack session may start with no roots.',
+      );
+      return FoldableNavigatorController.empty();
+    }
     return FoldableNavigatorController(
       branches: [
         for (var index = 0; index < config.roots.length; index++)
@@ -136,6 +155,10 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   /// Number of the latest [go]. Used to drop the result of a redirect that
   /// finished after the user navigated again.
   int _navigations = 0;
+
+  /// Whether [dispose] ran. Stops a navigation that waits for a
+  /// [rootContextOf] that will never come from scheduling frames forever.
+  bool _disposed = false;
 
   /// Where back goes when the current branch has no page to pop, or null to
   /// leave the app.
@@ -253,6 +276,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
     BuildContext? callerContext,
     Uri? uri,
   ) {
+    if (_disposed) return;
     // The redirects get the page that navigated, else the router's navigator.
     final context = callerContext ?? rootContextOf?.call();
     if (context == null) {
@@ -261,7 +285,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
       // frame, so ask for one or the retry could wait forever.
       WidgetsBinding.instance
         ..addPostFrameCallback((_) {
-          if (navigation == _navigations) {
+          if (!_disposed && navigation == _navigations) {
             _resolveAndApply(navigation, route, parent, callerContext, uri);
           }
         })
@@ -285,7 +309,11 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   ///
   /// The result of a redirect, and what [go] ends up calling.
   void apply(FoldableRoute target, {Page<Object?>? parent}) {
-    final branch = config.branchOf?.call(target) ?? _defaultBranchOf(target);
+    // An empty stack has no branch root to switch to yet: show the target as
+    // its first page, even when it is a tab root.
+    final branch = _controller.pages.isEmpty
+        ? null
+        : config.branchOf?.call(target) ?? _defaultBranchOf(target);
     if (branch != null) {
       // Switch and pop in one update, so the branch is rendered once, already
       // at its root.
@@ -407,7 +435,12 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
 
   @override
   void goUri(Uri uri) {
-    if (uri.toString() == currentUri.toString()) return;
+    // A stack that started empty has no URL yet: let its first navigation
+    // fill it, even when the URL is `/`.
+    if (_controller.pages.isNotEmpty &&
+        uri.toString() == currentUri.toString()) {
+      return;
+    }
 
     final pages = _controller.pages;
     final below = pages.length > 1 ? pages[pages.length - 2].name : null;
@@ -435,6 +468,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
 
   @override
   void dispose() {
+    _disposed = true;
     _controller.removeListener(notifyListeners);
     _controller.dispose();
     super.dispose();

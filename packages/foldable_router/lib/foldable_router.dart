@@ -16,3 +16,4 @@ export 'src/router/foldable_router.dart';
 export 'src/router/foldable_router_config.dart';
 export 'src/router/foldable_router_delegate.dart';
 export 'src/router/foldable_router_observer.dart';
+export 'src/router/foldable_session_router.dart';

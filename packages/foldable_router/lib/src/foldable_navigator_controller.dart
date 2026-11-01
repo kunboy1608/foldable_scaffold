@@ -6,6 +6,9 @@ import 'package:material_ui/material_ui.dart';
 /// Holds the page stacks (branches) of a [FoldableNavigator] and the current
 /// branch.
 ///
+/// [FoldableSplitNavigator] shows one stack per branch; [FoldableStackNavigator]
+/// shows only the top page of the current branch.
+///
 /// Each change notifies listeners once, so only the navigator rebuilds; the
 /// widget that owns the controller does not need `setState`.
 ///
@@ -27,6 +30,15 @@ class FoldableNavigatorController extends ChangeNotifier {
   /// A controller with a single page stack.
   FoldableNavigatorController.single(List<Page<Object?>> pages)
     : this(branches: [pages]);
+
+  /// A controller with one empty branch, for a stack that starts with no page.
+  ///
+  /// [FoldableStackNavigator] shows nothing until the first page is pushed or
+  /// navigated to. [FoldableSplitNavigator] expects a page in every branch and
+  /// does not support it.
+  FoldableNavigatorController.empty()
+    : _branches = [<Page<Object?>>[]],
+      _currentIndex = 0;
 
   final List<List<Page<Object?>>> _branches;
   final Map<Page<Object?>, Completer<Object?>> _results = {};

@@ -6,6 +6,9 @@ slides, edge swipe back, deep links, redirects and guards, on top of
 
 ## Features
 
+* **Two navigators.** `FoldableNavigator(...)` keeps one stack per tab in two
+  panes; `FoldableNavigator.stack(...)` shows only the top page of the current
+  branch, full screen, without keeping branches.
 * **One stack per tab.** Switching tab keeps the pages of both tabs.
 * **Two panes.** The second-to-last page is the body, the top page is the
   secondary body; a new page appears next to the current one on a wide window
@@ -152,6 +155,37 @@ router.go(context, const SettingsRoute());
 router.goLocation('/details?id=3'); // from a link
 ```
 
+## Navigators
+
+`FoldableNavigator` is the abstraction that draws a
+`FoldableNavigatorController`. Pick an implementation when you create one:
+
+* `FoldableNavigator(...)` creates a `FoldableSplitNavigator`: one page stack
+  per branch (tab), the body and the secondary body side by side on a wide
+  window, every page kept mounted offstage.
+* `FoldableNavigator.stack(...)` creates a `FoldableStackNavigator`: only the
+  top page of the current branch, filling the screen. The pages below it and
+  the other branches are not mounted, so their state is thrown away. Use it
+  for flows without tabs, like sign in or onboarding.
+
+```dart
+FoldableNavigator(
+  controller: router.controller,
+  builder: (context, body, secondaryBody) => FoldableScaffold(/* ... */),
+);
+
+FoldableNavigator.stack(controller: router.controller);
+```
+
+A stack may start with no page: `FoldableNavigatorController.empty()` shows
+nothing until the first page arrives. Likewise, a stack session may leave
+`FoldableRouterConfig.roots` empty; its first navigation fills the stack. A
+split session needs at least one root.
+
+Both support push, pop, `FoldableBackButton`, the system back button and the
+left-edge swipe back, and share `FoldableNavigator.of`, `pageOf`,
+`popPageOf`, `isTransitioning` and `transitioningOf`.
+
 ## Redirects and guards
 
 `FoldableRoute.redirect` runs for the route being opened, then
@@ -215,12 +249,73 @@ FoldableRouterConfig(observers: const [Logger()], /* ... */);
 ## Pages and state
 
 Pages are `FoldablePage`s (a plain `Page`, so a normal `Navigator` accepts them
-too). Every page of every branch stays mounted offstage, so scroll positions
-and text fields survive tab switches and split views. `LazyBranch` defers the
-first build of a tab until it is shown (on by default for all but the first
-tab via `FoldableRouterConfig.lazyBranches`).
+too). With `FoldableNavigator(...)`, every page of every branch stays mounted
+offstage, so scroll positions and text fields survive tab switches and split
+views. `FoldableNavigator.stack(...)` only keeps the top page, so pop back to a
+page that was disposed and it builds again. `LazyBranch` defers the first build
+of a tab until it is shown (on by default for all but the first tab via
+`FoldableRouterConfig.lazyBranches`).
+
+## Sessions
+
+An app that is more than one flow, for example sign in, onboarding and the
+tabs, uses `FoldableSessionRouter`. Each `FoldableSession` has its own roots,
+redirects, **navigator** and optional **shell**, so one flow can fill the
+screen with only its top page while another has a navigation rail. One session
+is on screen, picked by `sessionOf`:
+
+```dart
+final router = FoldableSessionRouter(
+  sessions: [
+    FoldableSession(
+      id: 'onboarding',
+      config: onboardingConfig,
+      // Top page only: no tabs, no scaffold, no pages kept below it.
+      navigator: FoldableNavigatorKind.stack,
+    ),
+    FoldableSession(
+      id: 'main',
+      config: mainConfig,
+      disposeOnLeave: true, // forget the stacks when leaving
+      // A shell arranges the panes. The session builds the navigator of the
+      // kind selected above and hands it to the shell.
+      shell: (context, controller, navigator) => navigator(
+        (context, body, secondaryBody) => FoldableScaffold(
+          bodyBuilder: (_, _) => body,
+          secondaryBodyBuilder: (_, _) => secondaryBody,
+          hasSecondaryBody: secondaryBody != null,
+          primaryNavigationBuilder: (context, constraints, padding) =>
+              NavigationRail(
+                selectedIndex: controller.currentIndex,
+                // router.go(null, mainConfig.roots[index]) runs redirects.
+                onDestinationSelected: controller.goBranch,
+                destinations: const [/* ... */],
+              ),
+        ),
+      ),
+    ),
+  ],
+  sessionOf: () => onboarded ? 'main' : 'onboarding',
+);
+
+FoldableRouterDelegate(
+  router: router,
+  navigatorKey: navigatorKey,
+  builder: router.buildShell,
+);
+```
+
+Call `router.refresh()` when the state `sessionOf` reads changes, or
+`router.replaceSession('main', route: const HomeRoute())` for a hand-off the
+state does not describe (change the state first, so both agree). `go`, `push` and `back` act on the session on screen.
+A URL the active session does not know can switch to another session, but only
+one marked `deepLinkable`.
 
 ## Example
 
-Run [`example/`](example/lib/main.dart) for tabs, a detail page, swipe back and
-deep links.
+Run [`example/`](example/) for three sessions: signed out (sign in,
+sign up), onboarding, and a tabbed home that has a button for every way to
+navigate (`push`, `push` with a result, `go` with and without a context,
+`goLocation`, `pushLocation`, `batch`, `pushAndRemoveUntil`, `popUntil`,
+redirects), with swipe back and deep links. The first two sessions use the stack
+navigator, so they fill the screen with only the top page.
