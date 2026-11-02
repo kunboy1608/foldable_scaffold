@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:material_ui/material_ui.dart';
 
 import '../foldable_page.dart';
+import '../foldable_page_transition.dart';
 import 'route_query.dart';
 
 /// What a redirect can look at, like go_router's `GoRouterState`.
@@ -73,6 +74,10 @@ abstract class FoldableRoute {
     FoldableRouteState state,
   ) => null;
 
+  /// How this route animates when it is pushed or popped, or null for the
+  /// transition of the navigator.
+  FoldablePageTransition? get transition => null;
+
   /// A [FoldablePage] for this route.
   ///
   /// The page is named after [urlLocation], so the address bar keeps showing
@@ -80,6 +85,7 @@ abstract class FoldableRoute {
   FoldablePage<T> toPage<T>() {
     return FoldablePage<T>(
       name: urlLocation,
+      transition: transition,
       child: Builder(builder: build),
     );
   }

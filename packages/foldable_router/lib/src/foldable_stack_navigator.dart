@@ -8,10 +8,11 @@ part of 'foldable_navigator.dart';
 /// the top one, and every page of the other branches, are not mounted, so
 /// their state is thrown away when they leave the screen.
 ///
-/// Push, pop, [FoldableBackButton], the system back button and the left-edge
-/// swipe back work like in [FoldableSplitNavigator], with the same Cupertino
-/// slide. A stack may start empty: it shows nothing until the first page
-/// arrives, then that page appears without a slide.
+/// Push, pop, [FoldableBackButton], the system back button, the left-edge
+/// swipe back and the Android predictive back gesture work like in
+/// [FoldableSplitNavigator], with the same Cupertino slide by default (see
+/// [transition]). A stack may start empty: it shows nothing until the first
+/// page arrives, then that page appears without a slide.
 ///
 /// ```dart
 /// FoldableNavigator.stack(controller: _controller);
@@ -21,25 +22,37 @@ class FoldableStackNavigator extends FoldableNavigator {
     required FoldableNavigatorController controller,
     this.transitionDuration = const Duration(milliseconds: 300),
     this.transitionCurve = Curves.fastOutSlowIn,
+    this.transition = FoldablePageTransition.cupertino,
     Key? key,
   }) : super.base(controller: controller, key: key);
 
   /// Duration of the push/pop slide. [Duration.zero] disables it, and the
-  /// swipe-back gesture with it.
+  /// swipe-back and predictive back gestures with it.
   final Duration transitionDuration;
 
   /// Curve of the push/pop slide.
   final Curve transitionCurve;
+
+  /// How pages animate, unless [FoldablePage.transition] says otherwise. On a
+  /// push the transition of the new page is used, on a pop the one of the page
+  /// that is removed. Swipe back is offered only when the top page's
+  /// transition supports it.
+  final FoldablePageTransition transition;
 
   @override
   State<FoldableStackNavigator> createState() => _FoldableStackNavigatorState();
 }
 
 class _FoldableStackNavigatorState extends State<FoldableStackNavigator>
-    with SingleTickerProviderStateMixin, _FoldableAppBarHistory {
+    with
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver,
+        _FoldableAppBarHistory,
+        _FoldablePredictiveBack {
   final Map<Key, GlobalKey> _subtreeKeys = {};
   final _transitioning = ValueNotifier<bool>(false);
 
+  @override
   late final AnimationController _animationController = AnimationController(
     vsync: this,
     duration: widget.transitionDuration,
@@ -61,12 +74,14 @@ class _FoldableStackNavigatorState extends State<FoldableStackNavigator>
   HorizontalDragGestureRecognizer? _backRecognizer;
 
   /// Whether a swipe-back drag is moving the pages right now.
+  @override
   bool _backSwipeDragging = false;
 
   /// Whether a released or cancelled swipe-back is sliding back to rest.
   bool _backSwipeSettling = false;
 
   /// Whether the released swipe-back is popping the top page right now.
+  @override
   bool _backSwipeCompleting = false;
 
   FoldableNavigatorController get _controller => widget.controller;
@@ -160,23 +175,35 @@ class _FoldableStackNavigatorState extends State<FoldableStackNavigator>
       _transition = null;
     }
     final topChanged = _idOfTop(previousTop) != _idOfTop(top);
-    if (top == null ||
-        previousTop == null ||
-        branchChanged ||
-        widget.transitionDuration == Duration.zero ||
-        !topChanged) {
-      // The first page of a stack that started empty just appears: there is
-      // nothing to slide over. The same when the stack empties.
-      _transition = null;
-      _animationController.value = 1;
-    } else {
+    _StackTransition? next;
+    // The first page of a stack that started empty just appears: there is
+    // nothing to slide over. The same when the stack empties.
+    if (top != null &&
+        previousTop != null &&
+        !branchChanged &&
+        widget.transitionDuration != Duration.zero &&
+        topChanged) {
       // A new top page means push; one that was already below means pop.
       final isPush = !previousIds.contains(_idOf(top));
-      _transition = _StackTransition(
-        isPush: isPush,
-        from: previousTop,
-        to: top,
+      // A push is animated by the page that arrives, a pop by the page that
+      // goes.
+      final pageTransition = _transitionOf(
+        isPush ? top : previousTop,
+        widget.transition,
       );
+      if (!pageTransition.isInstant) {
+        next = _StackTransition(
+          transition: pageTransition,
+          isPush: isPush,
+          from: previousTop,
+          to: top,
+        );
+      }
+    }
+    _transition = next;
+    if (next == null) {
+      _animationController.value = 1;
+    } else {
       _animationController.forward(from: 0);
     }
     _transitioning.value = _transition != null;
@@ -209,13 +236,22 @@ class _FoldableStackNavigatorState extends State<FoldableStackNavigator>
     _subtreeKeys.removeWhere((id, _) => !alive.contains(id));
   }
 
-  /// Whether a swipe from the left edge can start a pop now.
+  @override
+  bool get _hasUserDrivenTransition => _transition?.userDriven == true;
+
+  /// Whether a swipe from the left edge, or a predictive back gesture, can
+  /// start a pop now.
+  @override
   bool get _canStartBackSwipe =>
       widget.transitionDuration != Duration.zero &&
       _transition == null &&
       !_backSwipeDragging &&
       _controller.canPop &&
-      _controller.pages.last.canPop;
+      _controller.pages.last.canPop &&
+      _transitionOf(
+        _controller.pages.last,
+        widget.transition,
+      ).supportsSwipeBack;
 
   void _handleBackPointerDown(PointerDownEvent event) {
     // One swipe at a time.
@@ -240,6 +276,7 @@ class _FoldableStackNavigatorState extends State<FoldableStackNavigator>
   }
 
   /// Shows the pop a rightward drag would do, before the page is removed.
+  @override
   void _startBackSwipe() {
     final from = _top;
     if (!mounted || !_canStartBackSwipe || from == null) return;
@@ -249,6 +286,7 @@ class _FoldableStackNavigatorState extends State<FoldableStackNavigator>
     _backSwipeDragging = true;
     setState(() {
       _transition = _StackTransition(
+        transition: _transitionOf(from, widget.transition),
         isPush: false,
         from: from,
         to: nextTop,
@@ -299,6 +337,7 @@ class _FoldableStackNavigatorState extends State<FoldableStackNavigator>
     _settleBackSwipe(complete: false);
   }
 
+  @override
   void _settleBackSwipe({required bool complete}) {
     if (complete) {
       _animationController.forward();
@@ -306,15 +345,6 @@ class _FoldableStackNavigatorState extends State<FoldableStackNavigator>
       _backSwipeSettling = true;
       _animationController.reverse();
     }
-  }
-
-  Widget _pageChild(Page<Object?> page) {
-    if (page is FoldablePage) return page.child;
-    if (page is MaterialPage) return page.child;
-    throw FlutterError(
-      'FoldableNavigator only supports FoldablePage and MaterialPage, '
-      'got ${page.runtimeType}.',
-    );
   }
 
   /// Wraps a page with the same widget types whatever its role, so the page
@@ -326,37 +356,39 @@ class _FoldableStackNavigatorState extends State<FoldableStackNavigator>
     // popped. The page sliding out does not.
     final canGoBack = !outgoing && _controller.canPop;
 
-    // Cupertino page transition: the page on top slides all the way in while
-    // the page below only gives way a third, and the top page casts a shadow
-    // while it moves.
-    const parallax = 1 / 3;
-    Animation<Offset> position = const AlwaysStoppedAnimation(Offset.zero);
-    var onTop = false;
-    if (t != null && role != _StackRole.steady) {
-      final entering = role == _StackRole.incoming;
-      onTop = entering == t.isPush;
-      final begin = entering
-          ? (t.isPush ? const Offset(1, 0) : const Offset(-parallax, 0))
-          : Offset.zero;
-      final end = entering
-          ? Offset.zero
-          : (t.isPush ? const Offset(-parallax, 0) : const Offset(1, 0));
+    // Only pages that take part in the running transition animate with it.
+    final active = (t != null && role != _StackRole.steady) ? t : null;
+    final info = FoldableTransitionInfo(
       // A swipe back follows the finger: the curve only applies when the
       // animation runs on its own.
-      position = (t.userDriven ? _animationController : _animation).drive(
-        Tween(begin: begin, end: end),
-      );
-    }
+      animation: active == null
+          ? kAlwaysCompleteAnimation
+          : (active.userDriven ? _animationController : _animation),
+      role: switch (role) {
+        _StackRole.incoming => FoldableTransitionRole.incoming,
+        _StackRole.outgoing => FoldableTransitionRole.outgoing,
+        _StackRole.steady => FoldableTransitionRole.steady,
+      },
+      isPush: active?.isPush ?? true,
+    );
+    final subtreeKey = _subtreeKeys.putIfAbsent(_idOf(page), GlobalKey.new);
 
-    final child = _FoldablePageScope(
-      page: page,
-      canGoBack: canGoBack,
-      // Slides repaint only the moving layers.
-      child: RepaintBoundary(child: _pageChild(page)),
+    final child = KeyedSubtree(
+      // Holds the page when a transition with other widget types wraps it, so
+      // it keeps its state.
+      key: GlobalObjectKey(subtreeKey),
+      child: _FoldablePageScope(
+        page: page,
+        canGoBack: canGoBack,
+        // Slides repaint only the moving layers.
+        child: RepaintBoundary(
+          child: _restorable(page, _foldablePageChild(page)),
+        ),
+      ),
     );
 
     return KeyedSubtree(
-      key: _subtreeKeys.putIfAbsent(_idOf(page), GlobalKey.new),
+      key: subtreeKey,
       child: Positioned(
         left: 0,
         top: 0,
@@ -366,12 +398,11 @@ class _FoldableStackNavigatorState extends State<FoldableStackNavigator>
           ignoring: outgoing,
           child: ExcludeFocus(
             excluding: outgoing,
-            child: SlideTransition(
-              position: position,
-              child: DecoratedBox(
-                decoration: onTop ? _pageShadow : const BoxDecoration(),
-                child: child,
-              ),
+            // The wrapper types stay the same whatever the role.
+            child: _transitioned(
+              active?.transition ?? _transitionOf(page, widget.transition),
+              info,
+              child,
             ),
           ),
         ),
@@ -430,12 +461,16 @@ class _FoldableStackNavigatorState extends State<FoldableStackNavigator>
 /// top page after it.
 class _StackTransition {
   const _StackTransition({
+    required this.transition,
     required this.isPush,
     required this.from,
     required this.to,
     this.userDriven = false,
   });
 
+  /// The transition that animates both pages, picked by the page that is
+  /// pushed or removed.
+  final FoldablePageTransition transition;
   final bool isPush;
   final Page<Object?> from;
   final Page<Object?> to;

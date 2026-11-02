@@ -15,15 +15,19 @@ part of 'foldable_navigator.dart';
 ///   offstage (no paint, no tickers, no relayout when panes resize), so
 ///   switching branches keeps their state. A page also keeps its state when
 ///   it moves from one pane to another.
-/// * Back (system back, predictive back or
-///   `FoldableNavigator.of(context).pop()`) removes the top page of the
-///   current branch. When the current branch has only 1 page, back falls
-///   through to the enclosing route. [FoldableBackButton] shows in the primary
-///   body and in the secondary body while the branch can be popped, and
-///   removes the page it is in together with the pages above it, so in a
-///   split view the two panes pop themselves (see
+/// * Back (system back or `FoldableNavigator.of(context).pop()`) removes the
+///   top page of the current branch. On Android, a predictive back gesture
+///   from the left edge drives the swipe-back slide below, when a swipe back
+///   could start (it needs `android:enableOnBackInvokedCallback="true"`); any
+///   other system back just pops the page. When the current branch has only 1
+///   page, back falls through to the enclosing route. [FoldableBackButton]
+///   shows in the primary body and in the secondary body while the branch can
+///   be popped, and removes the page it is in together with the pages above it,
+///   so in a split view the two panes pop themselves (see
 ///   [FoldableNavigator.popPageOf]).
-/// * Pages slide like a Cupertino page push/pop (see [transitionDuration]):
+/// * Pages slide like a Cupertino page push/pop by default (see
+///   [transitionDuration] and [transition], which a page overrides with
+///   [FoldablePage.transition]):
 ///   the new page slides in from the right over the old one, which only
 ///   gives way a third and lets the new page cast a shadow. Each pane only
 ///   slides if its own page changed. In a layout with two panes, a change
@@ -35,7 +39,8 @@ part of 'foldable_navigator.dart';
 ///   animate.
 /// * On a single-pane layout, dragging from the left edge follows the finger
 ///   and, when released past half the width (or with enough speed), pops the
-///   top page like a Cupertino swipe-back; otherwise the page snaps back.
+///   top page like a Cupertino swipe-back; otherwise the page snaps back. The
+///   Android predictive back gesture moves the same slide.
 ///
 /// Pages are identified by [Page.key], or by the page object when it has no
 /// key.
@@ -62,6 +67,7 @@ class FoldableSplitNavigator extends FoldableNavigator {
     required this.builder,
     this.transitionDuration = const Duration(milliseconds: 300),
     this.transitionCurve = Curves.fastOutSlowIn,
+    this.transition = FoldablePageTransition.cupertino,
     Key? key,
   }) : super.base(controller: controller, key: key);
 
@@ -71,24 +77,35 @@ class FoldableSplitNavigator extends FoldableNavigator {
   final FoldableNavigatorBuilder builder;
 
   /// Duration of the push/pop slide. [Duration.zero] disables it, and the
-  /// swipe-back gesture with it.
+  /// swipe-back and predictive back gestures with it.
   final Duration transitionDuration;
 
   /// Curve of the push/pop slide.
   final Curve transitionCurve;
+
+  /// How pages animate, unless [FoldablePage.transition] says otherwise. On a
+  /// push the transition of the new page is used, on a pop the one of the page
+  /// that is removed. Swipe back is offered only when the top page's
+  /// transition supports it.
+  final FoldablePageTransition transition;
 
   @override
   State<FoldableSplitNavigator> createState() => _FoldableSplitNavigatorState();
 }
 
 class _FoldableSplitNavigatorState extends State<FoldableSplitNavigator>
-    with SingleTickerProviderStateMixin, _FoldableAppBarHistory {
+    with
+        SingleTickerProviderStateMixin,
+        WidgetsBindingObserver,
+        _FoldableAppBarHistory,
+        _FoldablePredictiveBack {
   final Map<(int, Key), GlobalKey> _subtreeKeys = {};
 
   /// Tells [FoldableScaffold] that pages are sliding, so it snaps pane
   /// changes instead of animating a resize on top of the slide.
   final _transitioning = ValueNotifier<bool>(false);
 
+  @override
   late final AnimationController _animationController = AnimationController(
     vsync: this,
     duration: widget.transitionDuration,
@@ -114,12 +131,14 @@ class _FoldableSplitNavigatorState extends State<FoldableSplitNavigator>
   HorizontalDragGestureRecognizer? _backRecognizer;
 
   /// Whether a swipe-back drag is moving the pages right now.
+  @override
   bool _backSwipeDragging = false;
 
   /// Whether a released or cancelled swipe-back is sliding back to rest.
   bool _backSwipeSettling = false;
 
   /// Whether the released swipe-back is popping the top page right now.
+  @override
   bool _backSwipeCompleting = false;
 
   FoldableNavigatorController get _controller => widget.controller;
@@ -228,14 +247,21 @@ class _FoldableSplitNavigatorState extends State<FoldableSplitNavigator>
       _backSwipeSettling = false;
       _transition = null;
     }
+    // A push is animated by the page that arrives, a pop by the page that goes.
+    final pageTransition = _transitionOf(
+      isPush ? next.top.page : previous.top.page,
+      widget.transition,
+    );
     if (previous.branch != next.branch ||
         widget.transitionDuration == Duration.zero ||
+        pageTransition.isInstant ||
         (!bodyChanged && !switchesPane) ||
         (closesSecondary && !switchesPane)) {
       _transition = null;
       _animationController.value = 1;
     } else {
       _transition = _Transition(
+        transition: pageTransition,
         isPush: isPush,
         body: previous.body,
         secondary: previous.secondary,
@@ -280,14 +306,23 @@ class _FoldableSplitNavigatorState extends State<FoldableSplitNavigator>
     _subtreeKeys.removeWhere((id, _) => !alive.contains(id));
   }
 
-  /// Whether a swipe from the left edge can start a pop now.
+  @override
+  bool get _hasUserDrivenTransition => _transition?.userDriven == true;
+
+  /// Whether a swipe from the left edge, or a predictive back gesture, can
+  /// start a pop now.
+  @override
   bool get _canStartBackSwipe =>
       widget.transitionDuration != Duration.zero &&
       _transition == null &&
       !_backSwipeDragging &&
       !_lastCanSplit &&
       _controller.canPop &&
-      _controller.pages.last.canPop;
+      _controller.pages.last.canPop &&
+      _transitionOf(
+        _controller.pages.last,
+        widget.transition,
+      ).supportsSwipeBack;
 
   void _handleBackPointerDown(PointerDownEvent event) {
     // One swipe at a time.
@@ -312,6 +347,7 @@ class _FoldableSplitNavigatorState extends State<FoldableSplitNavigator>
   }
 
   /// Shows the pop a rightward drag would do, before the page is removed.
+  @override
   void _startBackSwipe() {
     if (!mounted || !_canStartBackSwipe) return;
     final branch = _controller.currentIndex;
@@ -321,6 +357,7 @@ class _FoldableSplitNavigatorState extends State<FoldableSplitNavigator>
     _backSwipeDragging = true;
     setState(() {
       _transition = _Transition(
+        transition: _transitionOf(_visible.top.page, widget.transition),
         isPush: false,
         body: _visible.body,
         secondary: _visible.secondary,
@@ -379,6 +416,7 @@ class _FoldableSplitNavigatorState extends State<FoldableSplitNavigator>
     _settleBackSwipe(complete: false);
   }
 
+  @override
   void _settleBackSwipe({required bool complete}) {
     if (complete) {
       _animationController.forward();
@@ -471,15 +509,6 @@ class _FoldableSplitNavigatorState extends State<FoldableSplitNavigator>
     return _Placement(body: body, secondary: secondary);
   }
 
-  Widget _pageChild(Page<Object?> page) {
-    if (page is FoldablePage) return page.child;
-    if (page is MaterialPage) return page.child;
-    throw FlutterError(
-      'FoldableNavigator only supports FoldablePage and MaterialPage, '
-      'got ${page.runtimeType}.',
-    );
-  }
-
   /// Wraps a page with the same widget types whatever its role, so hiding,
   /// showing or sliding a page only updates properties. Changing the wrapper
   /// types would move the page to a new parent, which rebuilds everything in
@@ -493,37 +522,41 @@ class _FoldableSplitNavigatorState extends State<FoldableSplitNavigator>
     // top page of the branch. Pages that are hidden or sliding out do not.
     final canGoBack = !hidden && !outgoing && _controller.canPop;
 
-    // Cupertino page transition: the page on top slides all the way in while
-    // the page below only gives way a third, and the top page casts a shadow
-    // while it moves.
-    const parallax = 1 / 3;
-    Animation<Offset> position = const AlwaysStoppedAnimation(Offset.zero);
-    var onTop = false;
-    if (t != null && role != null && role != _Role.steady) {
-      final entering = role == _Role.incoming;
-      onTop = entering == t.isPush;
-      final begin = entering
-          ? (t.isPush ? const Offset(1, 0) : const Offset(-parallax, 0))
-          : Offset.zero;
-      final end = entering
-          ? Offset.zero
-          : (t.isPush ? const Offset(-parallax, 0) : const Offset(1, 0));
+    // Only pages that take part in the running transition animate with it.
+    final active = (t != null && role != null && role != _Role.steady)
+        ? t
+        : null;
+    final info = FoldableTransitionInfo(
       // A swipe back follows the finger: the curve only applies when the
       // animation runs on its own.
-      position = (t.userDriven ? _animationController : _animation).drive(
-        Tween(begin: begin, end: end),
-      );
-    }
+      animation: active == null
+          ? kAlwaysCompleteAnimation
+          : (active.userDriven ? _animationController : _animation),
+      role: switch (role) {
+        _Role.incoming => FoldableTransitionRole.incoming,
+        _Role.outgoing => FoldableTransitionRole.outgoing,
+        _ => FoldableTransitionRole.steady,
+      },
+      isPush: active?.isPush ?? true,
+    );
+    final subtreeKey = _subtreeKeys.putIfAbsent(entry.key, GlobalKey.new);
 
-    final child = _FoldablePageScope(
-      page: entry.page,
-      canGoBack: canGoBack,
-      // Slides and pane resizes repaint only the moving layers.
-      child: RepaintBoundary(child: _pageChild(entry.page)),
+    final child = KeyedSubtree(
+      // Holds the page when a transition with other widget types wraps it, so
+      // it keeps its state.
+      key: GlobalObjectKey(subtreeKey),
+      child: _FoldablePageScope(
+        page: entry.page,
+        canGoBack: canGoBack,
+        // Slides and pane resizes repaint only the moving layers.
+        child: RepaintBoundary(
+          child: _restorable(entry.page, _foldablePageChild(entry.page)),
+        ),
+      ),
     );
 
     return KeyedSubtree(
-      key: _subtreeKeys.putIfAbsent(entry.key, GlobalKey.new),
+      key: subtreeKey,
       // Hidden pages get a fixed size so resizing the panes (dragging the
       // divider, pane animations) does not lay them out again.
       child: Positioned(
@@ -541,14 +574,13 @@ class _FoldableSplitNavigatorState extends State<FoldableSplitNavigator>
               ignoring: hidden || outgoing,
               child: ExcludeFocus(
                 excluding: hidden || outgoing,
-                child: SlideTransition(
-                  position: position,
-                  // The wrapper stays the same whatever the role, so only
-                  // properties change when the page starts or stops moving.
-                  child: DecoratedBox(
-                    decoration: onTop ? _pageShadow : const BoxDecoration(),
-                    child: child,
-                  ),
+                // The wrapper types stay the same whatever the role, so only
+                // properties change when the page starts or stops moving.
+                child: _transitioned(
+                  active?.transition ??
+                      _transitionOf(entry.page, widget.transition),
+                  info,
+                  child,
                 ),
               ),
             ),
@@ -673,6 +705,7 @@ class _Visible {
 /// A running push/pop slide, holding what was visible before it.
 class _Transition {
   const _Transition({
+    required this.transition,
     required this.isPush,
     required this.body,
     required this.secondary,
@@ -683,6 +716,9 @@ class _Transition {
     this.nextSecondary,
   });
 
+  /// The transition that animates both pages, picked by the page that is
+  /// pushed or removed.
+  final FoldablePageTransition transition;
   final bool isPush;
   final _Entry body;
   final _Entry? secondary;

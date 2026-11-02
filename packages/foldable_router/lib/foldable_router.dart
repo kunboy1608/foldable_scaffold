@@ -8,6 +8,7 @@ export 'package:foldable_core/foldable_core.dart';
 export 'src/foldable_navigator.dart';
 export 'src/foldable_navigator_controller.dart';
 export 'src/foldable_page.dart';
+export 'src/foldable_page_transition.dart';
 export 'src/lazy_branch.dart';
 export 'src/route/foldable_path.dart';
 export 'src/route/foldable_route.dart';

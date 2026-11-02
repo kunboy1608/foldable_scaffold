@@ -37,6 +37,22 @@ mixin FoldableRouterBase on Listenable {
   /// Shows the route [backGoesToRoot] promised, usually a branch root.
   void goBackToRoot();
 
+  /// A snapshot of the page stacks for state restoration, or null when this
+  /// router has nothing to save.
+  ///
+  /// It must be made of what the standard message codec carries (maps with
+  /// string keys, lists, strings, numbers, booleans). The default saves
+  /// nothing, so a router written against an earlier version keeps working
+  /// with [FoldableRouterDelegate.restorationId].
+  Map<String, Object?>? saveState() => null;
+
+  /// Rebuilds the page stacks from a snapshot made by [saveState].
+  ///
+  /// It must ignore a snapshot that does not fit the router (it may come from
+  /// an older version of the app), and it must neither redirect nor tell
+  /// observers: it brings back what the user saw. The default does nothing.
+  void restoreState(Map<String, Object?> state) {}
+
   /// Adds an observer of every navigation, for example a dev tools log.
   void addObserver(FoldableRouterObserver observer) {}
 
@@ -459,6 +475,90 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
     final target = fallback ?? backTarget;
     if (target != null) _go(target, null);
   }
+
+  /// A snapshot of the page stacks, for state restoration.
+  ///
+  /// Holds the current branch and, for every branch, the URLs of its pages
+  /// from bottom to top, without the branch root (the router creates the roots
+  /// itself; a router without roots saves every page). A page whose route is
+  /// not [FoldableRoute.deepLinkable] has no URL and is left out.
+  ///
+  /// Only maps, lists, strings and integers, so it survives the platform's
+  /// restoration data.
+  @override
+  Map<String, Object?> saveState() {
+    final skip = config.roots.isEmpty ? 0 : 1;
+    return {
+      _indexKey: currentIndex,
+      _branchesKey: [
+        for (var branch = 0; branch < branchCount; branch++)
+          <String>[
+            for (final page in _controller.pagesOf(branch).skip(skip))
+              if (page.name case final name?) name,
+          ],
+      ],
+    };
+  }
+
+  /// Puts back the page stacks of a [saveState] snapshot.
+  ///
+  /// Every saved URL goes through [FoldableRouterConfig.matcher]; one it does
+  /// not know is dropped, the other pages stay. The branch roots stay what the
+  /// router created. Nothing runs through the redirects and the observers hear
+  /// nothing: it re-creates what the user saw, it does not navigate.
+  ///
+  /// A snapshot that does not fit this router (another number of branches, a
+  /// branch index out of range, anything not made by [saveState]) is ignored
+  /// as a whole.
+  @override
+  void restoreState(Map<String, Object?> state) {
+    if (_disposed) return;
+    final index = state[_indexKey];
+    final saved = state[_branchesKey];
+    if (index is! int || saved is! List<Object?>) return;
+    if (saved.length != branchCount || index < 0 || index >= branchCount) {
+      return;
+    }
+    final stacks = <List<String>>[];
+    for (final urls in saved) {
+      if (urls is! List<Object?> || urls.any((url) => url is! String)) return;
+      stacks.add(urls.cast<String>());
+    }
+
+    _announce(() {
+      _controller.batch(() {
+        for (var branch = 0; branch < stacks.length; branch++) {
+          final pages = _restoredPages(branch, stacks[branch]);
+          if (pages.isNotEmpty) _controller.setPages(pages, branch: branch);
+        }
+        _controller.goBranch(index);
+      });
+    });
+  }
+
+  List<Page<Object?>> _restoredPages(int branch, List<String> urls) {
+    final current = _controller.pagesOf(branch);
+    final root = config.roots.isEmpty || current.isEmpty
+        ? const <Page<Object?>>[]
+        : [current.first];
+    return [
+      ...root,
+      for (final url in urls)
+        if (_pageOfUrl(url) case final page?) page,
+    ];
+  }
+
+  /// The page for a saved URL, or null when no route matches it.
+  Page<Object?>? _pageOfUrl(String url) {
+    try {
+      return config.matcher(Uri.parse(url))?.toPage<void>();
+    } on FormatException {
+      return null;
+    }
+  }
+
+  static const _indexKey = 'index';
+  static const _branchesKey = 'branches';
 
   /// The URL for the address bar: the top page that has one.
   @override

@@ -364,6 +364,33 @@ class FoldableSessionRouter extends ChangeNotifier with FoldableRouterBase {
     if (id != null) _switchTo(id);
   }
 
+  /// The id of the session on screen and the page stacks of that session.
+  /// The other sessions are not saved.
+  @override
+  Map<String, Object?> saveState() => {
+    _sessionKey: _activeId,
+    _routerKey: active.saveState(),
+  };
+
+  /// Restores the stacks of the session on screen, if the snapshot is of that
+  /// session.
+  ///
+  /// [sessionOf] decides which session is on screen, restored or not: when the
+  /// snapshot was saved for another session (the user signed out in the
+  /// meantime, for example), it is ignored. See [FoldableRouter.restoreState]
+  /// for the rest.
+  @override
+  void restoreState(Map<String, Object?> state) {
+    final id = state[_sessionKey];
+    final saved = state[_routerKey];
+    if (id != _activeId || saved is! Map<Object?, Object?>) return;
+    if (saved.keys.any((key) => key is! String)) return;
+    active.restoreState(saved.cast<String, Object?>());
+  }
+
+  static const _sessionKey = 'session';
+  static const _routerKey = 'router';
+
   @override
   bool get backGoesToRoot => active.backGoesToRoot;
 

@@ -20,8 +20,10 @@ plumbing comes from
   secondary body; a new page appears next to the current one on a wide window
   and slides over it on a narrow one.
 - **Cupertino transitions.** The new page slides in over the old one, which
-  gives way a third and lets the new page cast a shadow.
-- **Swipe back.** Drag from the left edge to pop the top page, like iOS.
+  gives way a third and lets the new page cast a shadow. Switch to a fade, no
+  animation or your own, for the whole navigator or per page.
+- **Swipe back.** Drag from the left edge to pop the top page, like iOS. On
+  Android, the predictive back gesture drives the same slide.
 - **Back buttons.** `FoldableBackButton` pops the page it is on, so in a split
   view each pane pops itself.
 - **Pages stay alive.** Hidden pages and pages of other branches stay mounted
@@ -195,6 +197,32 @@ Both support push, pop, `FoldableBackButton`, the system back button and the
 left-edge swipe back, and share `FoldableNavigator.of`, `pageOf`,
 `popPageOf`, `isTransitioning` and `transitioningOf`.
 
+## Path patterns and query parameters
+
+`FoldablePath` matches `:name` segments and a trailing `*name` wildcard that
+takes one or more remaining segments, joined with `/` and percent-decoded
+(`/files` and `/files/` do not match):
+
+```dart
+const files = FoldablePath('/files/*rest');
+files.match(Uri.parse('/files/a%20b/c.txt'))?.string('rest'); // 'a b/c.txt'
+```
+
+A query key may be repeated. `strings`, `integers`, `decimals` and `booleans`
+return every value in URL order and skip the ones that do not parse, while
+`string` and friends read the last value. `RouteQuery.build` writes an
+`Iterable` as a repeated key:
+
+```dart
+final query = RouteQuery.fromUri(Uri.parse('/search?tag=a&tag=b&page=2'));
+query.strings('tag'); // ['a', 'b']
+query.integer('page'); // 2
+RouteQuery.build('/search', {'tag': ['a', 'b']}); // '/search?tag=a&tag=b'
+```
+
+`integer` accepts plain decimal integers only (`-4`, `007`; not `0x10`, `+3`
+or `1.5`), and `decimal` never returns `NaN` or infinity.
+
 ## Redirects and guards
 
 `FoldableRoute.redirect` runs for the route being opened, then
@@ -230,7 +258,9 @@ FoldableRouterConfig(
 
 ## Back
 
-- The system back button pops the top page of the current branch.
+- The system back button pops the top page of the current branch. On Android,
+  a back gesture can preview the pop (see
+  [Predictive back (Android)](#predictive-back-android)).
 - When a branch has no page to pop, `backTarget` decides: return a route to
   show it, or null to let the app close. Only tabs other than the first one
   usually return a route.
@@ -263,6 +293,40 @@ AppBar(
 );
 ```
 
+## Predictive back (Android)
+
+On Android 14 and later, the system back gesture can show a preview while the
+finger is still down. For that the app must opt in, in
+`android/app/src/main/AndroidManifest.xml`:
+
+```xml
+<application
+    android:enableOnBackInvokedCallback="true"
+    ...>
+```
+
+With it, a back gesture from the left edge drives the same slide as the
+left-edge swipe back: the top page follows the progress the system reports.
+When the gesture is committed the page is popped and the slide finishes; when
+it is cancelled the page slides back and nothing is popped. Without the
+attribute, or on other platforms, back behaves as before.
+
+The navigator follows the gesture only when a swipe back could start: on
+Android, with a page below the top one, a top page that can pop, a transition
+that supports swipe back (the default `cupertino`), a `transitionDuration` that
+is not zero, no split layout showing two panes, and no other swipe running.
+Otherwise the system back pops the top page at once, without a preview. So do
+the back button, a gesture from the right edge (the slide only goes right), and
+a back that a dialog or another route above the navigator should receive first.
+When the navigator has no page to pop, the gesture is left to the route around
+it, which may play its own predictive transition.
+
+The system back pops exactly one page, once: the navigator pops through its
+controller when it follows a gesture, and a gesture it does not follow is
+popped by `PopScope` as before. This was tested with simulated platform events
+only (the same messages the Android embedder sends), not on a real device or
+emulator.
+
 ## Observers
 
 ```dart
@@ -288,6 +352,64 @@ views. `FoldableNavigator.stack(...)` only keeps the top page, so pop back to a
 page that was disposed and it builds again. `LazyBranch` defers the first build
 of a tab until it is shown (on by default for all but the first tab via
 `FoldableRouterConfig.lazyBranches`).
+
+Besides `FoldablePage`, the navigators show `MaterialPage` and `CupertinoPage`
+(the one from `package:flutter/cupertino.dart`; a page class from another
+package needs the interface below). To use your own `Page` subclass,
+implement `FoldablePageContent` (a single `Widget get child`): the navigators
+mount that child themselves, and your `createRoute` only matters if the page is
+also given to a normal `Navigator`. Any other page type throws a
+`FlutterError` that names the supported types.
+
+Give a page a `restorationId` and the navigators wrap its content in its own
+`RestorationScope`, so the restorable state inside it (a `ListView` or a
+`TextField` with a `restorationId`, a `RestorableInt`) is saved with the app.
+Ids must be unique among the pages of a navigator, and the app needs a
+restoration scope (`MaterialApp.restorationScopeId`). A page without an id is
+unchanged. The split navigator keeps every page mounted, so each page restores
+its own state; the stack navigator drops the state of a page when it unmounts
+it.
+
+## Transitions
+
+Pages slide like a Cupertino push by default. Pick another transition for all
+the pages of a navigator, or for one page:
+
+```dart
+// The whole navigator fades.
+FoldableNavigator.stack(
+  controller: router.controller,
+  transition: FoldablePageTransition.fade,
+);
+
+// One page opts out, from code or from its route.
+FoldablePage(transition: FoldablePageTransition.none, child: ...);
+
+class SettingsRoute extends FoldableRoute {
+  @override
+  FoldablePageTransition? get transition => FoldablePageTransition.fade;
+  // ...
+}
+```
+
+- `FoldablePageTransition.cupertino` is the default: slide, a third of
+  parallax and a shadow. It is the only built-in one with swipe back.
+- `.fade` fades the page on top in (push) or out (pop) over the page below.
+- `.none` shows or removes the page at once. The navigator starts no
+  animation, so `FoldableNavigator.isTransitioning` stays false.
+- `FoldablePageTransition.custom(builder, supportsSwipeBack: false)` wraps the
+  page with `builder(context, info, child)`. `info.animation` runs 0 to 1 over
+  the transition (curved, or the raw drag while swiping back), `info.role` is
+  `steady`, `incoming` or `outgoing`, and `info.isPush` says push or pop.
+
+On a push the transition of the page that arrives animates both pages; on a
+pop, the one of the page that is removed. A page without a `transition` uses
+the navigator's, as do `MaterialPage`, `CupertinoPage` and pages that
+implement `FoldablePageContent`. Swipe back is only offered when the top
+page's transition supports it. A transition is called for every page, including
+those at rest and hidden, and must return the same widget types for every role
+(change properties, not the tree). Pages keep their state either way, but a
+different tree re-creates their render objects.
 
 ## Sessions
 
@@ -344,19 +466,72 @@ state does not describe (change the state first, so both agree). `go`, `push`
 and `back` act on the session on screen. A URL the active session does not
 know can switch to another session, but only one marked `deepLinkable`.
 
+## State restoration
+
+When the system ends the app in the background, `MaterialApp.router` brings
+back only the URL on top, so the user returns to a single page. To get the
+page stacks back, give the app a restoration scope and the delegate an id:
+
+```dart
+MaterialApp.router(
+  restorationScopeId: 'app',
+  routerDelegate: FoldableRouterDelegate(
+    router: router,
+    navigatorKey: navigatorKey,
+    builder: (context) => MyShell(),
+    restorationId: 'foldable_router', // off while null (the default)
+  ),
+  routeInformationParser: const FoldableRouteInformationParser(),
+);
+```
+
+What is saved is `router.saveState()`: the current branch and, for every
+branch, the URLs of its pages from bottom to top. On restore each URL goes
+through `FoldableRouterConfig.matcher` and the page is built again, before the
+first frame:
+
+- The branch roots are not recreated from a URL; the router keeps its own.
+- Only routes with a URL are restored. A page whose route is not
+  `deepLinkable`, and objects passed to a route's constructor, are not saved:
+  those pages are dropped and the ones around them stay.
+- A URL the `matcher` no longer knows is dropped (it does not become a
+  `notFound` page).
+- Nothing runs through the redirects and the observers are not told: restoring
+  re-creates what the user already saw.
+- A snapshot that does not fit the config (another number of branches, a
+  branch index out of range) is ignored.
+- For a `FoldableSessionRouter` the active session and its stacks are saved.
+  `sessionOf` still decides which session is on screen: a snapshot saved for
+  another one is ignored.
+- The startup route from the platform is applied after the restore, so on a
+  restored app it equals the page on top and changes nothing.
+
+State inside a page, like a scroll position or a text field, is not part of
+this: give those widgets their own `restorationId`, as in any Flutter app.
+A custom `FoldableRouterBase` saves nothing unless it overrides `saveState` and
+`restoreState`.
+
 ## Limitations
 
 - **Deep links to non-root pages of another tab.** `branchOf` only recognises
   branch roots, so a URL such as `/inbox/42` does not switch to the inbox tab:
   the page is shown in the current branch.
-- **Pages are not `Navigator` routes.** Hero animations and per-page
-  transitions are not supported, and `Navigator.of(context)` inside a page
+- **Pages are not `Navigator` routes.** Hero animations are not supported,
+  and `Navigator.of(context)` inside a page
   reaches the root navigator, not the stack of the router. Use
   `FoldableNavigator.of(context)` or the router.
-- **No state restoration.** The page stacks are not saved or restored by the
-  platform.
+- **State restoration covers the routes with a URL.** With
+  `FoldableRouterDelegate.restorationId` the page stacks come back after the
+  system ended the app, but pages that are not `deepLinkable` and the objects
+  passed to a route's constructor are lost, and state inside a page needs the
+  page's `restorationId` (see [Pages and state](#pages-and-state)). See [State restoration](#state-restoration).
 - **Swipe back is left-edge only.** There is no right-edge swipe for
   right-to-left layouts.
+- **Android predictive back is untested on a device.** The gesture drives the
+  same slide as the edge swipe (see [Predictive back (Android)](#predictive-back-android)),
+  but it has only been exercised with simulated events in tests. It follows
+  gestures from the left edge only: a right-edge gesture, the back button and
+  pages whose transition has no swipe back pop at once, without a preview.
 - **The split navigator keeps every page of every branch mounted.** This keeps
   scroll positions and text fields, at the cost of memory. Use
   `FoldableNavigator.stack(...)` when that matters; `LazyBranch` only defers

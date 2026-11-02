@@ -1,13 +1,17 @@
+import 'package:flutter/cupertino.dart' show CupertinoPage;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter/services.dart' show PredictiveBackEvent, SwipeEdge;
 import 'package:foldable_core/foldable_core.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'foldable_navigator_controller.dart';
 import 'foldable_page.dart';
+import 'foldable_page_transition.dart';
 
 export 'foldable_navigator_controller.dart';
 export 'foldable_page.dart';
+export 'foldable_page_transition.dart';
 
 part 'foldable_split_navigator.dart';
 part 'foldable_stack_navigator.dart';
@@ -15,6 +19,36 @@ part 'foldable_stack_navigator.dart';
 /// Builds the scaffold around the two panes of a [FoldableSplitNavigator].
 typedef FoldableNavigatorBuilder =
     Widget Function(BuildContext context, Widget body, Widget? secondaryBody);
+
+/// The widget a navigator shows for [page].
+///
+/// Supported pages, in this order: a [Page] that implements
+/// [FoldablePageContent] (this includes [FoldablePage]), a [MaterialPage] and a
+/// [CupertinoPage]. Anything else throws a [FlutterError].
+///
+/// The navigators build the page themselves and never call
+/// [Page.createRoute], so the page transition is [FoldablePage.transition], or
+/// the one of the navigator.
+Widget _foldablePageChild(Page<Object?> page) {
+  // `Page` is not a subtype of the interface, so `is` does not promote.
+  if (page is FoldablePageContent) return (page as FoldablePageContent).child;
+  if (page is MaterialPage) return page.child;
+  if (page is CupertinoPage) return page.child;
+  throw FlutterError.fromParts([
+    ErrorSummary(
+      'FoldableNavigator does not support pages of type '
+      '${page.runtimeType}.',
+    ),
+    ErrorDescription(
+      'FoldableNavigator shows FoldablePage, MaterialPage, CupertinoPage and '
+      'any Page that implements FoldablePageContent.',
+    ),
+    ErrorHint(
+      'To use a custom Page, make it implement FoldablePageContent and return '
+      'the widget to show from its child getter.',
+    ),
+  ]);
+}
 
 /// Shows the pages of a [FoldableNavigatorController].
 ///
@@ -59,6 +93,7 @@ abstract class FoldableNavigator extends StatefulWidget {
     required FoldableNavigatorBuilder builder,
     Duration transitionDuration = const Duration(milliseconds: 300),
     Curve transitionCurve = Curves.fastOutSlowIn,
+    FoldablePageTransition transition = FoldablePageTransition.cupertino,
     Key? key,
   }) {
     return FoldableSplitNavigator(
@@ -66,6 +101,7 @@ abstract class FoldableNavigator extends StatefulWidget {
       builder: builder,
       transitionDuration: transitionDuration,
       transitionCurve: transitionCurve,
+      transition: transition,
       key: key,
     );
   }
@@ -82,12 +118,14 @@ abstract class FoldableNavigator extends StatefulWidget {
     required FoldableNavigatorController controller,
     Duration transitionDuration = const Duration(milliseconds: 300),
     Curve transitionCurve = Curves.fastOutSlowIn,
+    FoldablePageTransition transition = FoldablePageTransition.cupertino,
     Key? key,
   }) {
     return FoldableStackNavigator(
       controller: controller,
       transitionDuration: transitionDuration,
       transitionCurve: transitionCurve,
+      transition: transition,
       key: key,
     );
   }
@@ -218,12 +256,6 @@ class FoldableBackButton extends StatelessWidget {
   }
 }
 
-/// The shadow the page on top casts while it slides over the one below, like
-/// a Cupertino page transition.
-const _pageShadow = BoxDecoration(
-  boxShadow: [BoxShadow(color: Color(0x33000000), blurRadius: 16)],
-);
-
 /// Keeps a [LocalHistoryEntry] on the enclosing [ModalRoute] while the
 /// navigator can pop.
 ///
@@ -286,8 +318,7 @@ mixin _FoldableAppBarHistory<T extends FoldableNavigator> on State<T> {
       _detachHistory();
       _historyRoute = route;
     }
-    final wantsEntry =
-        historyController.canPop && (route?.isCurrent ?? false);
+    final wantsEntry = historyController.canPop && (route?.isCurrent ?? false);
     if (wantsEntry && _historyEntry == null && route != null) {
       final entry = LocalHistoryEntry(onRemove: _onHistoryRemoved);
       _historyEntry = entry;
@@ -319,12 +350,158 @@ mixin _FoldableAppBarHistory<T extends FoldableNavigator> on State<T> {
   }
 }
 
+/// The navigator that currently follows a predictive back gesture, so that two
+/// navigators on screen (one inside a page of the other) never both pop for the
+/// same gesture. [WidgetsBinding] hands a gesture to every observer that claims
+/// it, not just the first.
+Object? _predictiveBackOwner;
+
+/// Drives the swipe-back transition of a navigator with the Android predictive
+/// back gesture, instead of letting the system back pop the top page at once.
+///
+/// The navigator registers as a [WidgetsBindingObserver] and claims a gesture
+/// only when a left-edge swipe could start now (see `_canStartBackSwipe`); an
+/// unclaimed gesture ends in the usual `handlePopRoute`, which pops through
+/// the navigator's [PopScope] without a slide. A claimed one never reaches
+/// `handlePopRoute`, so the page is popped exactly once, by [commit].
+///
+/// Why nothing else claims the same gesture: the `Navigator` is not a
+/// [WidgetsBindingObserver]; only the predictive page transition of a route is,
+/// and it requires `popGestureEnabled`. While the navigator can pop, its
+/// [PopScope] (`canPop: false`) and its local history entry both make the
+/// route of the page it sits in refuse it. And when it cannot pop, this mixin
+/// declines, so the route may animate its own pop.
+mixin _FoldablePredictiveBack<T extends FoldableNavigator>
+    on State<T>, WidgetsBindingObserver {
+  bool get _canStartBackSwipe;
+  bool get _hasUserDrivenTransition;
+  bool get _backSwipeDragging;
+  set _backSwipeDragging(bool value);
+  set _backSwipeCompleting(bool value);
+  AnimationController get _animationController;
+  void _startBackSwipe();
+  void _settleBackSwipe({required bool complete});
+
+  /// Whether this navigator follows the gesture that is running now.
+  bool _predictiveBackActive = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    _releasePredictiveBack();
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  void _releasePredictiveBack() {
+    _predictiveBackActive = false;
+    if (identical(_predictiveBackOwner, this)) _predictiveBackOwner = null;
+  }
+
+  /// Whether the page this navigator sits in is the one the system back would
+  /// pop, and is on screen: not under a dialog or another route.
+  bool get _isFront {
+    if (!TickerMode.getValuesNotifier(context).value.enabled) return false;
+    return ModalRoute.of(context)?.isCurrent ?? true;
+  }
+
+  @override
+  bool handleStartBackGesture(PredictiveBackEvent backEvent) {
+    // Only Android sends these events, and the check keeps tests of other
+    // platforms honest. A button press is not a gesture; a swipe from the
+    // right edge would have to slide the page the other way, which the slide
+    // transitions do not do: both end in an instant pop.
+    if (defaultTargetPlatform != TargetPlatform.android ||
+        backEvent.isButtonEvent ||
+        backEvent.swipeEdge != SwipeEdge.left ||
+        !mounted ||
+        _predictiveBackOwner != null ||
+        !_isFront ||
+        !_canStartBackSwipe) {
+      return false;
+    }
+    _startBackSwipe();
+    if (!_backSwipeDragging) return false;
+    _predictiveBackActive = true;
+    _predictiveBackOwner = this;
+    _animationController.value = backEvent.progress.clamp(0.0, 1.0);
+    return true;
+  }
+
+  @override
+  void handleUpdateBackGestureProgress(PredictiveBackEvent backEvent) {
+    if (!_predictiveBackActive) return;
+    if (!_hasUserDrivenTransition) {
+      // The stack changed under the gesture and the swipe was dropped.
+      _releasePredictiveBack();
+      return;
+    }
+    _animationController.value = backEvent.progress.clamp(0.0, 1.0);
+  }
+
+  @override
+  void handleCommitBackGesture() {
+    if (!_predictiveBackActive) return;
+    _releasePredictiveBack();
+    _backSwipeDragging = false;
+    if (!_hasUserDrivenTransition) return;
+    // Pops through the controller, not the route: this gesture is ours.
+    _backSwipeCompleting = true;
+    final didPop = widget.controller.pop();
+    _backSwipeCompleting = false;
+    _settleBackSwipe(complete: didPop);
+  }
+
+  @override
+  void handleCancelBackGesture() {
+    if (!_predictiveBackActive) return;
+    _releasePredictiveBack();
+    _backSwipeDragging = false;
+    if (!_hasUserDrivenTransition) return;
+    _settleBackSwipe(complete: false);
+  }
+}
+
 /// Width of the left edge strip where a drag starts a back swipe.
 const double _kBackSwipeEdge = 20.0;
 
 /// Speed, in logical pixels per second, a released swipe needs to pop the
 /// page even when it has not moved past half the width.
 const double _kBackSwipeMinFlingVelocity = 700.0;
+
+/// The transition of [page]: its own, else the [fallback] of the navigator.
+///
+/// Pages that are not a [FoldablePage] (a [MaterialPage], a custom page type
+/// with [FoldablePageContent]) use the [fallback].
+FoldablePageTransition _transitionOf(
+  Page<Object?> page,
+  FoldablePageTransition fallback,
+) {
+  return (page is FoldablePage ? page.transition : null) ?? fallback;
+}
+
+/// Wraps [child] with [transition]. The [Builder] stays the same whatever the
+/// transition, and gives it a context below the navigator.
+Widget _transitioned(
+  FoldablePageTransition transition,
+  FoldableTransitionInfo info,
+  Widget child,
+) {
+  return Builder(builder: (context) => transition.build(context, info, child));
+}
+
+/// Gives the page its own restoration scope when it has a [Page.restorationId].
+///
+/// The [RestorationScope] is always there, with a null id it does nothing, so
+/// the widget tree has the same shape for every page.
+Widget _restorable(Page<Object?> page, Widget child) {
+  return RestorationScope(restorationId: page.restorationId, child: child);
+}
 
 class _FoldableNavigatorScope extends InheritedWidget {
   const _FoldableNavigatorScope({

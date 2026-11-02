@@ -72,10 +72,7 @@ class _Recorder extends FoldableRouterObserver {
   void onNavigation(FoldableNavigationEvent event) => events.add(event);
 }
 
-FoldableRouter _router(
-  _Recorder recorder, {
-  FoldableRedirect? redirect,
-}) {
+FoldableRouter _router(_Recorder recorder, {FoldableRedirect? redirect}) {
   return FoldableRouter(
     config: FoldableRouterConfig(
       roots: const [_HomeRoute(), _SecondRoute()],

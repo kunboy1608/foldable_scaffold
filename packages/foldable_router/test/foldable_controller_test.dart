@@ -241,29 +241,32 @@ void main() {
   });
 
   group('popPage', () {
-    test('removes a page that is not on top, with the pages above it', () async {
-      final log = <String>[];
-      final controller = _single([_page('root')]);
-      final a = _Result(controller.push(_page('a', log: log)));
-      final b = _Result(controller.push(_page('b', log: log)));
-      final c = _Result(controller.push(_page('c', log: log)));
-      final pageA = controller.pages[1];
-      var notified = 0;
-      controller.addListener(() => notified++);
+    test(
+      'removes a page that is not on top, with the pages above it',
+      () async {
+        final log = <String>[];
+        final controller = _single([_page('root')]);
+        final a = _Result(controller.push(_page('a', log: log)));
+        final b = _Result(controller.push(_page('b', log: log)));
+        final c = _Result(controller.push(_page('c', log: log)));
+        final pageA = controller.pages[1];
+        var notified = 0;
+        controller.addListener(() => notified++);
 
-      expect(controller.popPage(pageA, 'r'), isTrue);
-      await pumpEventQueue();
+        expect(controller.popPage(pageA, 'r'), isTrue);
+        await pumpEventQueue();
 
-      expect(_names(controller), ['/root']);
-      expect(notified, 1);
-      // The pages above are removed first, with a null result.
-      expect(log, ['c:true:null', 'b:true:null', 'a:true:r']);
-      expect(a.value, 'r');
-      expect(b.done, isTrue);
-      expect(b.value, isNull);
-      expect(c.done, isTrue);
-      expect(c.value, isNull);
-    });
+        expect(_names(controller), ['/root']);
+        expect(notified, 1);
+        // The pages above are removed first, with a null result.
+        expect(log, ['c:true:null', 'b:true:null', 'a:true:r']);
+        expect(a.value, 'r');
+        expect(b.done, isTrue);
+        expect(b.value, isNull);
+        expect(c.done, isTrue);
+        expect(c.value, isNull);
+      },
+    );
 
     test('never removes the first page, only what is above it', () async {
       final controller = _single([_page('root')]);
