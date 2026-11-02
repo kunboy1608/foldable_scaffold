@@ -13,11 +13,13 @@ import 'package:material_ui/material_ui.dart';
 /// * Below 600: one pane at a time, no navigation rail.
 /// * From 600: the primary navigation is shown sideways, one pane at a time.
 /// * From 1200: the body and the secondary body are shown side by side, with
-///   a divider that can be dragged to resize them.
+///   a divider that can be dragged to resize them. The divider stops where
+///   either pane would get narrower than [minBodySize].
 ///
 /// When only one pane is shown, the secondary body replaces the body, unless
 /// [focusOnPrimaryBody] is true. A pane narrower than [minBodySize] collapses
-/// into the other one.
+/// into the other one, which happens when the available width cannot hold two
+/// panes of that size.
 ///
 /// Switching the one visible pane is instant while [paneTransition] is true,
 /// so a page slide (`FoldableNavigator`) does not run a pane resize on top of
@@ -159,22 +161,28 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
     );
   }
 
+  /// The ratio is relative to [screenWidth], the width of the whole scaffold,
+  /// while the panes share a narrower area: [minSecondarySize] and
+  /// [maxSecondarySize] bound the secondary pane inside that area.
   Widget _buildResizableDivider({
     required BoxConstraints constraints,
-    required double minExtendedSize,
-    required double maxExtendedSize,
-    required double halfTotalWidth,
+    required double minSecondarySize,
+    required double maxSecondarySize,
     required double screenWidth,
   }) {
     return MouseRegion(
       cursor: SystemMouseCursors.resizeLeftRight,
       child: GestureDetector(
+        key: const Key('pane_divider'),
         onHorizontalDragStart: (_) {
           _isHoveringDivider.value = true;
         },
         onHorizontalDragUpdate: (update) {
+          // Keep the stored ratio in range, so dragging back after going past
+          // an edge moves the divider right away.
           final currentSecondarySize = _ratioSecondaryBody.value * screenWidth;
-          final newSecondarySize = currentSecondarySize - update.delta.dx;
+          final newSecondarySize = (currentSecondarySize - update.delta.dx)
+              .clamp(minSecondarySize, maxSecondarySize);
           _ratioSecondaryBody.value = newSecondarySize / screenWidth;
         },
         onHorizontalDragEnd: (_) {
@@ -220,7 +228,7 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
 
         final scaffoldWidth = scaffoldConstraints.maxWidth;
         final isMediumSize = scaffoldWidth >= 600;
-        final isMediumLargeSize = scaffoldWidth > 1200;
+        final isMediumLargeSize = scaffoldWidth >= 1200;
         final navigationWidth = scaffoldWidth > 1000
             ? _maxWidthNavigation + padding.left
             : isMediumSize
@@ -289,16 +297,22 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
                     child: LayoutBuilder(
                       builder: (innerContext, constraints) {
                         final totalWidth = constraints.maxWidth;
-                        final halfTotalWidth = totalWidth / 2;
-                        final halfDividerSize = _dividerSize / 2;
 
                         final canSplitPanel =
                             isMediumLargeSize && hasSecondaryBody;
 
-                        final minExtendedSize =
-                            -halfTotalWidth + halfDividerSize;
-                        final maxExtendedSize =
-                            halfTotalWidth - halfDividerSize;
+                        // The panes share the width left by the navigation and
+                        // the divider. Each keeps at least minBodySize, or half
+                        // of that width when it cannot hold two of them.
+                        final splitWidth = (totalWidth - _dividerSize).clamp(
+                          0.0,
+                          double.infinity,
+                        );
+                        final minPaneSize = _minBodySize < splitWidth / 2
+                            ? _minBodySize
+                            : splitWidth / 2;
+                        final minSecondarySize = minPaneSize;
+                        final maxSecondarySize = splitWidth - minPaneSize;
 
                         return MediaQuery(
                           data: MediaQuery.of(context).copyWith(
@@ -319,16 +333,19 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
                                   _isHoveringDivider.value;
                               double secondaryTargetWidth = 0.0;
                               double primaryTargetWidth = totalWidth;
+                              double dividerTargetWidth = 0.0;
 
                               if (canSplitPanel) {
+                                // The window may have been resized since the
+                                // ratio was stored.
                                 secondaryTargetWidth =
-                                    ratioSecondaryBody * scaffoldWidth -
-                                    halfDividerSize;
-
+                                    (ratioSecondaryBody * scaffoldWidth).clamp(
+                                      minSecondarySize,
+                                      maxSecondarySize,
+                                    );
+                                dividerTargetWidth = _dividerSize;
                                 primaryTargetWidth =
-                                    totalWidth -
-                                    secondaryTargetWidth -
-                                    halfDividerSize;
+                                    splitWidth - secondaryTargetWidth;
                               } else {
                                 if (!_focusOnPrimaryBody && hasSecondaryBody) {
                                   secondaryTargetWidth = totalWidth;
@@ -339,15 +356,21 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
                                 }
                               }
 
+                              // A collapsed pane gives its room, and the
+                              // divider's, to the other one.
                               if (!isHoveringDivider) {
                                 if (primaryTargetWidth < _minBodySize) {
-                                  secondaryTargetWidth += primaryTargetWidth;
+                                  secondaryTargetWidth +=
+                                      primaryTargetWidth + dividerTargetWidth;
                                   primaryTargetWidth = 0;
+                                  dividerTargetWidth = 0;
                                 }
 
                                 if (secondaryTargetWidth < _minBodySize) {
-                                  primaryTargetWidth += secondaryTargetWidth;
+                                  primaryTargetWidth +=
+                                      secondaryTargetWidth + dividerTargetWidth;
                                   secondaryTargetWidth = 0;
+                                  dividerTargetWidth = 0;
                                 }
                               }
 
@@ -356,9 +379,10 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
                                   0.0,
                                   totalWidth,
                                 ),
-                                dividerWidth: canSplitPanel
-                                    ? _dividerSize
-                                    : 0.0,
+                                dividerWidth: dividerTargetWidth.clamp(
+                                  0.0,
+                                  totalWidth,
+                                ),
                                 secondaryWidth: secondaryTargetWidth.clamp(
                                   0.0,
                                   totalWidth,
@@ -398,7 +422,6 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
                                       final panes = CustomMultiChildLayout(
                                         delegate: _FoldablePaneLayoutDelegate(
                                           geometry: geometry,
-                                          showOnePanel: totalWidth <= 1200,
                                         ),
                                         children: [
                                           LayoutId(
@@ -409,9 +432,10 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
                                             id: _PaneSlot.divider,
                                             child: _buildResizableDivider(
                                               constraints: constraints,
-                                              minExtendedSize: minExtendedSize,
-                                              maxExtendedSize: maxExtendedSize,
-                                              halfTotalWidth: halfTotalWidth,
+                                              minSecondarySize:
+                                                  minSecondarySize,
+                                              maxSecondarySize:
+                                                  maxSecondarySize,
                                               screenWidth:
                                                   scaffoldConstraints.maxWidth,
                                             ),
@@ -495,9 +519,6 @@ typedef PreferredSizeBoxConstraintsWidgetBuilder =
       BoxConstraints constraints,
     );
 
-/// Builds a widget, or returns null.
-typedef NullableWidgetBuilder = Widget? Function(BuildContext context);
-
 enum _PaneSlot { primary, divider, secondary }
 
 class _PaneGeometry {
@@ -534,13 +555,9 @@ class _PaneGeometryTween extends Tween<_PaneGeometry> {
 }
 
 class _FoldablePaneLayoutDelegate extends MultiChildLayoutDelegate {
-  _FoldablePaneLayoutDelegate({
-    required this.geometry,
-    required this.showOnePanel,
-  });
+  _FoldablePaneLayoutDelegate({required this.geometry});
 
   final _PaneGeometry geometry;
-  final bool showOnePanel;
 
   @override
   void performLayout(Size size) {

@@ -5,8 +5,8 @@ void main() => runApp(const ScaffoldExample());
 
 /// A mail app: the body lists messages, the secondary body reads one.
 ///
-/// Resize the window: one pane below 1200, both panes above, and the divider
-/// can be dragged.
+/// Resize the window: one pane below 1200, both panes from 1200, and the
+/// divider can be dragged.
 class ScaffoldExample extends StatefulWidget {
   const ScaffoldExample({super.key});
 

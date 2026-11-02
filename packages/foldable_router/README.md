@@ -1,34 +1,38 @@
 # foldable_router
 
 Navigation for foldable apps: one page stack per branch (tab), Cupertino page
-slides, edge swipe back, deep links, redirects and guards, on top of
-`[foldable_scaffold](../foldable_scaffold)`.
+slides, edge swipe back, deep links, redirects and guards.
+
+It is built for the two-pane layouts of
+[foldable_scaffold](https://github.com/kunboy1608/foldable_scaffold/tree/main/packages/foldable_scaffold),
+but it does not depend on it. `FoldableNavigator` hands its panes to any
+builder, so you can lay them out with your own widgets. The shared pane
+plumbing comes from
+[foldable_core](https://github.com/kunboy1608/foldable_scaffold/tree/main/packages/foldable_core).
 
 ## Features
 
 - **Two navigators.** `FoldableNavigator(...)` keeps one stack per tab in two
-panes; `FoldableNavigator.stack(...)` shows only the top page of the current
-branch, full screen, without keeping branches.
+  panes; `FoldableNavigator.stack(...)` shows only the top page of the current
+  branch, full screen, without keeping branches.
 - **One stack per tab.** Switching tab keeps the pages of both tabs.
 - **Two panes.** The second-to-last page is the body, the top page is the
-secondary body; a new page appears next to the current one on a wide window
-and slides over it on a narrow one.
+  secondary body; a new page appears next to the current one on a wide window
+  and slides over it on a narrow one.
 - **Cupertino transitions.** The new page slides in over the old one, which
-gives way a third and lets the new page cast a shadow.
+  gives way a third and lets the new page cast a shadow.
 - **Swipe back.** Drag from the left edge to pop the top page, like iOS.
 - **Back buttons.** `FoldableBackButton` pops the page it is on, so in a split
-view each pane pops itself.
+  view each pane pops itself.
 - **Pages stay alive.** Hidden pages and pages of other branches stay mounted
-offstage.
+  offstage.
 - **Deep links.** A `FoldableRoute` has a URL; a matcher turns a URL back into
-a route.
+  a route.
 - **Redirects and guards.** Per-route and global, synchronous or async, with a
-loop cap, like go_router.
+  loop cap, like go_router.
 - **Back policy.** Choose what the system back button does when a branch has
-nothing to pop.
+  nothing to pop.
 - **Observers.** Log every navigation, or drive `foldable_dev_tools`.
-
-
 
 ## Install
 
@@ -36,9 +40,10 @@ nothing to pop.
 flutter pub add foldable_router
 ```
 
-
-
 ## Quick start
+
+The example uses `FoldableScaffold`, so add `foldable_scaffold` to your
+app too; the router itself does not need it.
 
 ```dart
 import 'package:foldable_router/foldable_router.dart';
@@ -108,7 +113,7 @@ final router = FoldableRouter(
   config: FoldableRouterConfig(
     roots: const [HomeRoute(), SettingsRoute()],
     matcher: _match,
-    notFound: (uri) => NotFoundRoute(uri),z
+    notFound: (uri) => NotFoundRoute(uri),
     branchOf: (route) => route is TabRoute ? route.tab : null,
     backTarget: (router) =>
         router.currentIndex == 0 ? null : const HomeRoute(),
@@ -144,16 +149,14 @@ MaterialApp.router(
 );
 ```
 
-
-
 ## `go` and `push`
 
 - `push(route)` adds the route on top of the current branch and leaves
-everything below it alone. No redirects, no tab switch.
+  everything below it alone. No redirects, no tab switch.
 - `go(context, route)` resolves the redirects, then replaces the pages above
-the page that navigated. `go(null, route)` uses the branch root as the
-parent. Going to a branch root switches to that tab and pops it to its root
-in one update, so it is rendered once.
+  the page that navigated. `go(null, route)` uses the branch root as the
+  parent. Going to a branch root switches to that tab and pops it to its root
+  in one update, so it is rendered once.
 
 ```dart
 router.push(const DetailsRoute(id: '3'));
@@ -161,20 +164,18 @@ router.go(context, const SettingsRoute());
 router.goLocation('/details?id=3'); // from a link
 ```
 
-
-
 ## Navigators
 
 `FoldableNavigator` is the abstraction that draws a
 `FoldableNavigatorController`. Pick an implementation when you create one:
 
 - `FoldableNavigator(...)` creates a `FoldableSplitNavigator`: one page stack
-per branch (tab), the body and the secondary body side by side on a wide
-window, every page kept mounted offstage.
+  per branch (tab), the body and the secondary body side by side on a wide
+  window, every page kept mounted offstage.
 - `FoldableNavigator.stack(...)` creates a `FoldableStackNavigator`: only the
-top page of the current branch, filling the screen. The pages below it and
-the other branches are not mounted, so their state is thrown away. Use it
-for flows without tabs, like sign in or onboarding.
+  top page of the current branch, filling the screen. The pages below it and
+  the other branches are not mounted, so their state is thrown away. Use it
+  for flows without tabs, like sign in or onboarding.
 
 ```dart
 FoldableNavigator(
@@ -227,23 +228,21 @@ FoldableRouterConfig(
 );
 ```
 
-
-
 ## Back
 
 - The system back button pops the top page of the current branch.
 - When a branch has no page to pop, `backTarget` decides: return a route to
-show it, or null to let the app close. Only tabs other than the first one
-usually return a route.
+  show it, or null to let the app close. Only tabs other than the first one
+  usually return a route.
 - `FoldableBackButton` pops the page it belongs to, together with the pages
-above it in the branch, so in a split view each pane pops itself. In the app
-bar of a shell, outside any page, it follows
-`FoldableNavigator.canPop(context)` instead and pops the top page.
+  above it in the branch, so in a split view each pane pops itself. In the app
+  bar of a shell, outside any page, it follows
+  `FoldableNavigator.canPop(context)` instead and pops the top page.
 - `FoldableNavigator.canPop(context)` says whether the closest navigator has a
-page to pop, and rebuilds when navigation changes, for custom app bar
-leading widgets.
+  page to pop, and rebuilds when navigation changes, for custom app bar
+  leading widgets.
 - The delegate only goes to the root when its own `PopScope` refused the back,
-so a page inside the navigator refusing a pop does not empty the stack.
+  so a page inside the navigator refusing a pop does not empty the stack.
 
 An `AppBar` with no `leading` shows the back button by itself while the
 navigator can pop, so `FoldableBackButton` is only needed for custom placement.
@@ -264,8 +263,6 @@ AppBar(
 );
 ```
 
-
-
 ## Observers
 
 ```dart
@@ -281,8 +278,6 @@ class Logger extends FoldableRouterObserver {
 FoldableRouterConfig(observers: const [Logger()], /* ... */);
 // Or later: router.addObserver(observer);
 ```
-
-
 
 ## Pages and state
 
@@ -345,13 +340,31 @@ FoldableRouterDelegate(
 
 Call `router.refresh()` when the state `sessionOf` reads changes, or
 `router.replaceSession('main', route: const HomeRoute())` for a hand-off the
-state does not describe (change the state first, so both agree). `go`, `push` and `back` act on the session on screen.
-A URL the active session does not know can switch to another session, but only
-one marked `deepLinkable`.
+state does not describe (change the state first, so both agree). `go`, `push`
+and `back` act on the session on screen. A URL the active session does not
+know can switch to another session, but only one marked `deepLinkable`.
+
+## Limitations
+
+- **Deep links to non-root pages of another tab.** `branchOf` only recognises
+  branch roots, so a URL such as `/inbox/42` does not switch to the inbox tab:
+  the page is shown in the current branch.
+- **Pages are not `Navigator` routes.** Hero animations and per-page
+  transitions are not supported, and `Navigator.of(context)` inside a page
+  reaches the root navigator, not the stack of the router. Use
+  `FoldableNavigator.of(context)` or the router.
+- **No state restoration.** The page stacks are not saved or restored by the
+  platform.
+- **Swipe back is left-edge only.** There is no right-edge swipe for
+  right-to-left layouts.
+- **The split navigator keeps every page of every branch mounted.** This keeps
+  scroll positions and text fields, at the cost of memory. Use
+  `FoldableNavigator.stack(...)` when that matters; `LazyBranch` only defers
+  the first build of a tab.
 
 ## Example
 
-Run `[example/](example/)` for three sessions: signed out (sign in,
+Run the [example](example/) for three sessions: signed out (sign in,
 sign up), onboarding, and a tabbed home that has a button for every way to
 navigate (`push`, `push` with a result, `go` with and without a context,
 `goLocation`, `pushLocation`, `batch`, `pushAndRemoveUntil`, `popUntil`,

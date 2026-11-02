@@ -77,7 +77,8 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   FoldableRouter({required this.config, this.allowEmptyRoots = false})
     : _observers = List.of(config.observers),
       _controller = _createController(config, allowEmptyRoots) {
-    _controller.addListener(notifyListeners);
+    _remember();
+    _controller.addListener(_onControllerChanged);
   }
 
   /// The app description of this router.
@@ -95,6 +96,16 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
 
   final FoldableNavigatorController _controller;
   final List<FoldableRouterObserver> _observers;
+
+  /// The branch and the pages of that branch at the last navigation that was
+  /// reported to the observers. A change of the controller that differs from
+  /// it was not announced by the router itself.
+  int _knownIndex = 0;
+  List<Page<Object?>> _knownPages = const [];
+
+  /// How many router operations are running that announce their own event.
+  /// While it is not zero the controller changes are not reported twice.
+  int _announcing = 0;
 
   @override
   void addObserver(FoldableRouterObserver observer) {
@@ -184,6 +195,11 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   ///
   /// Returns the final route right away while every redirect is synchronous,
   /// and a [Future] as soon as one of them returns one.
+  ///
+  /// An exception thrown by a redirect reaches the caller, as an error of the
+  /// [Future] once a redirect is asynchronous. [go] and the other navigations
+  /// of the router report it with [FlutterError.reportError] and abandon the
+  /// navigation instead.
   ///
   /// The result is null when the navigation is abandoned: an asynchronous
   /// redirect finished after [context] and the router's navigator were gone,
@@ -292,16 +308,36 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
         ..scheduleFrame();
       return;
     }
-    final target = resolve(route, context: context, uri: uri);
+    final FutureOr<FoldableRoute?> target;
+    try {
+      target = resolve(route, context: context, uri: uri);
+    } catch (error, stack) {
+      _reportRedirectError(error, stack);
+      return;
+    }
     if (target is Future<FoldableRoute?>) {
-      target.then((resolved) {
+      target.then<void>((resolved) {
         if (resolved != null && navigation == _navigations) {
           apply(resolved, parent: parent);
         }
-      });
+      }, onError: _reportRedirectError);
       return;
     }
     if (target != null) apply(target, parent: parent);
+  }
+
+  /// A redirect threw: tell Flutter and abandon the navigation. Showing the
+  /// route that was asked for would skip the redirect, and that route may be
+  /// the very one the redirect guards.
+  void _reportRedirectError(Object error, StackTrace stack) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        stack: stack,
+        library: 'foldable_router',
+        context: ErrorDescription('while resolving a redirect'),
+      ),
+    );
   }
 
   /// Shows [target] at the position of [parent] (default: the branch root),
@@ -314,16 +350,18 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
     final branch = _controller.pages.isEmpty
         ? null
         : config.branchOf?.call(target) ?? _defaultBranchOf(target);
-    if (branch != null) {
-      // Switch and pop in one update, so the branch is rendered once, already
-      // at its root.
-      _controller.batch(() {
-        _controller.popToRoot(branch: branch);
-        _controller.goBranch(branch);
-      });
-    } else {
-      _replaceChildren(parent, target);
-    }
+    _announce(() {
+      if (branch != null) {
+        // Switch and pop in one update, so the branch is rendered once,
+        // already at its root.
+        _controller.batch(() {
+          _controller.popToRoot(branch: branch);
+          _controller.goBranch(branch);
+        });
+      } else {
+        _replaceChildren(parent, target);
+      }
+    });
     _emit(FoldableNavigationKind.go, target);
   }
 
@@ -359,7 +397,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   /// Unlike [go] this never redirects and never switches branch: the page is
   /// added exactly where the user is.
   Future<T?> push<T extends Object?>(FoldableRoute route) {
-    final future = _controller.push<T>(route.toPage<T>());
+    final future = _announce(() => _controller.push<T>(route.toPage<T>()));
     _emit(FoldableNavigationKind.push, route);
     return future;
   }
@@ -404,9 +442,8 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
     FoldableRoute route,
     bool Function(Page<Object?> page) predicate,
   ) {
-    final future = _controller.pushAndRemoveUntil<T>(
-      route.toPage<T>(),
-      predicate,
+    final future = _announce(
+      () => _controller.pushAndRemoveUntil<T>(route.toPage<T>(), predicate),
     );
     _emit(FoldableNavigationKind.push, route);
     return future;
@@ -415,7 +452,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   /// Removes the top page. When there is none to remove, shows [fallback] or
   /// the [backTarget].
   void back([FoldableRoute? fallback]) {
-    if (_controller.pop()) {
+    if (_announce(() => _controller.pop())) {
       _emit(FoldableNavigationKind.pop, null);
       return;
     }
@@ -445,11 +482,68 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
     final pages = _controller.pages;
     final below = pages.length > 1 ? pages[pages.length - 2].name : null;
     if (below != null && below == uri.toString()) {
-      _controller.pop();
-      _emit(FoldableNavigationKind.pop, null);
+      if (_announce(() => _controller.pop())) {
+        _emit(FoldableNavigationKind.pop, null);
+      }
       return;
     }
     _go(config.matcher(uri) ?? config.notFound(uri), null, uri: uri);
+  }
+
+  /// Runs a change of the controller that the caller announces itself with
+  /// [_emit], so the controller listener does not report it a second time.
+  T _announce<T>(T Function() mutate) {
+    // Changes made directly on the controller earlier in the same batch are
+    // reported before this one, so that neither gets lost.
+    if (_announcing == 0) _reportControllerChange();
+    _announcing++;
+    try {
+      return mutate();
+    } finally {
+      _announcing--;
+      if (_announcing == 0) _remember();
+    }
+  }
+
+  void _remember() {
+    _knownIndex = _controller.currentIndex;
+    _knownPages = List.of(_controller.pages);
+  }
+
+  void _onControllerChanged() {
+    notifyListeners();
+    if (_announcing == 0) _reportControllerChange();
+  }
+
+  /// Reports what changed on the controller without the router announcing
+  /// it: a pop from a back button, system back or swipe, `goBranch` from a
+  /// navigation rail, or any other direct use of the controller.
+  ///
+  /// One event for the whole change, so the controller's `batch` stays one
+  /// event. Changes to a branch that is not on screen are not navigations.
+  void _reportControllerChange() {
+    final index = _controller.currentIndex;
+    final pages = _controller.pages;
+    final previousIndex = _knownIndex;
+    final previousPages = _knownPages;
+    if (index == previousIndex && _samePages(pages, previousPages)) return;
+    _remember();
+    final kind = index != previousIndex
+        ? FoldableNavigationKind.branch
+        : pages.length < previousPages.length
+        ? FoldableNavigationKind.pop
+        : pages.length > previousPages.length
+        ? FoldableNavigationKind.push
+        : FoldableNavigationKind.go;
+    _emit(kind, null);
+  }
+
+  static bool _samePages(List<Page<Object?>> a, List<Page<Object?>> b) {
+    if (a.length != b.length) return false;
+    for (var index = 0; index < a.length; index++) {
+      if (!identical(a[index], b[index])) return false;
+    }
+    return true;
   }
 
   void _emit(FoldableNavigationKind kind, FoldableRoute? route) {
@@ -469,7 +563,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   @override
   void dispose() {
     _disposed = true;
-    _controller.removeListener(notifyListeners);
+    _controller.removeListener(_onControllerChanged);
     _controller.dispose();
     super.dispose();
   }

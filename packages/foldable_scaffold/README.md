@@ -62,12 +62,14 @@ class _MailScreenState extends State<MailScreen> {
 | Available width | What is shown |
 | --- | --- |
 | < 600 | one pane, `bottomNavigationBuilder` |
-| 600 – 1200 | one pane, `primaryNavigationBuilder` on the left |
-| > 1200 | body and secondary body side by side, with a draggable divider |
+| 600 to below 1200 | one pane, `primaryNavigationBuilder` on the left |
+| 1200 and above | body and secondary body side by side, with a draggable divider |
 
 * In a single-pane layout the secondary body replaces the body. Set
   `focusOnPrimaryBody` to keep the body when the secondary body is open.
-* A pane narrower than `minBodySize` collapses into the other one.
+* The divider stops where either pane would get narrower than `minBodySize`.
+  A pane that still ends up narrower than `minBodySize`, because the available
+  width cannot hold two of them, collapses into the other one.
 * Switching the one visible pane is instant while `paneTransition` is true, so
   a page slide does not run a pane resize on top of it.
   `FoldablePaneTransitionScope` provides that signal automatically when a
