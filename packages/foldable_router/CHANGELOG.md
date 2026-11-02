@@ -76,3 +76,17 @@
   navigators. It needs `android:enableOnBackInvokedCallback="true"` and applies
   only when a swipe back could start; otherwise the system back pops at once as
   before. Only tested with simulated events, not on a device.
+* `push`, `pushLocation` and `pushAndRemoveUntil` follow the redirects, so a
+  guard cannot be skipped by pushing. A redirect that changes the route pushes
+  the new one. They take an optional `context`, wait for the first frame when
+  there is no `BuildContext` yet, stay on the branch that was on screen and are
+  applied in the order they were made even when a redirect is async. A `go`
+  that starts meanwhile cancels a push that is still waiting.
+* A redirect loop (more than `FoldableRouterConfig.maxRedirects` redirects in
+  one navigation) throws a `FlutterError` with the chain of routes when
+  `throwOnRedirectLoop` is true (the default in debug builds). Otherwise the
+  `notFound` route is shown and the error is reported; the route the loop ended
+  on is never shown. A cap of zero now allows no redirect, and a chain of
+  exactly `maxRedirects` redirects is no longer cut short.
+* A matcher that returns null for `/` shows the first root instead of
+  `notFound` (the platform opens `/` at startup).

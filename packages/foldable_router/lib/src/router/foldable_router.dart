@@ -123,6 +123,11 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   /// While it is not zero the controller changes are not reported twice.
   int _announcing = 0;
 
+  /// Pushes that wait for a redirect or for earlier pushes, and the moment the
+  /// last of them has been applied. See [_pushResolved].
+  int _pushesWaiting = 0;
+  Future<void> _lastPushTurn = Future.value();
+
   @override
   void addObserver(FoldableRouterObserver observer) {
     if (!_observers.contains(observer)) _observers.add(observer);
@@ -201,9 +206,18 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   }
 
   /// The route for [location] (`/record?recordId=1`), or a not-found route.
-  FoldableRoute routeOf(String location) {
-    final uri = Uri.parse(location);
-    return config.matcher(uri) ?? config.notFound(uri);
+  FoldableRoute routeOf(String location) => _routeOfUri(Uri.parse(location));
+
+  /// The route the matcher gives for [uri]. The platform opens `/` first, and
+  /// a matcher that does not know it would show the not-found page at startup:
+  /// show the first root instead.
+  FoldableRoute _routeOfUri(Uri uri) {
+    final matched = config.matcher(uri);
+    if (matched != null) return matched;
+    if (config.roots.isNotEmpty && (uri.path.isEmpty || uri.path == '/')) {
+      return config.roots.first;
+    }
+    return config.notFound(uri);
   }
 
   /// Follows [FoldableRoute.redirect] and then the router's redirect until a
@@ -221,12 +235,17 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   /// redirect finished after [context] and the router's navigator were gone,
   /// so the redirect chain cannot continue. The caller must not show the
   /// original route then, it may be the very route a redirect guards.
+  ///
+  /// More than [FoldableRouterConfig.maxRedirects] redirects in one navigation
+  /// is a loop: see [FoldableRouterConfig.throwOnRedirectLoop].
   FutureOr<FoldableRoute?> resolve(
     FoldableRoute route, {
     required BuildContext context,
     Uri? uri,
   }) {
-    return _resolve(context, route, 0, uri ?? Uri.parse(route.location));
+    return _resolve(context, route, 0, uri ?? Uri.parse(route.location), [
+      route.location,
+    ]);
   }
 
   FutureOr<FoldableRoute?> _resolve(
@@ -234,8 +253,8 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
     FoldableRoute current,
     int step,
     Uri uri,
+    List<String> trail,
   ) {
-    if (step >= config.maxRedirects) return current;
     final state = FoldableRouteState(
       route: current,
       uri: uri,
@@ -248,15 +267,51 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
     if (next is Future<FoldableRoute?>) {
       return next.then((value) {
         if (value == null) return current;
+        if (step >= config.maxRedirects) {
+          return _redirectLoop(uri, [...trail, value.location]);
+        }
         // The page that started the navigation may be gone by now: continue
         // with the router's navigator, or abandon the navigation. Returning
         // [current] here would skip the redirect that was just decided.
         final live = context.mounted ? context : rootContextOf?.call();
         if (live == null || !live.mounted) return null;
-        return _resolve(live, value, step + 1, uri);
+        return _resolve(live, value, step + 1, uri, [...trail, value.location]);
       });
     }
-    return next == null ? current : _resolve(context, next, step + 1, uri);
+    if (next == null) return current;
+    if (step >= config.maxRedirects) {
+      return _redirectLoop(uri, [...trail, next.location]);
+    }
+    return _resolve(context, next, step + 1, uri, [...trail, next.location]);
+  }
+
+  /// A navigation kept redirecting past [FoldableRouterConfig.maxRedirects].
+  ///
+  /// Throws in development, so the loop gets fixed; otherwise reports the
+  /// error and shows the not-found route. Neither shows the route the loop
+  /// stopped on, which may be the one a redirect guards.
+  FoldableRoute _redirectLoop(Uri uri, List<String> trail) {
+    final error = FlutterError.fromParts([
+      ErrorSummary(
+        'Too many redirects (more than ${config.maxRedirects}) while opening '
+        '$uri.',
+      ),
+      ErrorDescription('The redirects led through: ${trail.join(' -> ')}'),
+      ErrorHint(
+        'A redirect probably sends the user back to a route that redirects '
+        'again. Make it return null once the user is where it wants them, or '
+        'raise FoldableRouterConfig.maxRedirects for a longer chain.',
+      ),
+    ]);
+    if (config.throwOnRedirectLoop) throw error;
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: error,
+        library: 'foldable_router',
+        context: ErrorDescription('while resolving a redirect'),
+      ),
+    );
+    return config.notFound(uri);
   }
 
   /// [second] only when [first] is null, without waiting for a value that is
@@ -410,17 +465,141 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   /// Adds [route] on top of the current branch. Completes with the result of
   /// the page, like `Navigator.push`.
   ///
-  /// Unlike [go] this never redirects and never switches branch: the page is
-  /// added exactly where the user is.
-  Future<T?> push<T extends Object?>(FoldableRoute route) {
-    final future = _announce(() => _controller.push<T>(route.toPage<T>()));
-    _emit(FoldableNavigationKind.push, route);
-    return future;
+  /// The redirects run first, like for [go], so a guard cannot be skipped by
+  /// pushing. When one sends the user elsewhere, that route is pushed instead
+  /// and the future completes with its result, or null when it is not a [T].
+  /// Unlike [go] this never switches branch: the page is added exactly where
+  /// the user is, even when it is the root of another branch. A push that has
+  /// to wait for a redirect still lands on the branch that was on screen when
+  /// it was made, and pushes are applied in the order they were made.
+  ///
+  /// [context] is handed to the redirects, like in [go]; without it they get
+  /// the router's navigator. While neither exists (before the first frame) the
+  /// push waits for the next frame. It completes with null when a redirect
+  /// abandons it, when [go] ran meanwhile, or when the router is disposed.
+  ///
+  /// Redirects that are all synchronous add the page before this returns.
+  /// Pushing a page straight onto [controller] skips the redirects, on
+  /// purpose.
+  Future<T?> push<T extends Object?>(
+    FoldableRoute route, {
+    BuildContext? context,
+  }) {
+    final branch = _controller.currentIndex;
+    return _pushResolved<T>(route, context, null, (target) {
+      final Future<T?> future;
+      if (identical(target, route)) {
+        future = _announce(
+          () => _controller.push<T>(route.toPage<T>(), branch: branch),
+        );
+      } else {
+        // A redirect changed the page, and with it the type of its result.
+        future = _announce(
+          () => _controller.push<Object?>(
+            target.toPage<Object?>(),
+            branch: branch,
+          ),
+        ).then((value) => value is T ? value : null);
+      }
+      _emit(FoldableNavigationKind.push, target);
+      return future;
+    });
   }
 
-  /// Adds the route for [location] on top of the current branch.
-  Future<void> pushLocation(String location) {
-    return push<void>(routeOf(location));
+  /// Adds the route for [location] on top of the current branch, after the
+  /// redirects. See [push].
+  Future<void> pushLocation(String location, {BuildContext? context}) {
+    final uri = Uri.parse(location);
+    final branch = _controller.currentIndex;
+    return _pushResolved<void>(_routeOfUri(uri), context, uri, (target) {
+      final future = _announce(
+        () =>
+            _controller.push<Object?>(target.toPage<Object?>(), branch: branch),
+      );
+      _emit(FoldableNavigationKind.push, target);
+      return future.then((_) {});
+    });
+  }
+
+  /// Follows the redirects of [route] and then calls [add] with the route that
+  /// stays, unless a [go] started in the meantime. The push counterpart of
+  /// [_resolveAndApply].
+  ///
+  /// When every redirect is synchronous and no earlier push is waiting, [add]
+  /// runs before this returns. Otherwise the push joins the queue: pushes are
+  /// applied in the order they were made, so a slow redirect never lets a later
+  /// push overtake an earlier one.
+  Future<T?> _pushResolved<T extends Object?>(
+    FoldableRoute route,
+    BuildContext? callerContext,
+    Uri? uri,
+    Future<T?> Function(FoldableRoute target) add,
+  ) {
+    if (_disposed) return Future.value();
+    // A later push does not cancel this one, a later go does.
+    final navigation = _navigations;
+    FutureOr<FoldableRoute?>? resolving;
+    final context = callerContext ?? rootContextOf?.call();
+    if (_pushesWaiting == 0 && context != null) {
+      try {
+        resolving = resolve(route, context: context, uri: uri);
+      } catch (error, stack) {
+        _reportRedirectError(error, stack);
+        return Future.value();
+      }
+      if (resolving is! Future<FoldableRoute?>) {
+        return resolving == null ? Future.value() : add(resolving);
+      }
+    }
+
+    final previous = _lastPushTurn;
+    final turn = Completer<void>();
+    _lastPushTurn = turn.future;
+    _pushesWaiting++;
+    final result = Completer<T?>();
+    unawaited(() async {
+      FoldableRoute? target;
+      try {
+        await previous;
+        target =
+            await (resolving ??
+                _resolveWhenReady(route, callerContext, uri, navigation));
+      } catch (error, stack) {
+        _reportRedirectError(error, stack);
+      }
+      try {
+        if (target == null || _disposed || navigation != _navigations) {
+          result.complete();
+        } else {
+          result.complete(add(target));
+        }
+      } catch (error, stack) {
+        result.completeError(error, stack);
+      } finally {
+        _pushesWaiting--;
+        turn.complete();
+      }
+    }());
+    return result.future;
+  }
+
+  /// [resolve] with the context of the caller, else the router's navigator;
+  /// waits for frames until one exists, and gives up with null when the router
+  /// is disposed or a [go] (newer than [navigation]) started meanwhile.
+  Future<FoldableRoute?> _resolveWhenReady(
+    FoldableRoute route,
+    BuildContext? callerContext,
+    Uri? uri,
+    int navigation,
+  ) async {
+    var context = callerContext ?? rootContextOf?.call();
+    while (context == null) {
+      // No BuildContext yet, as when a push is made before the first build.
+      await WidgetsBinding.instance.endOfFrame;
+      if (_disposed || navigation != _navigations) return null;
+      context = callerContext ?? rootContextOf?.call();
+    }
+    return resolve(route, context: context, uri: uri);
   }
 
   /// Removes the top page of the current branch.
@@ -453,16 +632,35 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   void batch(void Function() mutations) => _controller.batch(mutations);
 
   /// Adds [route] on top of the current branch after removing pages, like
-  /// [Navigator.pushAndRemoveUntil].
+  /// [Navigator.pushAndRemoveUntil]. The redirects run first, see [push].
   Future<T?> pushAndRemoveUntil<T extends Object?>(
     FoldableRoute route,
-    bool Function(Page<Object?> page) predicate,
-  ) {
-    final future = _announce(
-      () => _controller.pushAndRemoveUntil<T>(route.toPage<T>(), predicate),
-    );
-    _emit(FoldableNavigationKind.push, route);
-    return future;
+    bool Function(Page<Object?> page) predicate, {
+    BuildContext? context,
+  }) {
+    final branch = _controller.currentIndex;
+    return _pushResolved<T>(route, context, null, (target) {
+      final Future<T?> future;
+      if (identical(target, route)) {
+        future = _announce(
+          () => _controller.pushAndRemoveUntil<T>(
+            route.toPage<T>(),
+            predicate,
+            branch: branch,
+          ),
+        );
+      } else {
+        future = _announce(
+          () => _controller.pushAndRemoveUntil<Object?>(
+            target.toPage<Object?>(),
+            predicate,
+            branch: branch,
+          ),
+        ).then((value) => value is T ? value : null);
+      }
+      _emit(FoldableNavigationKind.push, target);
+      return future;
+    });
   }
 
   /// Removes the top page. When there is none to remove, shows [fallback] or
@@ -587,7 +785,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
       }
       return;
     }
-    _go(config.matcher(uri) ?? config.notFound(uri), null, uri: uri);
+    _go(_routeOfUri(uri), null, uri: uri);
   }
 
   /// Runs a change of the controller that the caller announces itself with

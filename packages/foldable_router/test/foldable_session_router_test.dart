@@ -72,10 +72,15 @@ void main() {
     );
   }
 
-  Future<void> pumpApp(WidgetTester tester, FoldableSessionRouter router) {
-    return tester.pumpWidget(
+  Future<void> pumpApp(
+    WidgetTester tester,
+    FoldableSessionRouter router,
+  ) async {
+    await tester.pumpWidget(
       MaterialApp(home: Builder(builder: router.buildShell)),
     );
+    // Pushes run the redirects, which need a context.
+    router.rootContextOf = () => tester.element(find.byType(MaterialApp));
   }
 
   setUp(() => current = 'guest');
@@ -145,6 +150,7 @@ void main() {
     current = 'main';
     final router = build();
     addTearDown(router.dispose);
+    await pumpApp(tester, router);
     router.push<void>(const _R('/detail'));
 
     current = 'guest';
@@ -178,6 +184,7 @@ void main() {
   testWidgets('observers reach sessions created later', (tester) async {
     final router = build();
     addTearDown(router.dispose);
+    await pumpApp(tester, router);
     final events = <FoldableNavigationEvent>[];
     router.addObserver(_Recorder(events));
 

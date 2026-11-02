@@ -30,8 +30,9 @@ plumbing comes from
   offstage.
 - **Deep links.** A `FoldableRoute` has a URL; a matcher turns a URL back into
   a route.
-- **Redirects and guards.** Per-route and global, synchronous or async, with a
-  loop cap, like go_router.
+- **Redirects and guards.** Per-route and global, synchronous or async, for
+  `go` and `push` alike, with a loop cap that throws while you develop, like
+  go_router.
 - **Back policy.** Choose what the system back button does when a branch has
   nothing to pop.
 - **Observers.** Log every navigation, or drive `foldable_dev_tools`.
@@ -99,8 +100,9 @@ class DetailsRoute extends FoldableRoute {
   Widget build(BuildContext context) => DetailsScreen(id: id);
 }
 
+// The platform opens '/' first, so match it too (here: show the first tab).
 FoldableRoute? _match(Uri uri) => switch (uri.path) {
-  '/home' => const HomeRoute(),
+  '/' || '/home' => const HomeRoute(),
   '/settings' => const SettingsRoute(),
   '/details' => DetailsRoute(id: RouteQuery.fromUri(uri).string('id')),
   _ => null,
@@ -154,7 +156,9 @@ MaterialApp.router(
 ## `go` and `push`
 
 - `push(route)` adds the route on top of the current branch and leaves
-  everything below it alone. No redirects, no tab switch.
+  everything below it alone. It follows the redirects like `go`, so a guard
+  cannot be skipped, but it never switches tab. Pushes are applied in the order
+  they were made, even when a redirect is async.
 - `go(context, route)` resolves the redirects, then replaces the pages above
   the page that navigated. `go(null, route)` uses the branch root as the
   parent. Going to a branch root switches to that tab and pops it to its root
@@ -255,6 +259,23 @@ FoldableRouterConfig(
       (state.extra! as AppSession).isLoggedIn ? null : const SignInRoute(),
 );
 ```
+
+`push`, `pushLocation` and `pushAndRemoveUntil` run the same redirects, so a
+guard holds for them too. A redirect that sends the user elsewhere makes the
+push add that route instead, and the future completes with its result when it
+is a `T`, else null. Only a page pushed straight onto
+`FoldableNavigatorController` skips the redirects. Pass `context:` to hand the
+redirects a `BuildContext` of your own.
+
+A navigation that keeps redirecting past `maxRedirects` is a loop. While you
+develop (`throwOnRedirectLoop`, true in debug builds) it fails with a
+`FlutterError` that lists the chain, and the navigation is abandoned. In release
+builds the app shows the `notFound` route instead and reports the error through
+`FlutterError.reportError`. The route the loop ended on is never shown, as it
+may be the one a redirect guards.
+
+The platform opens `/` first. If your `matcher` returns null for it, the router
+shows the first of `roots` rather than `notFound`.
 
 ## Back
 

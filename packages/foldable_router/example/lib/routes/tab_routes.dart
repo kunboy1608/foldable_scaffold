@@ -114,10 +114,10 @@ class HomeRoute extends TabRoute {
         ),
         LabAction(
           title: 'push the same guarded page',
-          subtitle: 'push never redirects, so Admin shows.',
+          subtitle: 'push follows the redirects too: Forbidden is pushed.',
           onTap: () {
             router.push(const AdminRoute());
-            logAction('push(Admin) -> no redirect');
+            logAction('push(Admin) -> redirected');
           },
         ),
       ],

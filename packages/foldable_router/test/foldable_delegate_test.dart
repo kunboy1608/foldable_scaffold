@@ -111,6 +111,7 @@ FoldableRouter _router({
   FoldableRedirect? redirect,
   Object? Function()? stateExtra,
   int maxRedirects = 5,
+  bool throwOnRedirectLoop = true,
   FoldableBackTarget? backTarget,
 }) {
   final router = FoldableRouter(
@@ -121,6 +122,7 @@ FoldableRouter _router({
       redirect: redirect,
       stateExtra: stateExtra,
       maxRedirects: maxRedirects,
+      throwOnRedirectLoop: throwOnRedirectLoop,
       backTarget: backTarget,
     ),
   );
@@ -153,9 +155,7 @@ FoldableRoute _flip(FoldableRouteState state) {
 
 void main() {
   group('redirects', () {
-    testWidgets('maxRedirects caps a loop of synchronous redirects', (
-      tester,
-    ) async {
+    testWidgets('a loop of synchronous redirects throws', (tester) async {
       final context = await _pumpContext(tester);
       var calls = 0;
       final router = _router(
@@ -166,17 +166,24 @@ void main() {
         },
       );
 
-      final result = router.resolve(const _DetailRoute(), context: context);
-
-      // It returns right away, after exactly [maxRedirects] redirects: four
-      // flips from Detail land on Detail again.
-      expect(result, isA<_DetailRoute>());
-      expect(calls, 4);
+      expect(
+        () => router.resolve(const _DetailRoute(), context: context),
+        throwsA(
+          isA<FlutterError>().having(
+            (error) => error.toString(),
+            'message',
+            allOf(
+              contains('Too many redirects (more than 4)'),
+              contains('/detail -> /second -> /detail -> /second -> /detail'),
+            ),
+          ),
+        ),
+      );
+      // Four redirects are followed, the fifth is the loop.
+      expect(calls, 5);
     });
 
-    testWidgets('maxRedirects caps a loop of asynchronous redirects', (
-      tester,
-    ) async {
+    testWidgets('a loop of asynchronous redirects throws', (tester) async {
       final context = await _pumpContext(tester);
       var calls = 0;
       final router = _router(
@@ -190,29 +197,77 @@ void main() {
       final result = router.resolve(const _DetailRoute(), context: context);
 
       expect(result, isA<Future<FoldableRoute?>>());
-      // Three flips from Detail land on Second.
-      expect(await result, isA<_SecondRoute>());
-      expect(calls, 3);
+      await expectLater(result, throwsA(isA<FlutterError>()));
+      expect(calls, 4);
     });
 
-    testWidgets('a cap of zero skips every redirect', (tester) async {
+    testWidgets('without throwOnRedirectLoop a loop shows not found and is '
+        'reported', (tester) async {
+      final context = await _pumpContext(tester);
+      final reported = <FlutterErrorDetails>[];
+      final previous = FlutterError.onError;
+      FlutterError.onError = reported.add;
+      addTearDown(() => FlutterError.onError = previous);
+      final router = _router(
+        maxRedirects: 3,
+        throwOnRedirectLoop: false,
+        redirect: (_, state) => _flip(state),
+      );
+
+      final result = router.resolve(const _DetailRoute(), context: context);
+
+      // Neither route of the loop is shown, they may be guarded.
+      expect(result, isA<_NotFoundRoute>());
+      expect((result! as _NotFoundRoute).uri.toString(), '/detail');
+      expect(reported, hasLength(1));
+      expect(reported.single.exception.toString(), contains('Too many'));
+    });
+
+    testWidgets('a chain of exactly maxRedirects redirects is not a loop', (
+      tester,
+    ) async {
+      final context = await _pumpContext(tester);
+      FoldableRoute? hop(FoldableRouteState state) =>
+          switch (state.route.path) {
+            '/detail' => const _SecondRoute(),
+            '/second' => const _HomeRoute(),
+            _ => null,
+          };
+
+      expect(
+        _router(
+          maxRedirects: 2,
+          redirect: (_, state) => hop(state),
+        ).resolve(const _DetailRoute(), context: context),
+        isA<_HomeRoute>(),
+      );
+      expect(
+        () => _router(
+          maxRedirects: 1,
+          redirect: (_, state) => hop(state),
+        ).resolve(const _DetailRoute(), context: context),
+        throwsFlutterError,
+      );
+    });
+
+    testWidgets('a cap of zero allows no redirect at all', (tester) async {
       final context = await _pumpContext(tester);
       final log = <String>[];
       final capped = _router(maxRedirects: 0);
       final router = _router(maxRedirects: 2);
 
+      // A route that keeps itself needs none.
+      expect(capped.resolve(_SpyRoute([]), context: context), isA<_SpyRoute>());
       expect(
-        capped.resolve(_GuardedRoute(log), context: context),
-        isA<_GuardedRoute>(),
+        () => capped.resolve(_GuardedRoute(log), context: context),
+        throwsFlutterError,
       );
-      expect(log, isEmpty);
 
       // Within the cap the redirect is followed until the route stays.
       expect(
         router.resolve(_GuardedRoute(log), context: context),
         isA<_SecondRoute>(),
       );
-      expect(log, ['route:/guarded']);
     });
 
     testWidgets('the route redirect runs before the global one', (

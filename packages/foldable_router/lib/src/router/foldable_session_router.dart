@@ -319,13 +319,15 @@ class FoldableSessionRouter extends ChangeNotifier with FoldableRouterBase {
   }
 
   /// See [FoldableRouter.push].
-  Future<T?> push<T extends Object?>(FoldableRoute route) =>
-      active.push<T>(route);
+  Future<T?> push<T extends Object?>(
+    FoldableRoute route, {
+    BuildContext? context,
+  }) => active.push<T>(route, context: context);
 
   /// See [FoldableRouter.pushLocation].
-  Future<void> pushLocation(String location) {
+  Future<void> pushLocation(String location, {BuildContext? context}) {
     _switchToClaiming(Uri.parse(location));
-    return active.pushLocation(location);
+    return active.pushLocation(location, context: context);
   }
 
   /// See [FoldableRouter.pop].

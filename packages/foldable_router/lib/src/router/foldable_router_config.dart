@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show kDebugMode;
 import 'package:material_ui/material_ui.dart';
 
 import '../route/foldable_route.dart';
@@ -51,6 +52,7 @@ class FoldableRouterConfig {
     this.backTarget,
     this.observers = const <FoldableRouterObserver>[],
     this.maxRedirects = 5,
+    this.throwOnRedirectLoop = kDebugMode,
     this.lazyBranches = true,
   });
 
@@ -66,6 +68,9 @@ class FoldableRouterConfig {
   final List<FoldableRoute> roots;
 
   /// The route for a URL, or null when no route matches.
+  ///
+  /// The platform opens `/` first. When the matcher returns null for `/`, the
+  /// router shows the first of [roots] instead of [notFound].
   final FoldableRouteMatcher matcher;
 
   /// The route shown for a URL that matches nothing.
@@ -96,7 +101,21 @@ class FoldableRouterConfig {
 
   /// How many redirects a single navigation may chain. Stops a loop of
   /// redirects from hanging the app.
+  ///
+  /// A navigation whose redirects still want to continue after this many
+  /// is a loop; see [throwOnRedirectLoop] for what happens then.
   final int maxRedirects;
+
+  /// What a redirect loop (more than [maxRedirects] redirects in one
+  /// navigation) does.
+  ///
+  /// When true (the default in debug builds) the navigation fails with a
+  /// [FlutterError] that lists the chain of routes, so the loop is fixed during
+  /// development. When false (the default in release builds) the app shows the
+  /// [notFound] route instead, and the error is still reported through
+  /// [FlutterError.reportError] so a crash reporter sees it. The route the loop
+  /// ended on is never shown: it may be the very route a redirect guards.
+  final bool throwOnRedirectLoop;
 
   /// Whether branches other than the first build their screen on the first
   /// visit instead of at startup.

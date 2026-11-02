@@ -197,11 +197,17 @@ Future<_Runs> _start(
 
 /// Builds a stack across branches: /a -> a/1 -> a/2 and /b -> b/1, with the
 /// second branch on screen.
-void _navigate(FoldableRouter router) {
+///
+/// A push waits for the redirects of its route, which the test routes answer
+/// asynchronously, so each one is pumped before the next navigation.
+Future<void> _navigate(WidgetTester tester, FoldableRouter router) async {
   router.push<void>(const _R('/a/1'));
+  await tester.pump();
   router.push<void>(const _R('/a/2'));
+  await tester.pump();
   router.controller.goBranch(1);
   router.push<void>(const _R('/b/1'));
+  await tester.pump();
 }
 
 void main() {
@@ -209,7 +215,7 @@ void main() {
 
   testWidgets('restores every branch and the current branch', (tester) async {
     final runs = await _start(tester);
-    _navigate(runs.router);
+    await _navigate(tester, runs.router);
     await tester.pumpAndSettle();
     expect(find.text('screen /b/1'), findsOneWidget);
 
@@ -301,7 +307,7 @@ void main() {
     tester,
   ) async {
     final runs = await _start(tester);
-    _navigate(runs.router);
+    await _navigate(tester, runs.router);
     await tester.pumpAndSettle();
 
     // Another version of the app: two tabs instead of three.
@@ -372,7 +378,7 @@ void main() {
 
   testWidgets('restoration is off without a restorationId', (tester) async {
     final runs = await _start(tester, restorationId: null);
-    _navigate(runs.router);
+    await _navigate(tester, runs.router);
     await tester.pumpAndSettle();
 
     await tester.restartAndRestore();
@@ -403,7 +409,7 @@ void main() {
     tester,
   ) async {
     final runs = await _start(tester);
-    _navigate(runs.router);
+    await _navigate(tester, runs.router);
     await tester.pumpAndSettle();
     expect(runs.events, isNotEmpty);
     expect(runs.redirects, greaterThan(0));
@@ -459,6 +465,7 @@ void main() {
     runs.router.push<void>(const _R('/a/1'));
     await tester.pumpAndSettle();
     runs.router.push<void>(const _R('/a/2'));
+    await tester.pump();
     runs.router.pop();
     await tester.pumpAndSettle();
 
@@ -471,7 +478,7 @@ void main() {
   group('FoldableRouter state', () {
     testWidgets('saveState holds plain codec friendly values', (tester) async {
       final runs = await _start(tester);
-      _navigate(runs.router);
+      await _navigate(tester, runs.router);
       await tester.pumpAndSettle();
 
       expect(runs.router.saveState(), {
@@ -538,6 +545,7 @@ void main() {
     testWidgets('saves the active session only', (tester) async {
       final runs = await _start(tester, sessions: true);
       runs.sessionRouter.push<void>(const _R('/a/1'));
+      await tester.pump();
 
       final state = runs.sessionRouter.saveState();
 
