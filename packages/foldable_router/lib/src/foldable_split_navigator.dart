@@ -82,7 +82,7 @@ class FoldableSplitNavigator extends FoldableNavigator {
 }
 
 class _FoldableSplitNavigatorState extends State<FoldableSplitNavigator>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, _FoldableAppBarHistory {
   final Map<(int, Key), GlobalKey> _subtreeKeys = {};
 
   /// Tells [FoldableScaffold] that pages are sliding, so it snaps pane

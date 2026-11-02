@@ -122,6 +122,15 @@ abstract class FoldableNavigator extends StatefulWidget {
     return context.getInheritedWidgetOfExactType<_FoldablePageScope>()?.page;
   }
 
+  /// Whether the closest [FoldableNavigator] has a page to pop.
+  ///
+  /// Useful in an app bar: unlike [isTransitioning], this resubscribes
+  /// [context] when navigation changes, so the bar can show or hide its back
+  /// button. Pass `listen: false` to read the value without subscribing.
+  static bool canPop(BuildContext context, {bool listen = true}) {
+    return maybeOf(context, listen: listen)?.canPop ?? false;
+  }
+
   /// Removes the page that [context] is inside of, together with the pages
   /// above it in its branch.
   ///
@@ -168,6 +177,10 @@ abstract class FoldableNavigator extends StatefulWidget {
 /// Tapping it removes the page it belongs to, together with the pages above it
 /// in the branch, so in a split view each pane pops itself instead of the page
 /// above it (see [FoldableNavigator.popPageOf]). Use it as `AppBar.leading`.
+///
+/// Outside a page, as in the app bar of a shell around the navigator, it
+/// follows whether the closest [FoldableNavigator] can pop and removes the top
+/// page of the current branch when tapped.
 class FoldableBackButton extends StatelessWidget {
   const FoldableBackButton({super.key, this.color, this.style, this.onPressed});
 
@@ -184,11 +197,14 @@ class FoldableBackButton extends StatelessWidget {
 
   /// Whether a [FoldableBackButton] would be shown at [context]. Rebuilds
   /// [context] when that changes.
+  ///
+  /// Inside a page it follows the page's position in the stack. Outside one,
+  /// as in the app bar of a shell that wraps the navigator, it follows
+  /// [FoldableNavigator.canPop].
   static bool isVisible(BuildContext context) {
-    return context
-            .dependOnInheritedWidgetOfExactType<_FoldablePageScope>()
-            ?.canGoBack ??
-        false;
+    final page = context
+        .dependOnInheritedWidgetOfExactType<_FoldablePageScope>();
+    return page?.canGoBack ?? FoldableNavigator.canPop(context);
   }
 
   @override
@@ -207,6 +223,101 @@ class FoldableBackButton extends StatelessWidget {
 const _pageShadow = BoxDecoration(
   boxShadow: [BoxShadow(color: Color(0x33000000), blurRadius: 16)],
 );
+
+/// Keeps a [LocalHistoryEntry] on the enclosing [ModalRoute] while the
+/// navigator can pop.
+///
+/// [AppBar] shows its automatic back button when its route implies app bar
+/// dismissal. A route with a single page does not, unless it has a local
+/// history entry (this is how a nested [Navigator] gets one). The entry also
+/// makes `Navigator.maybePop` — what that back button calls — pop one foldable
+/// page.
+mixin _FoldableAppBarHistory<T extends FoldableNavigator> on State<T> {
+  LocalHistoryEntry? _historyEntry;
+  ModalRoute<dynamic>? _historyRoute;
+  bool _removingHistory = false;
+  bool _historySyncScheduled = false;
+
+  FoldableNavigatorController get historyController => widget.controller;
+
+  @override
+  void initState() {
+    super.initState();
+    historyController.addListener(_scheduleHistorySync);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Catch the route becoming current, or a different one when the widget
+    // moves inside a Navigator.
+    _scheduleHistorySync();
+  }
+
+  @override
+  void didUpdateWidget(T oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.controller != widget.controller) {
+      oldWidget.controller.removeListener(_scheduleHistorySync);
+      widget.controller.addListener(_scheduleHistorySync);
+      _scheduleHistorySync();
+    }
+  }
+
+  @override
+  void dispose() {
+    historyController.removeListener(_scheduleHistorySync);
+    _detachHistory();
+    super.dispose();
+  }
+
+  void _scheduleHistorySync() {
+    if (!mounted || _historySyncScheduled) return;
+    _historySyncScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _historySyncScheduled = false;
+      if (mounted) _syncHistory();
+    });
+  }
+
+  void _syncHistory() {
+    final route = ModalRoute.of<dynamic>(context);
+    if (!identical(route, _historyRoute)) {
+      _detachHistory();
+      _historyRoute = route;
+    }
+    final wantsEntry =
+        historyController.canPop && (route?.isCurrent ?? false);
+    if (wantsEntry && _historyEntry == null && route != null) {
+      final entry = LocalHistoryEntry(onRemove: _onHistoryRemoved);
+      _historyEntry = entry;
+      route.addLocalHistoryEntry(entry);
+    } else if (!wantsEntry && _historyEntry != null) {
+      _detachHistory();
+    }
+  }
+
+  void _detachHistory() {
+    final entry = _historyEntry;
+    if (entry == null) return;
+    _historyEntry = null;
+    final route = _historyRoute;
+    if (route == null) return;
+    // Removing it ourselves must not pop a page: only a user back should.
+    _removingHistory = true;
+    try {
+      route.removeLocalHistoryEntry(entry);
+    } finally {
+      _removingHistory = false;
+    }
+  }
+
+  void _onHistoryRemoved() {
+    if (_removingHistory) return;
+    _historyEntry = null;
+    historyController.pop();
+  }
+}
 
 /// Width of the left edge strip where a drag starts a back swipe.
 const double _kBackSwipeEdge = 20.0;

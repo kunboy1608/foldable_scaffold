@@ -151,4 +151,33 @@ void main() {
     expect(find.text('detail'), findsOneWidget);
     expect(find.text('body', skipOffstage: false), findsNothing);
   });
+
+  testWidgets('an AppBar without leading shows a back button by itself', (
+    tester,
+  ) async {
+    final controller = FoldableNavigatorController.single([
+      FoldablePage<void>(
+        name: '/body',
+        child: Scaffold(appBar: AppBar(title: const Text('body'))),
+      ),
+    ]);
+
+    await tester.pumpWidget(_app(controller));
+    expect(find.byType(BackButton), findsNothing);
+
+    controller.push(
+      FoldablePage<void>(
+        name: '/detail',
+        child: Scaffold(appBar: AppBar(title: const Text('detail'))),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byType(BackButton), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    expect(controller.pages.length, 1);
+    expect(find.byType(BackButton), findsNothing);
+  });
 }

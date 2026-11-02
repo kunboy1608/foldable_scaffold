@@ -437,4 +437,39 @@ void main() {
     expect(controller.pages.length, 1);
     expect(find.text('second'), findsNothing);
   });
+
+  testWidgets('a shell app bar shows a back button while the stack can pop', (
+    tester,
+  ) async {
+    final controller = FoldableNavigatorController.single([_page('body')]);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: FoldableNavigator(
+          controller: controller,
+          builder: (context, body, secondary) => Scaffold(
+            appBar: AppBar(
+              // Outside the page's scope, as in the app bar of a shell.
+              leading: const FoldableBackButton(),
+              title: const Text('shell'),
+            ),
+            body: body,
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byType(BackButton), findsNothing);
+
+    controller.push(_page('detail'));
+    await tester.pumpAndSettle();
+
+    expect(find.byType(BackButton), findsOneWidget);
+
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+
+    expect(controller.pages.length, 1);
+    expect(find.byType(BackButton), findsNothing);
+  });
 }

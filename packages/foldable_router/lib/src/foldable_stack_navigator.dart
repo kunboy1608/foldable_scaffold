@@ -36,7 +36,7 @@ class FoldableStackNavigator extends FoldableNavigator {
 }
 
 class _FoldableStackNavigatorState extends State<FoldableStackNavigator>
-    with SingleTickerProviderStateMixin {
+    with SingleTickerProviderStateMixin, _FoldableAppBarHistory {
   final Map<Key, GlobalKey> _subtreeKeys = {};
   final _transitioning = ValueNotifier<bool>(false);
 

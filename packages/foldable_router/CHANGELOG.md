@@ -5,6 +5,13 @@
   `FoldableNavigator(...)`) and `FoldableStackNavigator` (created by
   `FoldableNavigator.stack(...)`), which mounts only the top page of the
   current branch and ignores the other branches.
+* An `AppBar` with no `leading` now shows its automatic back button while the
+  navigator can pop, like with `go_router`: the navigators keep a local history
+  entry on the enclosing route, so `FoldableBackButton` is no longer required.
+* `FoldableBackButton` now works outside a page, such as in the app bar of a
+  shell: it follows the closest navigator's `canPop` and pops the top page.
+  `FoldableNavigator.canPop(context)` exposes the same check for custom leading
+  widgets.
 * A stack session may start with no roots: `FoldableRouterConfig.roots` can be
   empty for `FoldableNavigatorKind.stack`, and the stack shows nothing until
   its first navigation fills it. `FoldableNavigatorController.empty()` supports
