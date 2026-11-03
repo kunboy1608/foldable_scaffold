@@ -1,5 +1,9 @@
 # foldable_router
 
+> [!WARNING]
+> **Experimental.** This is a prerelease (`0.1.0-dev.1`). The API will change
+> without notice and the package is not ready for production use.
+
 Navigation for foldable apps: one page stack per branch (tab), Cupertino page
 slides, edge swipe back, deep links, redirects and guards.
 
@@ -40,7 +44,7 @@ plumbing comes from
 ## Install
 
 ```sh
-flutter pub add foldable_router
+flutter pub add foldable_router:^0.1.0-dev.1
 ```
 
 ## Quick start

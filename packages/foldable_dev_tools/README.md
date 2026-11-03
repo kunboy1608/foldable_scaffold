@@ -1,5 +1,9 @@
 # foldable_dev_tools
 
+> [!WARNING]
+> **Experimental.** This is a prerelease (`0.1.0-dev.1`). The API will change
+> without notice and the package is not ready for production use.
+
 An in-app development overlay for
 [foldable_scaffold](https://github.com/kunboy1608/foldable_scaffold/tree/main/packages/foldable_scaffold)
 and
@@ -12,7 +16,7 @@ what the router does.
 ## Install
 
 ```sh
-flutter pub add foldable_dev_tools
+flutter pub add foldable_dev_tools:^0.1.0-dev.1
 ```
 
 ## Usage

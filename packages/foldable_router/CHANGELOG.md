@@ -1,5 +1,6 @@
-## 0.1.0
+## 0.1.0-dev.1
 
+* Experimental prerelease: the API may change and it is not ready for production.
 * Initial release.
 * `FoldableNavigator` is an abstract class with two implementations:
   `FoldableSplitNavigator` (created by `FoldableNavigator(...)`), with one page

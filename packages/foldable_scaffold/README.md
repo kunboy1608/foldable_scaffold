@@ -1,5 +1,9 @@
 # foldable_scaffold
 
+> [!WARNING]
+> **Experimental.** This is a prerelease (`0.1.0-dev.1`). The API will change
+> without notice and the package is not ready for production use.
+
 A [Scaffold](https://pub.dev/documentation/material_ui/latest/material_ui/Scaffold-class.html)
 with two panes, for foldables, tablets and desktop windows.
 
@@ -10,7 +14,7 @@ but a `FoldableScaffold` works on its own.
 ## Install
 
 ```sh
-flutter pub add foldable_scaffold
+flutter pub add foldable_scaffold:^0.1.0-dev.1
 ```
 
 ## Usage

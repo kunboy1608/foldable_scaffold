@@ -1,5 +1,6 @@
-## 0.1.0
+## 0.1.0-dev.1
 
+* Experimental prerelease: the API may change and it is not ready for production.
 * Initial release.
 * `FoldableDevTools` overlay with viewport presets and sliders, hinge overlay that is also reported in `MediaQuery.displayFeatures` (a hinge, a flat fold or a half-open fold, see `FoldableHingeMode`), slow motion, pane inspector and navigation log.
 * `FoldableDevToolsController` to drive the overlay from code or tests.

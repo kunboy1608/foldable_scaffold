@@ -1,5 +1,9 @@
 # foldable_core
 
+> [!WARNING]
+> **Experimental.** This is a prerelease (`0.1.0-dev.1`). The API will change
+> without notice and the package is not ready for production use.
+
 Small shared signals that let `foldable_scaffold` and `foldable_router` work
 together without depending on each other.
 

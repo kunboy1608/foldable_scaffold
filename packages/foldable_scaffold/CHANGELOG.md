@@ -1,5 +1,6 @@
-## 0.1.0
+## 0.1.0-dev.1
 
+* Experimental prerelease: the API may change and it is not ready for production.
 * Initial release.
 * The usual `Scaffold` slots are forwarded: `floatingActionButton`, `floatingActionButtonLocation`, `drawer`, `endDrawer`, `bottomSheet`, `backgroundColor` and `resizeToAvoidBottomInset`.
 * Fixed the `MediaQuery` of the panes. It now comes from the `Scaffold` body, so with `extendBody` the bottom padding is the height of the bottom navigation bar (it used to be only the system inset, which let lists run under the bar); without `extendBody` it is zero above the bar, and the system inset when no bar is shown (the rail replaces it, or there is no `bottomNavigationBuilder`). The keyboard is no longer counted twice: the body is resized, so the panes see no `viewInsets`.
