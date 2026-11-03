@@ -101,8 +101,12 @@ Widget _singlePaneApp(FoldableNavigatorController controller) {
 
 /// A real [FoldableScaffold] in a narrow window: the scaffold itself decides
 /// which pane is shown.
+///
+/// The default 800 x 600 test window is a small tablet on Android, which gets
+/// two panes: a desktop platform keeps it narrow (the split starts at 1200).
 Widget _phoneApp(FoldableNavigatorController controller) {
   return MaterialApp(
+    theme: ThemeData(platform: TargetPlatform.linux),
     home: FoldableNavigator(
       controller: controller,
       builder: (context, body, secondary) => FoldableScaffold(

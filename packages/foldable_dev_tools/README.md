@@ -38,10 +38,11 @@ A small bug button appears in the corner of the screen and opens the panel.
   laptop, desktop) and width/height sliders. The app is wrapped in a `SizedBox`
   and a `MediaQuery` override, so `LayoutBuilder`s (and `FoldableScaffold`)
   react exactly like a window resize.
-* **Hinge**: draw a hinge over the simulated screen and move it. The hinge is
-  a drawn overlay only. It is not exposed to the app as
-  `MediaQuery.displayFeatures`, so it does not change layout: dev tools only
-  simulate the size, not the fold.
+* **Hinge**: simulate a hinge or a fold at any position: a hinge between two
+  screens, a flat fold or a half-open fold. It is drawn over the screen **and**
+  reported to the app in `MediaQuery.displayFeatures`, as Android does, so a
+  `FoldableScaffold` puts its panes around it. It works with or without a
+  simulated viewport.
 * **Motion**: slow every pane and page animation down (`FoldableMotion`).
 * **Panes**: the current mode (single body, single secondary, split), whether
   the scaffold can split, and the simulated size. Add a
@@ -72,7 +73,7 @@ FoldableDevTools(controller: controller, router: router, child: app);
 ```
 
 The controller has `isOpen`, `viewport`, `setViewportSize`, `showHinge`,
-`hingePosition`, `slowMotion`, `pane`, `events` and `clearEvents`.
+`hingeMode`, `hingePosition`, `hingeThickness`, `slowMotion`, `pane`, `events` and `clearEvents`.
 
 ## Release safe
 

@@ -59,6 +59,28 @@ class FoldableViewport {
   ];
 }
 
+/// What the simulated hinge of [FoldableDevToolsController] is.
+///
+/// The app sees it in `MediaQuery.displayFeatures`, as Android reports it.
+enum FoldableHingeMode {
+  /// A hinge between two screens, like a dual-screen device. It hides the area
+  /// under it, so a `FoldableScaffold` puts one pane on each screen.
+  hinge('Hinge'),
+
+  /// The crease of a foldable that is fully open. The content crosses it; a
+  /// `FoldableScaffold` starts its divider on it.
+  foldFlat('Fold, flat'),
+
+  /// The crease of a foldable that is half open, like a book. A
+  /// `FoldableScaffold` puts one pane on each side.
+  foldHalfOpen('Fold, half open');
+
+  const FoldableHingeMode(this.label);
+
+  /// Label shown in the dev tools panel.
+  final String label;
+}
+
 /// The pane layout reported by `FoldablePaneLayoutObserver`.
 @immutable
 class FoldablePaneInfo {
@@ -102,6 +124,7 @@ class FoldableDevToolsController extends ChangeNotifier
   FoldableViewport? _viewport;
   bool _slowMotion = false;
   bool _showHinge = false;
+  FoldableHingeMode _hingeMode = FoldableHingeMode.hinge;
   double _hingePosition = 0.5;
   double _hingeThickness = 24;
   FoldablePaneInfo? _pane;
@@ -143,11 +166,21 @@ class FoldableDevToolsController extends ChangeNotifier
   /// How much [slowMotion] slows animations down.
   double get slowMotionFactor => 6;
 
-  /// Whether a hinge is drawn over the simulated screen.
+  /// Whether a hinge is simulated: drawn over the screen and reported to the
+  /// app in `MediaQuery.displayFeatures`.
   bool get showHinge => _showHinge;
   set showHinge(bool value) {
     if (_showHinge == value) return;
     _showHinge = value;
+    notifyListeners();
+  }
+
+  /// What the hinge is: a hinge between two screens, or a flat or half-open
+  /// fold. See [FoldableHingeMode].
+  FoldableHingeMode get hingeMode => _hingeMode;
+  set hingeMode(FoldableHingeMode value) {
+    if (_hingeMode == value) return;
+    _hingeMode = value;
     notifyListeners();
   }
 
@@ -159,7 +192,8 @@ class FoldableDevToolsController extends ChangeNotifier
     notifyListeners();
   }
 
-  /// How wide the hinge is drawn.
+  /// How wide the hinge is, for [FoldableHingeMode.hinge]. A fold has no
+  /// width.
   double get hingeThickness => _hingeThickness;
   set hingeThickness(double value) {
     if (_hingeThickness == value) return;

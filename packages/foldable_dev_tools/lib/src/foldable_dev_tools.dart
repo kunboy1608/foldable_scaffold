@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 
 import 'package:foldable_router/foldable_router.dart';
 import 'package:flutter/foundation.dart';
@@ -242,50 +243,78 @@ class _SimulatedViewport extends StatelessWidget {
   final FoldableDevToolsController controller;
   final Widget child;
 
+  /// The hinge as the platform would report it, in the coordinates of [size].
+  DisplayFeature _feature(Size size) {
+    final mode = controller.hingeMode;
+    final thickness = mode == FoldableHingeMode.hinge
+        ? controller.hingeThickness
+        : 0.0;
+    final left = size.width * controller.hingePosition - thickness / 2;
+    return DisplayFeature(
+      bounds: Rect.fromLTWH(left, 0, thickness, size.height),
+      type: mode == FoldableHingeMode.hinge
+          ? DisplayFeatureType.hinge
+          : DisplayFeatureType.fold,
+      state: mode == FoldableHingeMode.foldHalfOpen
+          ? DisplayFeatureState.postureHalfOpened
+          : DisplayFeatureState.postureFlat,
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final viewport = controller.viewport;
-    if (viewport == null) return child;
+    if (viewport == null && !controller.showHinge) return child;
 
     return LayoutBuilder(
       builder: (context, constraints) {
-        final size = Size(
-          math.min(viewport.size.width, constraints.maxWidth),
-          math.min(viewport.size.height, constraints.maxHeight),
+        final size = viewport == null
+            ? constraints.biggest
+            : Size(
+                math.min(viewport.size.width, constraints.maxWidth),
+                math.min(viewport.size.height, constraints.maxHeight),
+              );
+        final hinge = controller.showHinge ? _feature(size) : null;
+        final content = SizedBox(
+          width: size.width,
+          height: size.height,
+          child: MediaQuery(
+            data: MediaQuery.of(context).copyWith(
+              size: size,
+              // The app sees the simulated hinge, as on a real device.
+              displayFeatures: hinge == null ? null : [hinge],
+            ),
+            child: Stack(
+              children: [
+                Positioned.fill(child: child),
+                if (hinge != null)
+                  Positioned(
+                    left: hinge.bounds.left,
+                    top: 0,
+                    bottom: 0,
+                    // A fold has no width: draw a crease.
+                    width: math.max(hinge.bounds.width, 2),
+                    child: IgnorePointer(
+                      child: ColoredBox(
+                        color: Colors.black.withValues(
+                          alpha: hinge.type == DisplayFeatureType.hinge
+                              ? 0.35
+                              : 0.2,
+                        ),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ),
         );
+        if (viewport == null) return content;
         return Center(
           child: DecoratedBox(
             decoration: BoxDecoration(
               border: Border.all(color: Theme.of(context).colorScheme.outline),
             ),
-            child: ClipRect(
-              child: SizedBox(
-                width: size.width,
-                height: size.height,
-                child: MediaQuery(
-                  data: MediaQuery.of(context).copyWith(size: size),
-                  child: Stack(
-                    children: [
-                      Positioned.fill(child: child),
-                      if (controller.showHinge)
-                        Positioned(
-                          left:
-                              size.width * controller.hingePosition -
-                              controller.hingeThickness / 2,
-                          top: 0,
-                          bottom: 0,
-                          width: controller.hingeThickness,
-                          child: IgnorePointer(
-                            child: ColoredBox(
-                              color: Colors.black.withValues(alpha: 0.35),
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ),
+            child: ClipRect(child: content),
           ),
         );
       },
@@ -493,11 +522,25 @@ class _HingeControls extends StatelessWidget {
         SwitchListTile(
           contentPadding: EdgeInsets.zero,
           title: const Text('Show hinge'),
+          subtitle: const Text(
+            'The app sees it in MediaQuery.displayFeatures.',
+          ),
           value: controller.showHinge,
-          onChanged: controller.viewport == null
-              ? null
-              : (value) => controller.showHinge = value,
+          onChanged: (value) => controller.showHinge = value,
         ),
+        if (controller.showHinge)
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (final mode in FoldableHingeMode.values)
+                ChoiceChip(
+                  label: Text(mode.label),
+                  selected: controller.hingeMode == mode,
+                  onSelected: (_) => controller.hingeMode = mode,
+                ),
+            ],
+          ),
         if (controller.showHinge)
           _NumberSlider(
             label: 'Position',
@@ -506,6 +549,16 @@ class _HingeControls extends StatelessWidget {
             max: 100,
             suffix: '%',
             onChanged: (value) => controller.hingePosition = value / 100,
+          ),
+        if (controller.showHinge &&
+            controller.hingeMode == FoldableHingeMode.hinge)
+          _NumberSlider(
+            label: 'Width',
+            value: controller.hingeThickness,
+            min: 8,
+            max: 80,
+            suffix: ' px',
+            onChanged: (value) => controller.hingeThickness = value,
           ),
       ],
     );

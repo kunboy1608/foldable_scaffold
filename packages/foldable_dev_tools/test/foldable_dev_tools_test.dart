@@ -1,3 +1,5 @@
+import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:foldable_dev_tools/foldable_dev_tools.dart';
 import 'package:foldable_router/foldable_router.dart';
@@ -119,5 +121,111 @@ void main() {
     await tester.tap(find.byTooltip('Close'));
     await tester.pumpAndSettle();
     expect(find.text('Foldable dev tools'), findsNothing);
+  });
+
+  group('hinge', () {
+    /// Pumps the app and returns what its MediaQuery says about the display.
+    Future<List<DisplayFeature> Function()> pumpApp(
+      WidgetTester tester,
+      FoldableDevToolsController controller,
+    ) async {
+      var features = <DisplayFeature>[];
+      await tester.pumpWidget(
+        MaterialApp(
+          builder: (context, child) => FoldableDevTools(
+            controller: controller,
+            child: child ?? const SizedBox.shrink(),
+          ),
+          home: Builder(
+            builder: (context) {
+              features = MediaQuery.displayFeaturesOf(context);
+              return const SizedBox.shrink();
+            },
+          ),
+        ),
+      );
+      return () => features;
+    }
+
+    testWidgets('is reported to the app as a hinge', (tester) async {
+      final controller = FoldableDevToolsController();
+      addTearDown(controller.dispose);
+      final features = await pumpApp(tester, controller);
+      expect(features(), isEmpty);
+
+      controller
+        ..showHinge = true
+        ..hingeThickness = 40;
+      await tester.pumpAndSettle();
+
+      // The default window is 800 x 600; the hinge is in the middle.
+      final feature = features().single;
+      expect(feature.type, DisplayFeatureType.hinge);
+      expect(feature.state, DisplayFeatureState.postureFlat);
+      expect(feature.bounds, const Rect.fromLTRB(380, 0, 420, 600));
+    });
+
+    testWidgets('is reported inside a simulated viewport', (tester) async {
+      final controller = FoldableDevToolsController()
+        ..viewport = FoldableViewport.foldableOpen
+        ..showHinge = true
+        ..hingePosition = 0.25;
+      addTearDown(controller.dispose);
+      final features = await pumpApp(tester, controller);
+
+      // The viewport is 717 wide and as tall as the window.
+      final feature = features().single;
+      expect(feature.bounds.left, closeTo(717 * 0.25 - 12, 0.01));
+      expect(feature.bounds.width, 24);
+      expect(feature.bounds.height, 600);
+    });
+
+    testWidgets('a fold has no width, and can be half open', (tester) async {
+      final controller = FoldableDevToolsController()
+        ..showHinge = true
+        ..hingeMode = FoldableHingeMode.foldFlat;
+      addTearDown(controller.dispose);
+      final features = await pumpApp(tester, controller);
+
+      var feature = features().single;
+      expect(feature.type, DisplayFeatureType.fold);
+      expect(feature.state, DisplayFeatureState.postureFlat);
+      expect(feature.bounds, const Rect.fromLTRB(400, 0, 400, 600));
+
+      controller.hingeMode = FoldableHingeMode.foldHalfOpen;
+      await tester.pumpAndSettle();
+      feature = features().single;
+      expect(feature.type, DisplayFeatureType.fold);
+      expect(feature.state, DisplayFeatureState.postureHalfOpened);
+    });
+
+    testWidgets('hiding it takes it away from the app', (tester) async {
+      final controller = FoldableDevToolsController()..showHinge = true;
+      addTearDown(controller.dispose);
+      final features = await pumpApp(tester, controller);
+      expect(features(), hasLength(1));
+
+      controller.showHinge = false;
+      await tester.pumpAndSettle();
+
+      expect(features(), isEmpty);
+    });
+
+    testWidgets('the panel switches the kind of hinge', (tester) async {
+      // Tall enough to build the whole panel.
+      tester.view.physicalSize = const Size(800, 2400);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      final controller = FoldableDevToolsController()
+        ..isOpen = true
+        ..showHinge = true;
+      addTearDown(controller.dispose);
+      await pumpApp(tester, controller);
+
+      await tester.tap(find.text('Fold, half open'));
+      await tester.pumpAndSettle();
+
+      expect(controller.hingeMode, FoldableHingeMode.foldHalfOpen);
+    });
   });
 }
