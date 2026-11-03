@@ -59,11 +59,46 @@ class _MailScreenState extends State<MailScreen> {
 
 ## Layout rules
 
-| Available width | What is shown |
-| --- | --- |
-| < 600 | one pane, `bottomNavigationBuilder` |
-| 600 to below 1200 | one pane, `primaryNavigationBuilder` on the left |
-| 1200 and above | body and secondary body side by side, with a draggable divider |
+The width at which the scaffold changes layout depends on the platform. Android
+and iOS (also in a mobile browser) are *handheld*, everything else is *desktop*.
+
+| Scaffold width | Handheld | Desktop |
+| --- | --- | --- |
+| < 600 | one pane, `bottomNavigationBuilder` | one pane, `bottomNavigationBuilder` |
+| 600 and above | `primaryNavigationBuilder` on the left | `primaryNavigationBuilder` on the left |
+| two panes | from 600, if the window is at least 600 on its **short** side | from 1200 |
+
+On a handheld, body and secondary body are shown side by side, with a draggable
+divider, on the inner screen of a foldable (a Galaxy Z Fold, an unfolded iPhone
+Fold) and on a tablet. A phone keeps one pane in either orientation: it is never
+more than about 480 on its short side. A narrow window, such as half a tablet in
+multi-window, keeps one pane too.
+
+| Device | Window (logical size) | Panes |
+| --- | --- | --- |
+| Phone | 360 x 800 to 440 x 956, also sideways | one |
+| Galaxy Z Fold8, folded | about 411 x 960 | one |
+| Galaxy Z Fold8, open | about 635 x 841 | two |
+| Galaxy Z Fold8 Ultra, open | about 740 x 822 | two |
+| iPhone Fold, open (not released, sizes are leaks) | about 640 x 904 | two |
+| Tablet | 800 x 1280 | two |
+| Desktop window | 1200 and wider | two |
+
+The sizes of the foldables are worked out from their published pixel counts and
+densities: check them on your device by printing `MediaQuery.sizeOf(context)`.
+
+Override the default with `breakpoints`:
+
+```dart
+FoldableScaffold(
+  // Split from 840 wide, on any platform and whatever the height.
+  breakpoints: const FoldableBreakpoints(split: 840),
+  // ...
+)
+
+// Or start from one of the two presets.
+breakpoints: const FoldableBreakpoints.handheld(split: 700),
+```
 
 * In a single-pane layout the secondary body replaces the body. Set
   `focusOnPrimaryBody` to keep the body when the secondary body is open.
@@ -74,6 +109,44 @@ class _MailScreenState extends State<MailScreen> {
   a page slide does not run a pane resize on top of it.
   `FoldablePaneTransitionScope` provides that signal automatically when a
   `FoldableNavigator` builds the scaffold.
+
+## Folds and hinges
+
+On Android, a device with a vertical fold or hinge (a Galaxy Z Fold, a Pixel
+Fold, a dual-screen device) reports it in `MediaQuery.displayFeatures`. The
+scaffold reads it, as `FoldableFold`, and places the panes around it:
+
+| The device reports | What the scaffold does |
+| --- | --- |
+| A **hinge** (two screens) | body on one screen, secondary body on the other, whatever the width. The hinge area stays empty and is not a handle. |
+| A **half-open fold** (book posture) | the same: one pane on each side of the fold. |
+| A **flat fold** (fully open) | the content crosses the crease. Two panes still follow `breakpoints`, and the divider *starts* on the crease. The user can drag it away. |
+| Nothing (a phone, a tablet, desktop, web) | nothing changes. |
+
+Folding or unfolding the device moves the divider back to the crease. A fold
+needs room: each side must be at least `minBodySize` wide, or the usual rules
+apply. Horizontal folds (laptop or tabletop posture) and cutouts are ignored.
+
+```dart
+FoldableScaffold(
+  followFold: true, // the default; false ignores the fold
+  // ...
+)
+
+// In a pane, to adapt your own content:
+final fold = FoldableFold.maybeOf(context);
+if (fold != null && fold.isSeparating) {
+  // Keep text and buttons off the hinge area: fold.bounds.
+}
+```
+
+The fold is in window coordinates, so it only applies to a scaffold as wide as
+the window. iOS and the web report no folds; there the width rules above are all
+that decide.
+
+To try it without a foldable, run the [example](example/lib/main.dart): the
+fold button in its app bar pretends the device has a hinge or a fold. In your
+own app, `foldable_dev_tools` has the same switch.
 
 ## Exposing the layout to the panes
 

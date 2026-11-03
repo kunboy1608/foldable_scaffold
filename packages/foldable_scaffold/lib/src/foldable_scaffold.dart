@@ -2,24 +2,35 @@ import 'package:flutter/foundation.dart';
 import 'package:foldable_core/foldable_core.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'foldable_breakpoints.dart';
+import 'foldable_fold.dart';
+
 /// A [Scaffold] with two panes: a body and a secondary body.
 ///
 /// The scaffold only takes care of the layout. Who fills the panes is up to
 /// you: `FoldableNavigator` in `foldable_router` puts a page stack in them,
 /// but any two widgets work.
 ///
-/// Layout, by available width:
+/// Layout, by available width (the numbers are [breakpoints], shown here for a
+/// desktop; see [FoldableBreakpoints] for handhelds):
 ///
 /// * Below 600: one pane at a time, no navigation rail.
 /// * From 600: the primary navigation is shown sideways, one pane at a time.
-/// * From 1200: the body and the secondary body are shown side by side, with
-///   a divider that can be dragged to resize them. The divider stops where
-///   either pane would get narrower than [minBodySize].
+/// * From 1200 on desktop, or from 600 on the inner screen of a foldable or a
+///   tablet (a window at least 600 on its short side, so never a phone): the
+///   body and the secondary body are shown side by side, with a divider that
+///   can be dragged to resize them. The divider stops where either pane would
+///   get narrower than [minBodySize].
 ///
 /// When only one pane is shown, the secondary body replaces the body, unless
 /// [focusOnPrimaryBody] is true. A pane narrower than [minBodySize] collapses
 /// into the other one, which happens when the available width cannot hold two
 /// panes of that size.
+///
+/// A device with a vertical fold or hinge (see [followFold]) gets the panes
+/// placed around it: when the fold separates the screen (a hinge, or a fold that
+/// is half open) the body is on one side and the secondary body on the other,
+/// whatever the width. A flat fold only decides where the divider starts.
 ///
 /// Switching the one visible pane is instant while [paneTransition] is true,
 /// so a page slide (`FoldableNavigator`) does not run a pane resize on top of
@@ -33,6 +44,8 @@ class FoldableScaffold extends StatefulWidget {
     this.extendBody = true,
     this.extendBodyBehindAppBar = false,
     this.focusOnPrimaryBody = false,
+    this.breakpoints,
+    this.followFold = true,
     this.minWidthNavigation = 72.0,
     this.maxWidthNavigation = 192.0,
     this.minBodySize = 200.0,
@@ -61,10 +74,34 @@ class FoldableScaffold extends StatefulWidget {
   /// single-pane layout.
   final bool focusOnPrimaryBody;
 
-  /// Width of the primary navigation when it is shown sideways (from 600).
+  /// The widths at which the layout changes.
+  ///
+  /// Defaults to [FoldableBreakpoints.forPlatform] for the platform of the
+  /// closest [Theme]: two panes on the inner screen of a foldable or on a tablet
+  /// for Android and iOS, from a window 1200 wide elsewhere.
+  final FoldableBreakpoints? breakpoints;
+
+  /// Whether the panes follow a vertical fold or hinge of the device
+  /// ([FoldableFold], from [MediaQuery.displayFeatures]).
+  ///
+  /// * A fold that separates the screen (a hinge, or a fold that is half open)
+  ///   gets one pane on each side, and the hinge area between them stays
+  ///   empty. The divider cannot be dragged. This applies even where
+  ///   [breakpoints] would show one pane, provided each side is at least
+  ///   [minBodySize] wide.
+  /// * A flat fold is only a crease: the divider starts on it, and can be dragged
+  ///   away. Two panes still need [breakpoints] to say so.
+  ///
+  /// It needs the scaffold to be as wide as the window, as the fold is reported
+  /// in window coordinates; a scaffold inside something narrower ignores the
+  /// fold. Devices without a fold are unaffected.
+  final bool followFold;
+
+  /// Width of the primary navigation when it is shown sideways.
   final double minWidthNavigation;
 
-  /// Width of the primary navigation when the window is wide (over 1000).
+  /// Width of the primary navigation when the scaffold is wide
+  /// ([FoldableBreakpoints.wideRail]).
   final double maxWidthNavigation;
 
   /// A pane narrower than this collapses into the other one.
@@ -113,7 +150,8 @@ class FoldableScaffold extends StatefulWidget {
   /// usually). Hidden when there is no room for it.
   final PrimaryNavigationBuilder? primaryNavigationBuilder;
 
-  /// Builds the bottom navigation, shown below 600 only.
+  /// Builds the bottom navigation, shown below [FoldableBreakpoints.rail]
+  /// only.
   final BoxConstraintsNullableWidgetBuilder? bottomNavigationBuilder;
 
   /// Called when the system back press is refused because the secondary body
@@ -130,11 +168,27 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
   bool _wasSinglePane = false;
   bool _wasPrimaryVisible = false;
 
+  /// Whether the user dragged the divider since the fold last changed. Until
+  /// then, a flat fold decides where the divider starts.
+  bool _userResized = false;
+  FoldableFold? _fold;
+
   double get _minWidthNavigation => widget.minWidthNavigation;
   double get _maxWidthNavigation => widget.maxWidthNavigation;
   double get _minBodySize => widget.minBodySize;
   double get _dividerSize => widget.dividerSize;
   bool get _focusOnPrimaryBody => widget.focusOnPrimaryBody;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Folding or unfolding the device moves the crease: start over from it.
+    final fold = FoldableFold.maybeOf(context);
+    if (fold != _fold) {
+      _fold = fold;
+      _userResized = false;
+    }
+  }
 
   @override
   void dispose() {
@@ -169,12 +223,24 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
     required double minSecondarySize,
     required double maxSecondarySize,
     required double screenWidth,
+    required double currentRatio,
+    required bool atFold,
   }) {
+    // The hinge area between two screens is not a handle.
+    if (atFold) {
+      return ColoredBox(
+        key: const Key('pane_divider'),
+        color: Theme.of(context).scaffoldBackgroundColor,
+      );
+    }
     return MouseRegion(
       cursor: SystemMouseCursors.resizeLeftRight,
       child: GestureDetector(
         key: const Key('pane_divider'),
         onHorizontalDragStart: (_) {
+          // Continue from where the divider is, which may be on the fold.
+          _ratioSecondaryBody.value = currentRatio;
+          _userResized = true;
           _isHoveringDivider.value = true;
         },
         onHorizontalDragUpdate: (update) {
@@ -222,18 +288,53 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
       widget.paneAnimationDuration,
     );
 
+    final breakpoints =
+        widget.breakpoints ??
+        FoldableBreakpoints.forPlatform(Theme.of(context).platform);
+    // The window, not the scaffold, tells a phone held sideways (wide but
+    // short) from a foldable or a tablet.
+    final windowSize = MediaQuery.sizeOf(context);
+    final displayFeatures = MediaQuery.displayFeaturesOf(context);
+
     return LayoutBuilder(
       builder: (context, scaffoldConstraints) {
         final padding = MediaQuery.paddingOf(context);
 
         final scaffoldWidth = scaffoldConstraints.maxWidth;
-        final isMediumSize = scaffoldWidth >= 600;
-        final isMediumLargeSize = scaffoldWidth >= 1200;
-        final navigationWidth = scaffoldWidth > 1000
+        final isMediumSize = scaffoldWidth >= breakpoints.rail;
+        final isMediumLargeSize = breakpoints.canSplit(
+          scaffoldWidth,
+          windowSize,
+        );
+        final navigationWidth = scaffoldWidth > breakpoints.wideRail
             ? _maxWidthNavigation + padding.left
             : isMediumSize
             ? _minWidthNavigation + padding.left
             : 0.0;
+        // What the navigation really takes: nothing without a builder.
+        final railWidth = widget.primaryNavigationBuilder == null
+            ? 0.0
+            : navigationWidth;
+        final paneAreaWidth = scaffoldWidth - railWidth;
+        // The fold is in window coordinates: it only means something to a
+        // scaffold that spans the window.
+        final fold =
+            widget.followFold && (scaffoldWidth - windowSize.width).abs() < 1
+            ? FoldableFold.fromFeatures(displayFeatures, windowSize)
+            : null;
+        final foldLeft = fold == null ? 0.0 : fold.bounds.left - railWidth;
+        final foldRight = fold == null ? 0.0 : fold.bounds.right - railWidth;
+        // One pane on each side of a fold that cuts the screen, as long as both
+        // are big enough to be useful.
+        final splitsAtFold =
+            fold != null &&
+            fold.isSeparating &&
+            foldLeft >= _minBodySize &&
+            paneAreaWidth - foldRight >= _minBodySize;
+        // Where the secondary pane ends up if the divider sits on a flat fold.
+        final foldSecondaryRatio = fold == null || fold.isSeparating
+            ? null
+            : (scaffoldWidth - fold.center - _dividerSize / 2) / scaffoldWidth;
         final hasSecondaryBody =
             widget.secondaryBodyBuilder != null &&
             (widget.hasSecondaryBody ??
@@ -250,7 +351,7 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
           canPop: !hasSecondaryBody,
           onPopInvokedWithResult: widget.onSecondBodyClose,
           child: FoldableScaffoldScope(
-            canSplit: isMediumLargeSize,
+            canSplit: isMediumLargeSize || splitsAtFold,
             child: Scaffold(
               primary: widget.primary,
               extendBody: widget.extendBody,
@@ -299,7 +400,8 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
                         final totalWidth = constraints.maxWidth;
 
                         final canSplitPanel =
-                            isMediumLargeSize && hasSecondaryBody;
+                            (isMediumLargeSize || splitsAtFold) &&
+                            hasSecondaryBody;
 
                         // The panes share the width left by the navigation and
                         // the divider. Each keeps at least minBodySize, or half
@@ -328,14 +430,21 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
                             ]),
                             builder: (context, _) {
                               final ratioSecondaryBody =
-                                  _ratioSecondaryBody.value;
+                                  _userResized || foldSecondaryRatio == null
+                                  ? _ratioSecondaryBody.value
+                                  : foldSecondaryRatio;
                               final isHoveringDivider =
                                   _isHoveringDivider.value;
                               double secondaryTargetWidth = 0.0;
                               double primaryTargetWidth = totalWidth;
                               double dividerTargetWidth = 0.0;
 
-                              if (canSplitPanel) {
+                              if (canSplitPanel && splitsAtFold) {
+                                // Around the hinge: its area is the divider.
+                                primaryTargetWidth = foldLeft;
+                                dividerTargetWidth = foldRight - foldLeft;
+                                secondaryTargetWidth = totalWidth - foldRight;
+                              } else if (canSplitPanel) {
                                 // The window may have been resized since the
                                 // ratio was stored.
                                 secondaryTargetWidth =
@@ -438,6 +547,9 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
                                                   maxSecondarySize,
                                               screenWidth:
                                                   scaffoldConstraints.maxWidth,
+                                              currentRatio: ratioSecondaryBody,
+                                              atFold:
+                                                  canSplitPanel && splitsAtFold,
                                             ),
                                           ),
                                           LayoutId(
