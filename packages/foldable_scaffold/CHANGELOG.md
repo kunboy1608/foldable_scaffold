@@ -1,6 +1,9 @@
 ## 0.1.0
 
 * Initial release.
+* The usual `Scaffold` slots are forwarded: `floatingActionButton`, `floatingActionButtonLocation`, `drawer`, `endDrawer`, `bottomSheet`, `backgroundColor` and `resizeToAvoidBottomInset`.
+* Fixed the `MediaQuery` of the panes. It now comes from the `Scaffold` body, so with `extendBody` the bottom padding is the height of the bottom navigation bar (it used to be only the system inset, which let lists run under the bar); without `extendBody` it is zero above the bar, and the system inset when no bar is shown (the rail replaces it, or there is no `bottomNavigationBuilder`). The keyboard is no longer counted twice: the body is resized, so the panes see no `viewInsets`.
+* `snapWidths` (with `snapThreshold`): the divider snaps to set widths, such as 360 or 412, when it is released. Either pane can be the one that snaps. Off by default.
 * `FoldableScaffold`: one pane on a phone, body and secondary body side by side on a foldable's inner screen, a tablet or a wide desktop window, draggable divider, collapsible panes, navigation rail and bottom navigation.
 * The divider stops where either pane would get narrower than `minBodySize`, so dragging past an edge leaves no dead zone when dragging back.
 * `FoldableBreakpoints` sets the widths of the layout: `rail`, `wideRail`, `split` and `splitMinShortestSide`. `FoldableScaffold.breakpoints` overrides the default, which depends on the platform: on Android and iOS (`FoldableBreakpoints.handheld`) two panes are shown from a width of 600 when the window is at least 600 on its short side, which covers the inner screen of a foldable and a tablet but never a phone, even sideways; elsewhere (`FoldableBreakpoints.desktop`) from a width of 1200, as before.

@@ -110,6 +110,44 @@ breakpoints: const FoldableBreakpoints.handheld(split: 700),
   `FoldablePaneTransitionScope` provides that signal automatically when a
   `FoldableNavigator` builds the scaffold.
 
+## Insets
+
+The panes get the `MediaQuery` that the `Scaffold` makes for its body, so a
+`ListView`, a `SafeArea` or a nested `Scaffold` in a pane pads the right way:
+
+| | `MediaQuery.padding.bottom` in a pane |
+| --- | --- |
+| `bottomNavigationBuilder` on screen, `extendBody: true` (the default) | the height of the bar: the pane runs under it, pad the end of the content |
+| `bottomNavigationBuilder` on screen, `extendBody: false` | 0: the pane ends above the bar |
+| no bar on screen (the rail replaces it, or no builder) | the system inset |
+
+The top inset is taken by the app bar (`topNavigationBuilder`), and the left one
+by the rail. With the keyboard open the body is resized, and the panes see no
+`viewInsets`, so a `Scaffold` in a pane does not shrink a second time.
+
+## Resizing the panes
+
+The divider is dragged. With `snapWidths` it snaps to set widths when it is
+released, like the
+[M3 pane handle](https://m3.material.io/foundations/layout/scaffold/panes):
+
+```dart
+FoldableScaffold(
+  // Snap to these widths when the divider is released, if a pane is within
+  // snapThreshold (32) of one. Either pane can be the one that snaps.
+  snapWidths: const [360, 412],
+  // ...
+)
+```
+
+Around a hinge the divider is not a handle, and snapping does not apply.
+
+## Other Scaffold slots
+
+`floatingActionButton`, `floatingActionButtonLocation`, `drawer`, `endDrawer`,
+`bottomSheet`, `backgroundColor` and `resizeToAvoidBottomInset` go to the
+underlying `Scaffold`. They span the whole scaffold, rail and both panes.
+
 ## Folds and hinges
 
 On Android, a device with a vertical fold or hinge (a Galaxy Z Fold, a Pixel

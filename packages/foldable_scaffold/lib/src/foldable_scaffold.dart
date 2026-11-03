@@ -32,6 +32,11 @@ import 'foldable_fold.dart';
 /// is half open) the body is on one side and the secondary body on the other,
 /// whatever the width. A flat fold only decides where the divider starts.
 ///
+/// The divider can snap to set widths when it is released ([snapWidths]).
+///
+/// The usual [Scaffold] slots are forwarded: [floatingActionButton],
+/// [drawer], [endDrawer] and [bottomSheet].
+///
 /// Switching the one visible pane is instant while [paneTransition] is true,
 /// so a page slide (`FoldableNavigator`) does not run a pane resize on top of
 /// it. [FoldablePaneTransitionScope] provides the same signal automatically
@@ -50,6 +55,8 @@ class FoldableScaffold extends StatefulWidget {
     this.maxWidthNavigation = 192.0,
     this.minBodySize = 200.0,
     this.dividerSize = 24.0,
+    this.snapWidths = const [],
+    this.snapThreshold = 32.0,
     this.paneAnimationDuration = const Duration(milliseconds: 250),
     this.paneTransition,
     this.topNavigationBuilder,
@@ -58,6 +65,13 @@ class FoldableScaffold extends StatefulWidget {
     this.primaryNavigationBuilder,
     this.bottomNavigationBuilder,
     this.onSecondBodyClose,
+    this.floatingActionButton,
+    this.floatingActionButtonLocation,
+    this.drawer,
+    this.endDrawer,
+    this.bottomSheet,
+    this.backgroundColor,
+    this.resizeToAvoidBottomInset,
   });
 
   /// Whether this scaffold hosts the primary content of the app, forwarded to
@@ -110,6 +124,16 @@ class FoldableScaffold extends StatefulWidget {
   /// Width of the drag handle between the two panes.
   final double dividerSize;
 
+  /// Widths a pane snaps to when the divider is released, for example
+  /// `[360, 412]`. Either pane snaps, whichever is nearest to one of the widths.
+  ///
+  /// Empty by default: the divider stays where it is released.
+  final List<double> snapWidths;
+
+  /// How close, in logical pixels, a pane must be to one of the [snapWidths]
+  /// when the divider is released to snap to it.
+  final double snapThreshold;
+
   /// Duration of the pane animations, scaled by [FoldableMotion].
   final Duration paneAnimationDuration;
 
@@ -157,6 +181,27 @@ class FoldableScaffold extends StatefulWidget {
   /// Called when the system back press is refused because the secondary body
   /// is open.
   final PopInvokedWithResultCallback<dynamic>? onSecondBodyClose;
+
+  /// Forwarded to [Scaffold.floatingActionButton].
+  final Widget? floatingActionButton;
+
+  /// Forwarded to [Scaffold.floatingActionButtonLocation].
+  final FloatingActionButtonLocation? floatingActionButtonLocation;
+
+  /// Forwarded to [Scaffold.drawer].
+  final Widget? drawer;
+
+  /// Forwarded to [Scaffold.endDrawer].
+  final Widget? endDrawer;
+
+  /// Forwarded to [Scaffold.bottomSheet].
+  final Widget? bottomSheet;
+
+  /// Forwarded to [Scaffold.backgroundColor].
+  final Color? backgroundColor;
+
+  /// Forwarded to [Scaffold.resizeToAvoidBottomInset].
+  final bool? resizeToAvoidBottomInset;
 
   @override
   State<FoldableScaffold> createState() => _FoldableScaffoldState();
@@ -252,6 +297,12 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
           _ratioSecondaryBody.value = newSecondarySize / screenWidth;
         },
         onHorizontalDragEnd: (_) {
+          _snapToWidths(
+            screenWidth: screenWidth,
+            splitWidth: constraints.maxWidth - _dividerSize,
+            minSecondarySize: minSecondarySize,
+            maxSecondarySize: maxSecondarySize,
+          );
           _isHoveringDivider.value = false;
         },
         child: Container(
@@ -279,6 +330,37 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
         ),
       ),
     );
+  }
+
+  /// Moves the divider to the nearest of [FoldableScaffold.snapWidths], if one
+  /// is within [FoldableScaffold.snapThreshold] of either pane.
+  void _snapToWidths({
+    required double screenWidth,
+    required double splitWidth,
+    required double minSecondarySize,
+    required double maxSecondarySize,
+  }) {
+    if (widget.snapWidths.isEmpty || screenWidth <= 0) return;
+    final secondary = (_ratioSecondaryBody.value * screenWidth).clamp(
+      minSecondarySize,
+      maxSecondarySize,
+    );
+    double? best;
+    var bestDistance = widget.snapThreshold;
+    for (final width in widget.snapWidths) {
+      // The secondary body takes the width, or the body does.
+      for (final candidate in [width, splitWidth - width]) {
+        if (candidate < minSecondarySize || candidate > maxSecondarySize) {
+          continue;
+        }
+        final distance = (secondary - candidate).abs();
+        if (distance <= bestDistance) {
+          best = candidate;
+          bestDistance = distance;
+        }
+      }
+    }
+    if (best != null) _ratioSecondaryBody.value = best / screenWidth;
   }
 
   @override
@@ -356,6 +438,13 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
               primary: widget.primary,
               extendBody: widget.extendBody,
               extendBodyBehindAppBar: widget.extendBodyBehindAppBar,
+              floatingActionButton: widget.floatingActionButton,
+              floatingActionButtonLocation: widget.floatingActionButtonLocation,
+              drawer: widget.drawer,
+              endDrawer: widget.endDrawer,
+              bottomSheet: widget.bottomSheet,
+              backgroundColor: widget.backgroundColor,
+              resizeToAvoidBottomInset: widget.resizeToAvoidBottomInset,
               appBar: widget.topNavigationBuilder?.call(
                 context,
                 BoxConstraints(
@@ -416,11 +505,24 @@ class _FoldableScaffoldState extends State<FoldableScaffold> {
                         final minSecondarySize = minPaneSize;
                         final maxSecondarySize = splitWidth - minPaneSize;
 
+                        // The panes see what the Scaffold made of the window
+                        // for its body: the app bar took the top inset, the
+                        // keyboard resized the body, and with extendBody the
+                        // bottom padding is the height of the bottom bar.
+                        final bodyMedia = MediaQuery.of(innerContext);
+                        // The Scaffold takes the bottom inset away from its body
+                        // as soon as it has a bottom bar, even a hidden one, and
+                        // gives it back as the bar's height (extendBody). With
+                        // no bar on screen the inset is the system's.
+                        final hasBottomBar =
+                            widget.bottomNavigationBuilder != null &&
+                            navigationWidth == 0;
                         return MediaQuery(
-                          data: MediaQuery.of(context).copyWith(
-                            padding: padding.copyWith(
-                              top: MediaQuery.paddingOf(innerContext).top,
-                              left: navigationWidth > 0 ? 0 : padding.left,
+                          data: bodyMedia.copyWith(
+                            padding: bodyMedia.padding.copyWith(
+                              // The navigation rail already took the left inset.
+                              left: navigationWidth > 0 ? 0 : null,
+                              bottom: hasBottomBar ? null : padding.bottom,
                             ),
                           ),
                           child: ListenableBuilder(
