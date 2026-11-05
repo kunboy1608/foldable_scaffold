@@ -8,8 +8,20 @@ void main() => runApp(const RouterExample());
 
 /// Swipe back works from the left edge in a single-pane window; in a split
 /// window the detail page and the list are side by side.
-class RouterExample extends StatelessWidget {
+class RouterExample extends StatefulWidget {
   const RouterExample({super.key});
+
+  @override
+  State<RouterExample> createState() => _RouterExampleState();
+}
+
+class _RouterExampleState extends State<RouterExample> {
+  @override
+  void initState() {
+    super.initState();
+    // Nothing is on screen until the sessions were checked once.
+    appRouter.refresh();
+  }
 
   @override
   Widget build(BuildContext context) {

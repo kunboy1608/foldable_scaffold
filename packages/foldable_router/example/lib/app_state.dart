@@ -14,31 +14,49 @@ const guestSession = 'guest';
 const onboardingSession = 'onboarding';
 const mainSession = 'main';
 
-/// The app state that picks the session. Change it, then call
-/// `AppRouterScope.of(context).refresh()`.
+/// Opened over [mainSession] with `openSession`; closing it shows the tabs
+/// again.
+const checkoutSession = 'checkout';
+
+/// The app state behind the sessions. [updateSession] changes it and asks the
+/// router to check which sessions still exist.
 bool _loggedIn = false;
 bool _onboarded = false;
 
-/// The session that matches the current app state.
-String sessionNow() {
-  if (!_loggedIn) return guestSession;
-  return _onboarded ? mainSession : onboardingSession;
-}
+bool get isLoggedIn => _loggedIn;
+bool get isOnboarded => _onboarded;
 
-/// Changes the state and lets the router follow it.
-void updateSession(BuildContext context, {bool? loggedIn, bool? onboarded}) {
+/// Whether the tabs may be opened, see `canActivate` in `app_router.dart`.
+///
+/// A real app reads a stored token here, which is why a condition may be
+/// async: the router waits for it in `refresh()`.
+Future<bool> get isReady async => _loggedIn && _onboarded;
+
+/// Changes the state and lets the router check the sessions again: the ones
+/// that no longer hold are closed, and the base is chosen again.
+Future<void> updateSession(
+  BuildContext context, {
+  bool? loggedIn,
+  bool? onboarded,
+}) {
   _loggedIn = loggedIn ?? _loggedIn;
   _onboarded = onboarded ?? _onboarded;
-  AppRouterScope.of(context).refresh();
+  return AppRouterScope.of(context).refresh();
 }
 
 /// Marks the onboarding done and puts [route] on screen in [mainSession].
 ///
-/// The state and the session switch in one step, so the router does not show
-/// the main session's default route in between.
-void completeOnboarding(BuildContext context, FoldableRoute route) {
+/// Navigation waits for the refresh, so [route] opens in the tabs and the
+/// router does not show the main session's default route in between.
+Future<void> completeOnboarding(
+  BuildContext context,
+  FoldableRoute route,
+) async {
+  final router = AppRouterScope.of(context);
   _onboarded = true;
-  AppRouterScope.of(context).replaceSession(mainSession, route: route);
+  final refreshed = router.refresh();
+  router.go(null, route);
+  await refreshed;
 }
 
 /// What the last button did, shown on the Home tab.

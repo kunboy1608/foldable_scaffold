@@ -58,13 +58,90 @@ mixin FoldableRouterBase on Listenable {
 
   /// Removes [observer].
   void removeObserver(FoldableRouterObserver observer) {}
+
+  /// Gives the router the app's shared [FoldableRouterConfig].
+  /// [FoldableRouterDelegate] calls it with its `config`. The default does
+  /// nothing.
+  void attachConfig(FoldableRouterConfig config) {}
+
+  /// Whether [closeSession] would close a session. False unless the router
+  /// stacks sessions, see [FoldableSessionRouter].
+  bool get canCloseSession => false;
+
+  /// Closes the session on screen and shows the one below, with [result] for
+  /// the future of [openSession]. Returns whether one was closed.
+  bool closeSession([Object? result]) => false;
+
+  /// Opens session [id] over the one on screen. See
+  /// [FoldableSessionRouter.openSession]; the default throws.
+  Future<T?> openSession<T extends Object?>(
+    String id, {
+    FoldableRoute? route,
+  }) => throw UnsupportedError('$runtimeType does not support sessions.');
+
+  /// See [FoldableRouter.go]. Needed by [FoldableRoute.go]; the default
+  /// throws.
+  void go(BuildContext? context, FoldableRoute route) =>
+      throw UnsupportedError('$runtimeType does not support go.');
+
+  /// See [FoldableRouter.push]. Needed by [FoldableRoute.push]; the default
+  /// throws.
+  Future<T?> push<T extends Object?>(
+    FoldableRoute route, {
+    BuildContext? context,
+  }) => throw UnsupportedError('$runtimeType does not support push.');
+
+  /// See [FoldableRouter.pushAndReplace]. Needed by
+  /// [FoldableRoute.pushAndReplace]; the default throws.
+  Future<T?> pushAndReplace<T extends Object?>(
+    FoldableRoute route, {
+    BuildContext? context,
+  }) => throw UnsupportedError('$runtimeType does not support pushAndReplace.');
+
+  /// See [FoldableRouter.pushAndRemoveUntil]. Needed by
+  /// [FoldableRoute.pushAndRemoveUntil]; the default throws.
+  Future<T?> pushAndRemoveUntil<T extends Object?>(
+    FoldableRoute route,
+    bool Function(Page<Object?> page) predicate, {
+    BuildContext? context,
+  }) => throw UnsupportedError(
+    '$runtimeType does not support pushAndRemoveUntil.',
+  );
+}
+
+/// Gives the pages below a [FoldableRouterDelegate] their router, so a route
+/// can navigate itself: `const DetailsRoute().push(context)`.
+class FoldableRouterScope extends InheritedWidget {
+  const FoldableRouterScope({
+    required this.router,
+    required super.child,
+    super.key,
+  });
+
+  final FoldableRouterBase router;
+
+  /// The router of the closest [FoldableRouterDelegate], if any.
+  static FoldableRouterBase? maybeOf(BuildContext context) {
+    return context.getInheritedWidgetOfExactType<FoldableRouterScope>()?.router;
+  }
+
+  /// Like [maybeOf], but asserts that there is one.
+  static FoldableRouterBase of(BuildContext context) {
+    final router = maybeOf(context);
+    assert(router != null, 'No FoldableRouterDelegate found in context.');
+    return router!;
+  }
+
+  @override
+  bool updateShouldNotify(FoldableRouterScope oldWidget) =>
+      router != oldWidget.router;
 }
 
 /// Navigation on top of [FoldableNavigator]: one page stack per branch
 /// (tab), deep links, redirects and guards.
 ///
 /// ```dart
-/// final router = FoldableRouter(config: FoldableRouterConfig(...));
+/// final router = FoldableRouter(roots: const [HomeRoute(), SettingsRoute()]);
 ///
 /// // From code:
 /// router.push(const DetailsRoute());
@@ -73,6 +150,7 @@ mixin FoldableRouterBase on Listenable {
 /// // In MaterialApp.router:
 /// routerDelegate: FoldableRouterDelegate(
 ///   router: router,
+///   config: FoldableRouterConfig(matcher: matchRoute, notFound: NotFoundRoute.new),
 ///   navigatorKey: rootNavigatorKey,
 ///   builder: (context) => MyScaffold(controller: router.controller),
 /// ),
@@ -90,27 +168,60 @@ mixin FoldableRouterBase on Listenable {
 /// [FoldableRouterConfig.redirect]), so the URL and the login state stay in
 /// charge of what a navigation actually shows.
 class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
-  FoldableRouter({required this.config, this.allowEmptyRoots = false})
-    : _observers = List.of(config.observers),
-      _controller = _createController(config, allowEmptyRoots) {
+  FoldableRouter({
+    required this.roots,
+    FoldableRouterConfig? config,
+    this.allowEmptyRoots = false,
+  }) : _config = config,
+       _observers = List.of(config?.observers ?? const []) {
     _remember();
     _controller.addListener(_onControllerChanged);
   }
 
-  /// The app description of this router.
-  final FoldableRouterConfig config;
+  /// The bottom page of every branch: the tabs of this router.
+  ///
+  /// A root also builds the URL of its branch, for example `/home`, and is
+  /// where back goes when the branch has no page to pop and
+  /// [FoldableRouterConfig.backTarget] says so.
+  final List<FoldableRoute> roots;
 
-  /// Whether [FoldableRouterConfig.roots] may be empty.
+  FoldableRouterConfig? _config;
+
+  /// The app description of this router, given by the constructor or by
+  /// [attachConfig] (the [FoldableRouterDelegate] does that).
+  FoldableRouterConfig get config {
+    final config = _config;
+    if (config == null) {
+      throw StateError(
+        'FoldableRouter has no FoldableRouterConfig. Pass config to '
+        'FoldableRouterDelegate, or to the router.',
+      );
+    }
+    return config;
+  }
+
+  @override
+  void attachConfig(FoldableRouterConfig config) {
+    _config = config;
+    for (final observer in config.observers) {
+      if (!_observers.contains(observer)) _observers.add(observer);
+    }
+  }
+
+  /// Whether [roots] may be empty.
   ///
   /// A router without roots starts with an empty stack: the first navigation
   /// fills it. Use it with a [FoldableStackNavigator]; a
   /// [FoldableSplitNavigator] needs a page in every branch.
   ///
-  /// [FoldableSessionRouter] sets it for `FoldableNavigatorKind.stack`
-  /// sessions, so a stack session does not need a dummy root.
+  /// [FoldableSessionRouter] sets it for a `FoldableSessionStack` without an
+  /// `initRoute`.
   final bool allowEmptyRoots;
 
-  final FoldableNavigatorController _controller;
+  late final FoldableNavigatorController _controller = _createController(
+    roots,
+    allowEmptyRoots,
+  );
   final List<FoldableRouterObserver> _observers;
 
   /// The branch and the pages of that branch at the last navigation that was
@@ -138,34 +249,40 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
     _observers.remove(observer);
   }
 
-  static FoldableNavigatorController _createController(
-    FoldableRouterConfig config,
+  FoldableNavigatorController _createController(
+    List<FoldableRoute> roots,
     bool allowEmptyRoots,
   ) {
-    if (config.roots.isEmpty) {
+    if (roots.isEmpty) {
       assert(
         allowEmptyRoots,
-        'Needs at least one root route in FoldableRouterConfig.roots. Only a '
-        'stack session may start with no roots.',
+        'Needs at least one root route. Only a stack session may start with '
+        'no roots.',
       );
       return FoldableNavigatorController.empty();
     }
     return FoldableNavigatorController(
       branches: [
-        for (var index = 0; index < config.roots.length; index++)
-          [_rootPage(config, index)],
+        for (var index = 0; index < roots.length; index++)
+          [_rootPage(roots, index)],
       ],
     );
   }
 
-  static Page<void> _rootPage(FoldableRouterConfig config, int index) {
-    final route = config.roots[index];
-    final child = Builder(builder: route.build);
+  Page<void> _rootPage(List<FoldableRoute> roots, int index) {
+    final route = roots[index];
+    final child = Builder(builder: route.buildPage);
     return FoldablePage<void>(
       name: route.urlLocation,
-      child: config.lazyBranches && index > 0
-          ? LazyBranch(branch: index, child: child)
-          : child,
+      // The config may arrive after the router, so it is read when the page
+      // is built.
+      child: index == 0
+          ? child
+          : Builder(
+              builder: (context) => (_config?.lazyBranches ?? true)
+                  ? LazyBranch(branch: index, child: child)
+                  : child,
+            ),
     );
   }
 
@@ -212,10 +329,10 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   /// a matcher that does not know it would show the not-found page at startup:
   /// show the first root instead.
   FoldableRoute _routeOfUri(Uri uri) {
-    final matched = config.matcher(uri);
+    final matched = config.match(uri);
     if (matched != null) return matched;
-    if (config.roots.isNotEmpty && (uri.path.isEmpty || uri.path == '/')) {
-      return config.roots.first;
+    if (roots.isNotEmpty && (uri.path.isEmpty || uri.path == '/')) {
+      return roots.first;
     }
     return config.notFound(uri);
   }
@@ -331,6 +448,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   /// That page stays, every page above it is dropped, and back from [route]
   /// returns to it. Without a [context] — or with one outside the navigator,
   /// as in [goUri] — the branch root is the parent instead.
+  @override
   void go(BuildContext? context, FoldableRoute route) {
     _go(
       route,
@@ -437,8 +555,8 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   }
 
   int? _defaultBranchOf(FoldableRoute route) {
-    for (var index = 0; index < config.roots.length; index++) {
-      if (config.roots[index].urlLocation == route.urlLocation) return index;
+    for (var index = 0; index < roots.length; index++) {
+      if (roots[index].urlLocation == route.urlLocation) return index;
     }
     return null;
   }
@@ -481,6 +599,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   /// Redirects that are all synchronous add the page before this returns.
   /// Pushing a page straight onto [controller] skips the redirects, on
   /// purpose.
+  @override
   Future<T?> push<T extends Object?>(
     FoldableRoute route, {
     BuildContext? context,
@@ -633,6 +752,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
 
   /// Adds [route] on top of the current branch after removing pages, like
   /// [Navigator.pushAndRemoveUntil]. The redirects run first, see [push].
+  @override
   Future<T?> pushAndRemoveUntil<T extends Object?>(
     FoldableRoute route,
     bool Function(Page<Object?> page) predicate, {
@@ -663,6 +783,57 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
     });
   }
 
+  /// Replaces the top page of the current branch with [route], like
+  /// [Navigator.pushReplacement]. The redirects run first, see [push].
+  ///
+  /// The replaced page completes with null. A branch root created from
+  /// [FoldableRouterConfig.roots] is never replaced: when the top page is the
+  /// root, [route] is pushed on top of it instead.
+  @override
+  Future<T?> pushAndReplace<T extends Object?>(
+    FoldableRoute route, {
+    BuildContext? context,
+  }) {
+    final branch = _controller.currentIndex;
+    return _pushResolved<T>(route, context, null, (target) {
+      final replace = roots.isEmpty || _controller.pagesOf(branch).length > 1;
+      Future<R?> add<R extends Object?>(Page<R> page) => replace
+          ? _controller.pushAndReplace<R>(page, branch: branch)
+          : _controller.push<R>(page, branch: branch);
+      final Future<T?> future;
+      if (identical(target, route)) {
+        future = _announce(() => add<T>(route.toPage<T>()));
+      } else {
+        future = _announce(
+          () => add<Object?>(target.toPage<Object?>()),
+        ).then((value) => value is T ? value : null);
+      }
+      _emit(FoldableNavigationKind.push, target);
+      return future;
+    });
+  }
+
+  /// Replaces the top page of the current branch with the route for
+  /// [location], after the redirects. See [pushAndReplace].
+  Future<void> pushReplacementLocation(
+    String location, {
+    BuildContext? context,
+  }) {
+    final uri = Uri.parse(location);
+    final branch = _controller.currentIndex;
+    return _pushResolved<void>(_routeOfUri(uri), context, uri, (target) {
+      final replace = roots.isEmpty || _controller.pagesOf(branch).length > 1;
+      final page = target.toPage<Object?>();
+      final future = _announce(
+        () => replace
+            ? _controller.pushAndReplace<Object?>(page, branch: branch)
+            : _controller.push<Object?>(page, branch: branch),
+      );
+      _emit(FoldableNavigationKind.push, target);
+      return future.then((_) {});
+    });
+  }
+
   /// Removes the top page. When there is none to remove, shows [fallback] or
   /// the [backTarget].
   void back([FoldableRoute? fallback]) {
@@ -685,7 +856,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   /// restoration data.
   @override
   Map<String, Object?> saveState() {
-    final skip = config.roots.isEmpty ? 0 : 1;
+    final skip = roots.isEmpty ? 0 : 1;
     return {
       _indexKey: currentIndex,
       _branchesKey: [
@@ -736,7 +907,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
 
   List<Page<Object?>> _restoredPages(int branch, List<String> urls) {
     final current = _controller.pagesOf(branch);
-    final root = config.roots.isEmpty || current.isEmpty
+    final root = roots.isEmpty || current.isEmpty
         ? const <Page<Object?>>[]
         : [current.first];
     return [
@@ -749,7 +920,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   /// The page for a saved URL, or null when no route matches it.
   Page<Object?>? _pageOfUrl(String url) {
     try {
-      return config.matcher(Uri.parse(url))?.toPage<void>();
+      return config.match(Uri.parse(url))?.toPage<void>();
     } on FormatException {
       return null;
     }

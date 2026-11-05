@@ -442,6 +442,38 @@ void main() {
     expect(find.text('second'), findsNothing);
   });
 
+  testWidgets('the automatic back button pops the page it sits on', (
+    tester,
+  ) async {
+    FoldablePage<void> autoPage(String name) => FoldablePage<void>(
+      name: '/$name',
+      child: Scaffold(appBar: AppBar(title: Text(name))),
+    );
+    final controller = FoldableNavigatorController.single([
+      autoPage('first'),
+      autoPage('second'),
+      autoPage('third'),
+    ]);
+
+    await tester.pumpWidget(_app(controller, primary: true, split: true));
+    await tester.pumpAndSettle();
+
+    // 'second' is the body, 'third' the secondary body.
+    final bodyButton = find
+        .descendant(
+          of: find.ancestor(
+            of: find.text('second'),
+            matching: find.byType(Scaffold),
+          ),
+          matching: find.byType(BackButton),
+        )
+        .first;
+    await tester.tap(bodyButton);
+    await tester.pumpAndSettle();
+
+    expect(controller.pages.length, 1);
+  });
+
   testWidgets('a shell app bar shows a back button while the stack can pop', (
     tester,
   ) async {

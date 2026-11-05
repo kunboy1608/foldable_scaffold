@@ -439,7 +439,7 @@ class _FoldableStackNavigatorState extends State<FoldableStackNavigator>
       child: PopScope(
         canPop: !_controller.canPop,
         onPopInvokedWithResult: (didPop, result) {
-          if (!didPop) _controller.pop(result);
+          if (!didPop) popFromBack(result);
         },
         child: Builder(
           builder: (context) {

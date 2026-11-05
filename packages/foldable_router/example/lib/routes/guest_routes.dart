@@ -27,7 +27,7 @@ class SignInRoute extends AppRoute {
         ),
         TextButton(
           // push: the next page goes on top, back returns here.
-          onPressed: () => AppRouterScope.of(context).push(const SignUpRoute()),
+          onPressed: () => const SignUpRoute().push<void>(context),
           child: const Text('Create an account'),
         ),
       ],

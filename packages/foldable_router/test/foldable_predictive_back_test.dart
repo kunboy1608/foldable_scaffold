@@ -521,8 +521,8 @@ void main() {
     tester,
   ) async {
     final router = FoldableRouter(
+      roots: const [_Route('/a')],
       config: FoldableRouterConfig(
-        roots: const [_Route('/a')],
         matcher: (uri) => _Route(uri.path == '/' ? '/a' : uri.path),
         notFound: (uri) => _Route(uri.path),
       ),

@@ -4,6 +4,7 @@ import '../app_router_scope.dart';
 import '../app_state.dart';
 import '../widgets.dart';
 import 'app_route.dart';
+import 'checkout_routes.dart';
 import 'details_routes.dart';
 
 /// The navigation lab: one button per way to move.
@@ -34,18 +35,18 @@ class HomeRoute extends TabRoute {
         ),
         const LabSection('Stack: push and pop'),
         LabAction(
-          title: 'push',
+          title: 'route.push(context)',
           subtitle: 'Adds one page on top. Back returns here.',
           onTap: () {
-            router.push(const DetailsRoute(id: '1'));
-            logAction('push(Details 1)');
+            const DetailsRoute(id: '1').push<void>(context);
+            logAction('route.push(context)');
           },
         ),
         LabAction(
           title: 'push, wait for a result',
           subtitle: 'The page pops with a value, like Navigator.push.',
           onTap: () async {
-            final color = await router.push<String>(const PickRoute());
+            final color = await const PickRoute().push<String>(context);
             logAction('push<String>(Pick) returned $color');
           },
         ),
@@ -63,11 +64,11 @@ class HomeRoute extends TabRoute {
         ),
         const LabSection('go: replace the children of a page'),
         LabAction(
-          title: 'go(context, route)',
+          title: 'route.go(context)',
           subtitle: 'Drops what is above this page, then shows the route.',
           onTap: () {
-            router.go(context, const DetailsRoute(id: '10'));
-            logAction('go(context, Details 10)');
+            const DetailsRoute(id: '10').go(context);
+            logAction('route.go(context)');
           },
         ),
         LabAction(
@@ -103,6 +104,26 @@ class HomeRoute extends TabRoute {
             logAction('pushLocation(/details?id=43)');
           },
         ),
+        LabAction(
+          title: 'goLocation("/pick")',
+          subtitle:
+              'PickRoute is not deepLinkable: a URL shows the not found page.',
+          onTap: () {
+            router.goLocation('/pick');
+            logAction('goLocation(/pick) -> not found');
+          },
+        ),
+        const LabSection('Sessions'),
+        LabAction(
+          title: 'push a route of another session',
+          subtitle:
+              'CheckoutRoute.session opens the checkout session over the '
+              'tabs. Its back button closes it.',
+          onTap: () async {
+            final result = await const CheckoutRoute().push<String>(context);
+            logAction('push(Checkout) returned $result');
+          },
+        ),
         const LabSection('Redirects'),
         LabAction(
           title: 'go to a guarded page',
@@ -136,7 +157,6 @@ class InboxRoute extends TabRoute {
 
   @override
   Widget build(BuildContext context) {
-    final router = AppRouterScope.of(context);
     return ListView(
       children: [
         for (var index = 1; index <= 5; index++)
@@ -146,7 +166,7 @@ class InboxRoute extends TabRoute {
               'Wide window: opens in the second pane. Each tab keeps its own '
               'stack.',
             ),
-            onTap: () => router.push(DetailsRoute(id: '$index')),
+            onTap: () => DetailsRoute(id: '$index').push<void>(context),
           ),
       ],
     );

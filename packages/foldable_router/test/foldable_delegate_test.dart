@@ -115,8 +115,8 @@ FoldableRouter _router({
   FoldableBackTarget? backTarget,
 }) {
   final router = FoldableRouter(
+    roots: const [_HomeRoute(), _SecondRoute()],
     config: FoldableRouterConfig(
-      roots: const [_HomeRoute(), _SecondRoute()],
       matcher: _match,
       notFound: _NotFoundRoute.new,
       redirect: redirect,
@@ -545,5 +545,25 @@ void main() {
       expect(const _DetailRoute().location, '/detail');
       expect(const _DetailRoute(id: '7').location, '/detail?id=7');
     });
+  });
+
+  test('the delegate hands its config to the router', () {
+    final router = FoldableRouter(roots: const [_HomeRoute()]);
+    addTearDown(router.dispose);
+    expect(() => router.routeOf('/second'), throwsStateError);
+
+    final delegate = FoldableRouterDelegate(
+      router: router,
+      config: FoldableRouterConfig(
+        matcher: (uri) => uri.path == '/second' ? const _SecondRoute() : null,
+        notFound: (uri) => const _DetailRoute(id: 'missing'),
+      ),
+      navigatorKey: GlobalKey<NavigatorState>(),
+      builder: (context) => const SizedBox.shrink(),
+    );
+    addTearDown(delegate.dispose);
+
+    expect(router.routeOf('/second').path, '/second');
+    expect(router.routeOf('/nothing').path, '/detail');
   });
 }

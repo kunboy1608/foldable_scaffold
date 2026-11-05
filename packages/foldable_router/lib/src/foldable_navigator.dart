@@ -8,6 +8,7 @@ import 'package:material_ui/material_ui.dart';
 import 'foldable_navigator_controller.dart';
 import 'foldable_page.dart';
 import 'foldable_page_transition.dart';
+import 'route/branch_route.dart';
 
 export 'foldable_navigator_controller.dart';
 export 'foldable_page.dart';
@@ -240,6 +241,8 @@ class FoldableBackButton extends StatelessWidget {
   /// as in the app bar of a shell that wraps the navigator, it follows
   /// [FoldableNavigator.canPop].
   static bool isVisible(BuildContext context) {
+    // The root of a branch has nothing to go back to.
+    if (FoldableBranchRoot.hidesBackButton(context)) return false;
     final page = context
         .dependOnInheritedWidgetOfExactType<_FoldablePageScope>();
     return page?.canGoBack ?? FoldableNavigator.canPop(context);
@@ -264,11 +267,17 @@ class FoldableBackButton extends StatelessWidget {
 /// history entry (this is how a nested [Navigator] gets one). The entry also
 /// makes `Navigator.maybePop` — what that back button calls — pop one foldable
 /// page.
+///
+/// The automatic button cannot tell which page it sits on, so a page that sees
+/// a pointer press reports itself with [pointerOnPage]. The button then pops
+/// that page, like [FoldableBackButton] does, and not the top one.
 mixin _FoldableAppBarHistory<T extends FoldableNavigator> on State<T> {
   LocalHistoryEntry? _historyEntry;
   ModalRoute<dynamic>? _historyRoute;
   bool _removingHistory = false;
   bool _historySyncScheduled = false;
+  Page<Object?>? _pressedPage;
+  Stopwatch? _pressedSince;
 
   FoldableNavigatorController get historyController => widget.controller;
 
@@ -343,10 +352,35 @@ mixin _FoldableAppBarHistory<T extends FoldableNavigator> on State<T> {
     }
   }
 
+  /// Called when a pointer goes down on [page] (`pressed`) and when it is
+  /// released or cancelled.
+  void pointerOnPage(Page<Object?> page, {required bool pressed}) {
+    _pressedPage = page;
+    _pressedSince = pressed ? null : (Stopwatch()..start());
+  }
+
+  /// The page of the last press, while the pointer is down and shortly after
+  /// it is released: a tap pops during the release, or a few microtasks later
+  /// when it goes through `Navigator.maybePop`.
+  Page<Object?>? get _pressedPageNow {
+    final since = _pressedSince;
+    final fresh =
+        since == null || since.elapsed < const Duration(milliseconds: 500);
+    return fresh ? _pressedPage : null;
+  }
+
   void _onHistoryRemoved() {
     if (_removingHistory) return;
     _historyEntry = null;
-    historyController.pop();
+    popFromBack();
+  }
+
+  /// Pops for a back that came from the system or from the automatic back
+  /// button: the page that button sits on, else the top page.
+  void popFromBack([Object? result]) {
+    final page = _pressedPageNow;
+    if (page != null && historyController.popPage(page, result)) return;
+    historyController.pop(result);
   }
 }
 

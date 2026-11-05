@@ -1,4 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:material_ui/material_ui.dart'
+    show BackButton, Offset, Scrollable;
 import 'package:foldable_router_example/main.dart';
 
 void main() {
@@ -21,9 +23,35 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Last action'), findsOneWidget);
 
-    await tester.tap(find.text('push'));
+    await tester.scrollUntilVisible(
+      find.text('push a route of another session'),
+      100,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.drag(find.byType(Scrollable).last, const Offset(0, -150));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('push a route of another session'));
+    await tester.pumpAndSettle();
+    expect(find.text('Checkout'), findsOneWidget);
+    await tester.tap(find.byType(BackButton));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('route.push(context)'),
+      -100,
+      scrollable: find.byType(Scrollable).last,
+    );
+    expect(find.text('Last action'), findsWidgets);
+
+    await tester.tap(find.text('route.push(context)'));
     await tester.pumpAndSettle();
     expect(find.text('Details 1'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('popToRoot()'),
+      100,
+      scrollable: find.byType(Scrollable).last,
+    );
+    await tester.drag(find.byType(Scrollable).last, const Offset(0, -200));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('popToRoot()'));
     await tester.pumpAndSettle();
     expect(find.text('Details 1'), findsNothing);

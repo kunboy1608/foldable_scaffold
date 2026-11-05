@@ -1,6 +1,5 @@
 import 'package:material_ui/material_ui.dart';
 
-import '../app_router_scope.dart';
 import '../app_state.dart';
 import '../widgets.dart';
 import 'app_route.dart';
@@ -22,8 +21,7 @@ class WelcomeRoute extends AppRoute {
       body: 'Signed in, not onboarded. Still no navigation rail or bar.',
       actions: [
         FilledButton(
-          onPressed: () =>
-              AppRouterScope.of(context).push(const WelcomeDoneRoute()),
+          onPressed: () => const WelcomeDoneRoute().push<void>(context),
           child: const Text('Next'),
         ),
         TextButton(

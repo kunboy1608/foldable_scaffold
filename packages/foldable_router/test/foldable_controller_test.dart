@@ -125,6 +125,31 @@ void main() {
     });
   });
 
+  group('pushAndReplace', () {
+    test('swaps the top page for the new one, once', () async {
+      final controller = _single([_page('root')]);
+      final a = controller.push(_page('a'));
+      var notified = 0;
+      controller.addListener(() => notified++);
+
+      final b = controller.pushAndReplace(_page('b'));
+
+      expect(_names(controller), ['/root', '/b']);
+      expect(notified, 1);
+
+      final resultA = _Result(a);
+      final resultB = _Result(b);
+      await pumpEventQueue();
+      expect(resultA.done, isTrue);
+      expect(resultA.value, isNull);
+      expect(resultB.done, isFalse);
+
+      controller.pop('result');
+      await pumpEventQueue();
+      expect(resultB.value, 'result');
+    });
+  });
+
   group('popUntil and popToRoot', () {
     test('popUntil stops at the first match and notifies once', () async {
       final controller = _single([_page('root')]);

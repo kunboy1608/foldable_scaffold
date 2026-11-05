@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 
 import '../foldable_page.dart';
 import '../foldable_page_transition.dart';
+import '../router/foldable_router.dart';
 import 'route_query.dart';
 
 /// What a redirect can look at, like go_router's `GoRouterState`.
@@ -31,7 +32,7 @@ class FoldableRouteState {
 
 /// A screen that a `FoldableRouter` can show.
 ///
-/// Only the routes the router's matcher knows can be opened from a URL (deep
+/// Only deep-linkable routes the router's matcher knows can be opened from a URL (deep
 /// link or the browser address bar), and their parameters are written into the
 /// URL as primitives only. Every route can still be pushed from code, with any
 /// object passed to its constructor.
@@ -45,15 +46,35 @@ abstract class FoldableRoute {
   /// Primitive parameters written into the URL.
   Map<String, Object?> get query => const {};
 
-  /// Whether this route has a URL: it is matched from links and shown in the
-  /// address bar.
+  /// Whether this route can be opened from a URL.
   ///
-  /// Routes that only make sense with an object argument (a whole record, a
-  /// category) set this to false and are pushed from code only.
+  /// * true: the route can be opened from the browser address bar and from a
+  ///   deep link, and its URL ([urlLocation]) is shown in the address bar.
+  /// * false: a URL never opens it (the router treats it as not matched, so
+  ///   [FoldableRouterConfig.notFound] is shown) and it has no URL in the
+  ///   address bar. It can only be pushed or `go`ne to from code, with any
+  ///   object passed to its constructor.
+  ///
+  /// Use false for routes that need an object argument or must not be reachable
+  /// from outside, such as a confirmation step.
   bool get deepLinkable => true;
+
+  /// The id of the `FoldableSession` that shows this route, or null for the
+  /// session on screen.
+  ///
+  /// With a `FoldableSessionRouter`, `go`/`push` of a route that names another
+  /// session first puts that session on top: it is created when it is not
+  /// open, or moved to the top when it is. Redirects and the route then run in
+  /// that session. URLs ignore it: a location is matched in the session on
+  /// screen (see `FoldableSession.deepLinkable`).
+  String? get session => null;
 
   /// Builds the screen.
   Widget build(BuildContext context);
+
+  /// What a page shows for this route. Calls [build]; a [BranchRoute] wraps
+  /// it. Override [build], not this.
+  Widget buildPage(BuildContext context) => build(context);
 
   /// This route and its query, e.g. `/record?recordId=3`.
   String get location => RouteQuery.build(path, query);
@@ -86,7 +107,30 @@ abstract class FoldableRoute {
     return FoldablePage<T>(
       name: urlLocation,
       transition: transition,
-      child: Builder(builder: build),
+      child: Builder(builder: buildPage),
     );
   }
+
+  /// Shows this route in place of the children of the page that owns
+  /// [context]. See [FoldableRouter.go].
+  void go(BuildContext context) =>
+      FoldableRouterScope.of(context).go(context, this);
+
+  /// Adds this route on top of the current branch. See [FoldableRouter.push].
+  Future<T?> push<T extends Object?>(BuildContext context) =>
+      FoldableRouterScope.of(context).push<T>(this, context: context);
+
+  /// Replaces the top page with this route. See
+  /// [FoldableRouter.pushAndReplace].
+  Future<T?> pushAndReplace<T extends Object?>(BuildContext context) =>
+      FoldableRouterScope.of(context).pushAndReplace<T>(this, context: context);
+
+  /// Adds this route after removing pages until [predicate] is true. See
+  /// [FoldableRouter.pushAndRemoveUntil].
+  Future<T?> pushAndRemoveUntil<T extends Object?>(
+    BuildContext context,
+    bool Function(Page<Object?> page) predicate,
+  ) => FoldableRouterScope.of(
+    context,
+  ).pushAndRemoveUntil<T>(this, predicate, context: context);
 }

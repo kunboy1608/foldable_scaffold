@@ -27,11 +27,12 @@ typedef FoldableBranchOf = int? Function(FoldableRoute route);
 /// leave the app.
 typedef FoldableBackTarget = FoldableRoute? Function(FoldableRouter router);
 
-/// Everything a [FoldableRouter] needs to know about an app.
+/// What the routers of an app share: how URLs map to routes, redirects, back,
+/// observers. Pass it to the [FoldableRouterDelegate]; the roots (tabs) belong
+/// to each session, see [FoldableSession.roots].
 ///
 /// ```dart
 /// final config = FoldableRouterConfig(
-///   roots: const [HomeRoute(), InboxRoute(), ProfileRoute()],
 ///   matcher: matchRoute,
 ///   notFound: NotFoundRoute.new,
 ///   branchOf: (route) => route.tabIndex,
@@ -43,7 +44,6 @@ typedef FoldableBackTarget = FoldableRoute? Function(FoldableRouter router);
 /// ```
 class FoldableRouterConfig {
   const FoldableRouterConfig({
-    required this.roots,
     required this.matcher,
     required this.notFound,
     this.redirect,
@@ -56,24 +56,21 @@ class FoldableRouterConfig {
     this.lazyBranches = true,
   });
 
-  /// The bottom page of every branch: the tabs of the app.
-  ///
-  /// A root also builds the URL of its branch, for example `/home`, and is
-  /// where back goes when the branch has no page to pop and
-  /// [FoldableRouterConfig.backTarget] says so.
-  ///
-  /// Empty is only valid for a stack session (`FoldableNavigatorKind.stack`):
-  /// the stack starts blank and its first navigation fills it. A split
-  /// navigator needs at least one root.
-  final List<FoldableRoute> roots;
-
   /// The route for a URL, or null when no route matches.
   ///
   /// The platform opens `/` first. When the matcher returns null for `/`, the
-  /// router shows the first of [roots] instead of [notFound].
+  /// router shows the first root of the session instead of [notFound].
   final FoldableRouteMatcher matcher;
 
-  /// The route shown for a URL that matches nothing.
+  /// The route [matcher] gives for [uri], unless it is not
+  /// [FoldableRoute.deepLinkable]: such a route can never be opened from a URL,
+  /// so it is treated as not matched.
+  FoldableRoute? match(Uri uri) {
+    final route = matcher(uri);
+    return route != null && route.deepLinkable ? route : null;
+  }
+
+  /// The route shown for a URL that matches nothing, in every session.
   final FoldableRouteFactory notFound;
 
   /// Runs on every navigation, after [FoldableRoute.redirect], like

@@ -15,6 +15,19 @@ class _R extends FoldableRoute {
   Widget build(BuildContext context) => Text('screen $path');
 }
 
+class _Private extends FoldableRoute {
+  const _Private();
+
+  @override
+  String get path => '/private';
+
+  @override
+  bool get deepLinkable => false;
+
+  @override
+  Widget build(BuildContext context) => const Text('private');
+}
+
 const _roots = [_R('/home'), _R('/settings')];
 
 FoldableRouter _make({
@@ -25,8 +38,8 @@ FoldableRouter _make({
   List<FoldableRoute> roots = _roots,
 }) {
   final router = FoldableRouter(
+    roots: roots,
     config: FoldableRouterConfig(
-      roots: roots,
       matcher: matcher ?? (uri) => _R(uri.path),
       notFound: (uri) => _R('/not-found${uri.path}'),
       redirect: redirect,
@@ -133,6 +146,26 @@ void main() {
         (page) => page == router.pages.first,
       );
       expect(_names(router), ['/home', '/sign-in']);
+    });
+
+    testWidgets('pushAndReplace redirects and replaces above the root', (
+      tester,
+    ) async {
+      final router = _make(
+        redirect: (_, state) =>
+            state.route.path == '/admin' ? const _R('/sign-in') : null,
+      );
+      await _attach(tester, router);
+
+      // At the root it pushes instead of replacing it.
+      router.pushAndReplace<void>(const _R('/detail'));
+      expect(_names(router), ['/home', '/detail']);
+
+      router.pushAndReplace<void>(const _R('/admin'));
+      expect(_names(router), ['/home', '/sign-in']);
+
+      router.pushReplacementLocation('/detail');
+      expect(_names(router), ['/home', '/detail']);
     });
 
     testWidgets('the redirects get the caller context', (tester) async {
@@ -265,8 +298,8 @@ void main() {
 
     testWidgets('a disposed router drops the waiting push', (tester) async {
       final router = FoldableRouter(
+        roots: _roots,
         config: FoldableRouterConfig(
-          roots: _roots,
           matcher: (uri) => _R(uri.path),
           notFound: (uri) => _R(uri.path),
         ),
@@ -371,9 +404,9 @@ void main() {
 
     testWidgets('a router with no roots still uses notFound', (tester) async {
       final router = FoldableRouter(
+        roots: const [],
         allowEmptyRoots: true,
         config: FoldableRouterConfig(
-          roots: const [],
           matcher: (_) => null,
           notFound: (uri) => _R('/not-found${uri.path}'),
         ),
@@ -383,5 +416,56 @@ void main() {
 
       expect(router.routeOf('/').path, '/not-found/');
     });
+  });
+
+  group('a route navigates itself', () {
+    testWidgets('push, pushAndReplace and go use the router of the delegate', (
+      tester,
+    ) async {
+      final router = _make();
+      late BuildContext context;
+      await tester.pumpWidget(
+        MaterialApp.router(
+          routerDelegate: FoldableRouterDelegate(
+            router: router,
+            navigatorKey: GlobalKey<NavigatorState>(),
+            builder: (c) {
+              context = c;
+              return const SizedBox.shrink();
+            },
+          ),
+          routeInformationParser: const FoldableRouteInformationParser(),
+        ),
+      );
+
+      unawaited(const _R('/a').push<void>(context));
+      expect(_names(router).last, '/a');
+
+      unawaited(const _R('/b').pushAndReplace<void>(context));
+      expect(_names(router).last, '/b');
+      expect(_names(router), isNot(contains('/a')));
+
+      unawaited(const _R('/c').pushAndRemoveUntil<void>(context, (_) => false));
+      expect(_names(router).last, '/c');
+    });
+  });
+
+  testWidgets('a route that is not deepLinkable cannot be opened by URL', (
+    tester,
+  ) async {
+    final router = _make(
+      matcher: (uri) =>
+          uri.path == '/private' ? const _Private() : _R(uri.path),
+    );
+    await _attach(tester, router);
+
+    expect(router.routeOf('/private').path, '/not-found/private');
+
+    router.goUri(Uri.parse('/private'));
+    expect(_names(router).last, '/not-found/private');
+
+    // From code it still works, and has no URL.
+    unawaited(router.push<void>(const _Private()));
+    expect(router.currentUri.path, isNot('/private'));
   });
 }

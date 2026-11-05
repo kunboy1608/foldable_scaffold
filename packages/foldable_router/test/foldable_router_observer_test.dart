@@ -74,8 +74,8 @@ class _Recorder extends FoldableRouterObserver {
 
 FoldableRouter _router(_Recorder recorder, {FoldableRedirect? redirect}) {
   return FoldableRouter(
+    roots: const [_HomeRoute(), _SecondRoute()],
     config: FoldableRouterConfig(
-      roots: const [_HomeRoute(), _SecondRoute()],
       matcher: _match,
       notFound: _NotFoundRoute.new,
       redirect: redirect,
@@ -149,6 +149,24 @@ void main() {
       expect(recorder.kinds, [FoldableNavigationKind.push]);
       expect(recorder.events.single.depth, 2);
       expect(recorder.events.single.uri.toString(), '/detail?id=3');
+    });
+
+    testWidgets('pushAndReplace emits one push without growing the stack', (
+      tester,
+    ) async {
+      final context = await _pumpContext(tester);
+      final recorder = _Recorder();
+      final router = _router(recorder)..rootContextOf = () => context;
+      addTearDown(router.dispose);
+
+      router.push<void>(const _DetailRoute(id: '1'));
+      recorder.events.clear();
+
+      router.pushAndReplace<void>(const _DetailRoute(id: '2'));
+
+      expect(recorder.kinds, [FoldableNavigationKind.push]);
+      expect(recorder.events.single.depth, 2);
+      expect(recorder.events.single.uri.toString(), '/detail?id=2');
     });
 
     testWidgets('goUri emits one go, or one pop when it returns', (

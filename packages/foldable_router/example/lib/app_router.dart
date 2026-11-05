@@ -3,36 +3,32 @@ import 'package:foldable_scaffold/foldable_scaffold.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'app_state.dart';
+import 'app_router_scope.dart';
 import 'routes/app_route.dart';
+import 'routes/checkout_routes.dart';
 import 'routes/guest_routes.dart';
 import 'routes/onboarding_routes.dart';
 import 'routes/route_registry.dart';
-import 'routes/tab_routes.dart';
 
-/// Keeps a session to its own screens: a route of another session shows
-/// [home] instead.
-FoldableRedirect _guard(String session, FoldableRoute home) {
-  return (context, state) {
-    final route = state.route;
-    final owner = route is AppRoute ? route.session : null;
-    return owner != null && owner != session ? home : null;
-  };
-}
-
-FoldableRouterConfig _config(
-  String session,
-  List<FoldableRoute> roots, {
-  FoldableBackTarget? backTarget,
-}) {
-  return FoldableRouterConfig(
-    roots: roots,
-    matcher: matchRoute,
-    notFound: NotFoundRoute.new,
-    redirect: _guard(session, roots.first),
-    branchOf: (route) => route is TabRoute ? route.tab : null,
-    backTarget: backTarget,
-  );
-}
+/// What every session shares: URL matching, the not found screen, the guard
+/// and the back target.
+final appConfig = FoldableRouterConfig(
+  matcher: matchRoute,
+  notFound: NotFoundRoute.new,
+  // A URL cannot open a screen of another session: the first screen of the
+  // session on screen is shown instead. Navigating from code to a route of
+  // another session opens that session, and never gets here.
+  redirect: (context, state) {
+    final router = AppRouterScope.of(context);
+    final owner = state.route.session;
+    return owner != null && owner != router.activeSessionId
+        ? router.activeSession.roots.first
+        : null;
+  },
+  branchOf: (route) => route is TabRoute ? route.tab : null,
+  // Back at the root of another tab shows the first tab.
+  backTarget: (router) => router.currentIndex == 0 ? null : router.roots.first,
+);
 
 /// The tabs of [mainSession] in a navigation rail / bar, drawn by the split
 /// navigator.
@@ -95,42 +91,49 @@ Widget _buildMainShell(
 /// The router of the example. Screens read it from `AppRouterScope`.
 final appRouter = FoldableSessionRouter(
   sessions: [
-    FoldableSession(
+    FoldableSessionStack(
       id: guestSession,
       // Top page only: no tabs, and no state kept below it.
-      navigator: FoldableNavigatorKind.stack,
+      // Only while signed out: signing in closes it.
+      canActivate: (_) => !isLoggedIn,
       disposeOnLeave: true,
-      config: _config(guestSession, const [SignInRoute()]),
+      initRoute: const SignInRoute(),
     ),
-    FoldableSession(
+    FoldableSessionStack(
       id: onboardingSession,
       // Top page only: no tabs, and no state kept below it.
-      navigator: FoldableNavigatorKind.stack,
       // Start from the first step every time.
+      canActivate: (_) => isLoggedIn && !isOnboarded,
       disposeOnLeave: true,
-      config: _config(onboardingSession, const [WelcomeRoute()]),
+      initRoute: const WelcomeRoute(),
     ),
-    FoldableSession(
+    FoldableSessionSplit(
       id: mainSession,
+      // A signed out user cannot open the tabs. May be async.
+      canActivate: (_) => isReady,
       // Forget what the last user opened.
       disposeOnLeave: true,
-      config: _config(
-        mainSession,
-        tabs,
-        // Back at the root of another tab shows the first tab.
-        backTarget: (router) =>
-            router.currentIndex == 0 ? null : const HomeRoute(),
-      ),
+      branches: tabs,
       shell: _buildMainShell,
     ),
+    FoldableSessionStack(
+      id: checkoutSession,
+      // Full screen, over whatever session is open.
+      // Fresh every time it is opened.
+      disposeOnLeave: true,
+      // Goes with the tabs when they stop existing, e.g. on sign out.
+      parent: mainSession,
+      canBeBase: false,
+      initRoute: const CheckoutRoute(),
+    ),
   ],
-  sessionOf: sessionNow,
 );
 
 final appNavigatorKey = GlobalKey<NavigatorState>();
 
 final appDelegate = FoldableRouterDelegate(
   router: appRouter,
+  config: appConfig,
   navigatorKey: appNavigatorKey,
   // Draws the shell of whichever session is on screen.
   builder: appRouter.buildShell,

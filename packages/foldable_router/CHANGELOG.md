@@ -1,3 +1,82 @@
+## 0.1.0-dev.2
+
+* `FoldableSessionStack.initRoute` is optional: without it the session starts
+  with no page, like a `Navigator` with no routes, and the first route shown in
+  it fills it.
+* Breaking: sessions are checked by `FoldableSessionRouter.refresh()`.
+  `FoldableSession.canActivate` may be async and gets the `BuildContext` of the root
+  navigator (`FutureOr<bool> Function(BuildContext)`) and
+  `FoldableSessionStack` takes it, `canBeBase` and the new `parent` too. A
+  session that does not hold, and its children, are closed with their stacks;
+  the base is chosen again, and `onNoSession` is called when none is left.
+  Nothing is on screen until the first `refresh()` completes; URLs and
+  navigation that arrive first, or during a `refresh()`, wait for it. A URL of
+  a session that does not exist yet is kept. `initialSessionOf` and
+  `evaluateSessions()` are gone, `isActivatable` too.
+* `pushAndReplace` replaces the top page of the current branch, like
+  `Navigator.pushReplacement`, on the controller, `FoldableRouter` and
+  `FoldableSessionRouter`. On the router a branch root is never replaced (the
+  route is pushed on top), and `pushReplacementLocation` takes a URL.
+* A route navigates itself: `route.go(context)`, `route.push(context)`,
+  `route.pushAndReplace(context)` and `route.pushAndRemoveUntil(context, ...)`.
+  `FoldableRouterDelegate` provides the router through `FoldableRouterScope`,
+  and `FoldableRouterBase` declares the four methods (the default throws).
+  `FoldableSessionRouter` gains `pushAndRemoveUntil`.
+* `FoldableRoute.deepLinkable` false now means the route can not be opened from
+  a URL or deep link (it is not found) and has no URL in the address bar. Use
+  `FoldableRouterConfig.match` for a match that respects it.
+* Stacked sessions: `FoldableSessionRouter.openSession(id, route:)` opens a
+  session over the one on screen (the lower one keeps its page stacks) and
+  returns a future that `closeSession(result)` completes. `FoldableSession`
+  gets `initialRoute` and `closable`, and the router can start from
+  `initialSessionOf`. System back at the root of a closable session closes it.
+  `sessionOf` and `refresh()` are gone: `resetSession(id)` closes every open
+  session and starts over from `id`, and `replaceSession` replaces the one on
+  screen. A restored snapshot of another session puts that session on screen.
+* Breaking: `FoldableSessionStack` takes `initRoute` (its first page) instead of
+  `roots`, and `FoldableSessionSplit` takes `branches: List<BranchRoute>` instead
+  of `roots`. A `BranchRoute` is the root route of a tab: the page it builds
+  never shows a back button (`FoldableBackButton` hides itself; `hideBackButton`
+  turns that off). `FoldableAppBar` is an `AppBar` with the same parameters
+  that also leaves out its automatic back button there, with no empty room (a
+  plain `AppBar` shares one route with every page, so it can only draw its icon
+  empty).
+  `FoldableRoute.buildPage` wraps `build` for it.
+* Session conditions: `FoldableSessionSplit.canActivate` says when a session may
+  be on screen, `canBeBase` whether it can be the base (`FoldableSessionStack`
+  has neither). Without an
+  `initialSessionOf` the router opens the first session whose
+  condition holds, and `evaluateSessions()` chooses again after the app state
+  changed. A session whose condition is false is not opened, moved to the top
+  or switched to (`openSession`, `replaceSession`, `resetSession`, a route's
+  `session`, a URL): nothing is shown instead, unlike a redirect, and
+  `onActivationDenied` is told. `replaceSession` and `resetSession` return
+  whether they ran.
+* `FoldableRoute.session` names the session that shows a route. With a
+  `FoldableSessionRouter`, `go`/`push`/`pushAndReplace`/`pushAndRemoveUntil` of
+  a route of another session create that session or move it to the top (null
+  keeps the session on screen). `openSession` of an open session moves it to
+  the top too.
+* Breaking: `roots` moved out of `FoldableRouterConfig`: `FoldableRouter` takes
+  `roots`, and a `FoldableSession` has its own `roots` instead of a `config`.
+  The rest of the config (matcher, `notFound`, redirects, `branchOf`,
+  `backTarget`, observers, ...) is shared by all sessions and passed once, to
+  `FoldableRouterDelegate(config: ...)`. `FoldableRouterBase.attachConfig` hands
+  it to the router; routers also take `config:` directly, for use without a
+  delegate. `FoldableRouter.roots` is public, for a shared `backTarget`.
+* A URL can switch session through the route the matcher returns: its
+  `FoldableRoute.session` names the owner, and the session switches when it is
+  `deepLinkable`.
+* `FoldableSessionRouter(initialSessionOf: (context) => id)` chooses the base
+  session with a `BuildContext`, for example from a provider; it replaces the
+  `initialSession` id. It runs when
+  `buildShell` first builds; a startup URL and a state to restore wait for it,
+  `isResolved` tells whether it ran, and other members throw before that.
+* `FoldableSessionBackButton` for an app bar: shown only while a session can be
+  closed, and always closes the session on top, never a page.
+* The automatic back button of an `AppBar` pops the page it sits on, like
+  `FoldableBackButton`, when it is pressed with a pointer.
+  
 ## 0.1.0-dev.1
 
 * Experimental prerelease: the API may change and it is not ready for production.
@@ -50,15 +129,17 @@
   or `+3`) and `decimal` returns null for `NaN` and infinity.
 * `FoldableSession` and `FoldableSessionRouter`: several self-contained
   sessions (each with its own roots, redirects, navigator and shell), one on
-  screen at a time, picked by `sessionOf` and switched by `refresh()`.
+  screen at a time, picked by `initialSessionOf` and switched by `resetSession()`.
   `buildShell` plugs into `FoldableRouterDelegate.builder`, so a session can
   render with or without a scaffold.
-* `FoldableSession.navigator` picks the navigator of a session
-  (`FoldableNavigatorKind.split` or `.stack`). `FoldableSession.shell` is
+* `FoldableSession` is abstract with two implementations that pick the
+  navigator: `FoldableSessionSplit` and `FoldableSessionStack`
+  (`FoldableNavigatorKind` and `FoldableSession.navigator` are gone). Its
+  `shell` is
   optional and receives a navigator factory, so a shell arranges the navigator
   the session selected instead of creating one itself.
-* A stack session may start with no roots: `FoldableRouterConfig.roots` can be
-  empty for `FoldableNavigatorKind.stack`, and the stack shows nothing until
+* A stack session may start with no roots: `roots` can be empty for a
+  `FoldableSessionStack`, and the stack shows nothing until
   its first navigation fills it. `FoldableNavigatorController.empty()` supports
   the same at the navigator level. A split session still needs at least one
   root.

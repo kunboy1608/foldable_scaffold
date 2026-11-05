@@ -16,8 +16,8 @@ enum FoldableNavigationKind {
   /// the kind of a direct `controller.setPages` that keeps the page count.
   go,
 
-  /// A page was added on top of the current branch: `push`, `pushLocation`
-  /// and `pushAndRemoveUntil`.
+  /// A page was added on top of the current branch: `push`, `pushLocation`,
+  /// `pushAndRemoveUntil` and `pushAndReplace`.
   ///
   /// Also the kind of a page added directly on the controller, whose event
   /// has no [FoldableNavigationEvent.route].

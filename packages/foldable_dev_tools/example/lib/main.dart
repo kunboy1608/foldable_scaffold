@@ -56,18 +56,16 @@ FoldableRoute? _match(Uri uri) {
   };
 }
 
-final _router = FoldableRouter(
-  config: FoldableRouterConfig(
-    roots: const [ListRoute()],
-    matcher: _match,
-    notFound: (uri) => const ListRoute(),
-  ),
-);
+final _router = FoldableRouter(roots: const [ListRoute()]);
 
 final _navigatorKey = GlobalKey<NavigatorState>();
 
 final _delegate = FoldableRouterDelegate(
   router: _router,
+  config: FoldableRouterConfig(
+    matcher: _match,
+    notFound: (uri) => const ListRoute(),
+  ),
   navigatorKey: _navigatorKey,
   builder: (context) => FoldableNavigator(
     controller: _router.controller,

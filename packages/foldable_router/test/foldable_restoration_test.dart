@@ -24,6 +24,17 @@ class _R extends FoldableRoute {
   }
 }
 
+/// The root of a branch.
+class _B extends BranchRoute {
+  const _B(this.path);
+
+  @override
+  final String path;
+
+  @override
+  Widget build(BuildContext context) => Text('screen $location');
+}
+
 /// A route that cannot be written into a URL.
 class _Hidden extends FoldableRoute {
   const _Hidden();
@@ -56,16 +67,22 @@ class _Runs {
     '/b/2',
     '/c',
     '/c/1',
+    '/g',
   };
 
   FoldableRouter get router => routers.last;
   FoldableSessionRouter get sessionRouter => sessionRouters.last;
 
+  List<BranchRoute> branchesOf(List<String> roots) => [
+    for (final root in roots) _B(root),
+  ];
+
+  List<FoldableRoute> rootsOf(List<String> roots) => [
+    for (final root in roots) _R(root, onRedirect: () => redirects++),
+  ];
+
   FoldableRouterConfig config(List<String> roots, {bool matchAll = false}) {
     return FoldableRouterConfig(
-      roots: [
-        for (final root in roots) _R(root, onRedirect: () => redirects++),
-      ],
       matcher: (uri) => matchAll
           ? _R(roots.first)
           : known.contains(uri.path)
@@ -122,21 +139,23 @@ class _AppState extends State<_App> {
 
     if (widget.sessions) {
       final router = FoldableSessionRouter(
+        config: runs.config(['/a', '/b']),
         sessions: [
-          FoldableSession(
+          // The one `_session` names comes first, so it is the base.
+          FoldableSessionSplit(
             id: 'guest',
-            config: runs.config(['/g'], matchAll: true),
+            branches: runs.branchesOf(['/g']),
             deepLinkable: true,
+            canActivate: (_) => _session == 'guest',
           ),
-          FoldableSession(
+          FoldableSessionSplit(
             id: 'main',
-            config: runs.config(['/a', '/b']),
+            branches: runs.branchesOf(['/a', '/b']),
             shell: (context, controller, navigator) =>
                 navigator((context, body, secondary) => secondary ?? body),
           ),
         ],
-        sessionOf: () => _session,
-      );
+      )..refresh();
       runs.sessionRouters.add(router);
       _router = router;
       _delegate = FoldableRouterDelegate(
@@ -146,7 +165,10 @@ class _AppState extends State<_App> {
         restorationId: widget.restorationId,
       );
     } else {
-      final router = FoldableRouter(config: runs.config(['/a', '/b', '/c']));
+      final router = FoldableRouter(
+        roots: runs.rootsOf(['/a', '/b', '/c']),
+        config: runs.config(['/a', '/b', '/c']),
+      );
       runs.routers.add(router);
       _router = router;
       _delegate = FoldableRouterDelegate(
@@ -175,7 +197,7 @@ class _AppState extends State<_App> {
   }
 }
 
-/// What [FoldableSessionRouter.sessionOf] answers in the session tests.
+/// The initial session of the session tests.
 String _session = 'main';
 
 List<String?> _names(FoldableRouter router, int branch) => [
@@ -312,7 +334,10 @@ void main() {
 
     // Another version of the app: two tabs instead of three.
     final saved = runs.router.saveState();
-    final other = FoldableRouter(config: runs.config(['/a', '/b']));
+    final other = FoldableRouter(
+      roots: runs.rootsOf(['/a', '/b']),
+      config: runs.config(['/a', '/b']),
+    );
     addTearDown(other.dispose);
     other.restoreState(saved);
     expect(_names(other, 0), ['/a']);
@@ -557,21 +582,20 @@ void main() {
       expect(state.keys, unorderedEquals(['session', 'router']));
     });
 
-    testWidgets('sessionOf wins over the restored session', (tester) async {
+    testWidgets('the saved session wins over the initial one', (tester) async {
       final runs = await _start(tester, sessions: true);
       runs.sessionRouter.push<void>(const _R('/a/1'));
       await tester.pumpAndSettle();
 
-      // The user is signed out when the app comes back.
+      // The app starts on another session when it comes back.
       _session = 'guest';
       await tester.restartAndRestore();
       await tester.pumpAndSettle();
 
       final restored = runs.sessionRouter;
-      expect(restored.activeSessionId, 'guest');
-      expect(restored.active.pages, hasLength(1));
-      expect(restored.routerOf('main').pages, hasLength(1));
-      expect(find.text('screen /g'), findsOneWidget);
+      expect(restored.activeSessionId, 'main');
+      expect(restored.openSessionIds, ['main']);
+      expect(restored.active.pages, hasLength(2));
     });
   });
 

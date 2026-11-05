@@ -27,10 +27,7 @@ class DetailsRoute extends AppRoute {
     final navigator = FoldableNavigator.of(context, listen: true);
     final next = '${(int.tryParse(id ?? '') ?? 0) + 1}';
     return Scaffold(
-      appBar: AppBar(
-        leading: const FoldableBackButton(),
-        title: Text('Details ${id ?? ''}'),
-      ),
+      appBar: AppBar(title: Text('Details ${id ?? ''}')),
       body: ListView(
         children: [
           ListTile(
@@ -46,20 +43,25 @@ class DetailsRoute extends AppRoute {
           LabAction(
             title: 'push Details $next',
             subtitle: 'Adds a page on top.',
-            onTap: () => router.push(DetailsRoute(id: next)),
+            onTap: () => DetailsRoute(id: next).push(context),
           ),
           LabAction(
             title: 'go(context) Details $next',
             subtitle: 'Replaces the pages above this one, keeps this one.',
-            onTap: () => router.go(context, DetailsRoute(id: next)),
+            onTap: () => DetailsRoute(id: next).go(context),
           ),
           LabAction(
             title: 'pushAndRemoveUntil Details $next',
             subtitle: 'Pushes after keeping only the tab root.',
-            onTap: () => router.active.pushAndRemoveUntil<void>(
-              DetailsRoute(id: next),
+            onTap: () => DetailsRoute(id: next).pushAndRemoveUntil<void>(
+              context,
               (page) => page == router.active.pages.first,
             ),
+          ),
+          LabAction(
+            title: 'pushAndReplace Details $next',
+            subtitle: 'Swaps this page for the next one, like pushReplacement.',
+            onTap: () => DetailsRoute(id: next).pushAndReplace<void>(context),
           ),
           LabAction(
             title: 'back()',
@@ -94,17 +96,15 @@ class PickRoute extends AppRoute {
   @override
   String get path => '/pick';
 
-  // Code only: the result has nowhere to go from a URL.
+  // Code only: the result has nowhere to go from a URL, so a URL for it shows
+  // the not found page.
   @override
   bool get deepLinkable => false;
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        leading: const FoldableBackButton(),
-        title: const Text('Pick a colour'),
-      ),
+      appBar: AppBar(title: const Text('Pick a colour')),
       body: ListView(
         children: [
           for (final name in const ['red', 'green', 'blue'])
@@ -137,10 +137,7 @@ class AdminRoute extends AppRoute {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        leading: const FoldableBackButton(),
-        title: const Text('Admin'),
-      ),
+      appBar: AppBar(title: const Text('Admin')),
       body: const Center(child: Text('Pushed, so no redirect ran.')),
     );
   }
@@ -158,10 +155,7 @@ class ForbiddenRoute extends AppRoute {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        leading: const FoldableBackButton(),
-        title: const Text('Forbidden'),
-      ),
+      appBar: AppBar(title: const Text('Forbidden')),
       body: const Center(
         child: Text('The redirect of /admin brought you here.'),
       ),

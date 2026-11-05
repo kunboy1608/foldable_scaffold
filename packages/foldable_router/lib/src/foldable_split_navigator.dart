@@ -550,7 +550,14 @@ class _FoldableSplitNavigatorState extends State<FoldableSplitNavigator>
         canGoBack: canGoBack,
         // Slides and pane resizes repaint only the moving layers.
         child: RepaintBoundary(
-          child: _restorable(entry.page, _foldablePageChild(entry.page)),
+          // Tells the automatic back button which page it was pressed on.
+          child: Listener(
+            behavior: HitTestBehavior.translucent,
+            onPointerDown: (_) => pointerOnPage(entry.page, pressed: true),
+            onPointerUp: (_) => pointerOnPage(entry.page, pressed: false),
+            onPointerCancel: (_) => pointerOnPage(entry.page, pressed: false),
+            child: _restorable(entry.page, _foldablePageChild(entry.page)),
+          ),
         ),
       ),
     );
@@ -646,7 +653,7 @@ class _FoldableSplitNavigatorState extends State<FoldableSplitNavigator>
       child: PopScope(
         canPop: !_controller.canPop,
         onPopInvokedWithResult: (didPop, result) {
-          if (!didPop) _controller.pop(result);
+          if (!didPop) popFromBack(result);
         },
         child: Builder(
           builder: (context) {

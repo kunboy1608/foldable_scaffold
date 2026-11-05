@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'foldable_router.dart';
+import 'foldable_router_config.dart';
 
 /// Connects a [FoldableRouter] to the platform: browser address bar and
 /// history, deep links and the system back button.
@@ -47,11 +48,13 @@ class FoldableRouterDelegate extends RouterDelegate<Uri>
     with ChangeNotifier, PopNavigatorRouterDelegateMixin<Uri> {
   FoldableRouterDelegate({
     required this.router,
+    this.config,
     required this.navigatorKey,
     required this.builder,
     this.observers = const <NavigatorObserver>[],
     this.restorationId,
   }) {
+    if (config != null) router.attachConfig(config!);
     router.addListener(_onRouterChanged);
     // Redirects started from code run against the navigator's context.
     router.rootContextOf = () => navigatorKey.currentContext;
@@ -59,6 +62,11 @@ class FoldableRouterDelegate extends RouterDelegate<Uri>
 
   /// The router this delegate drives.
   final FoldableRouterBase router;
+
+  /// What the routers of the app share: the URL matcher, `notFound`,
+  /// redirects, back target and observers. Handed to [router], which passes it
+  /// on to all its sessions. Null when the router was given one itself.
+  final FoldableRouterConfig? config;
 
   /// Builds the app shell (usually the widget with the [Navigator] pages of
   /// [FoldableRouter.controller]). Called again on every navigation.
@@ -136,7 +144,10 @@ class FoldableRouterDelegate extends RouterDelegate<Uri>
           child: PopScope(
             canPop: !router.backGoesToRoot,
             onPopInvokedWithResult: (didPop, _) => onPopInvoked(didPop),
-            child: Builder(builder: builder),
+            child: FoldableRouterScope(
+              router: router,
+              child: Builder(builder: builder),
+            ),
           ),
         ),
       ],

@@ -4,6 +4,7 @@ import 'package:material_ui/material_ui.dart';
 import '../app_router_scope.dart';
 import '../app_state.dart';
 import 'app_route.dart';
+import 'checkout_routes.dart';
 import 'details_routes.dart';
 import 'guest_routes.dart';
 import 'onboarding_routes.dart';
@@ -64,6 +65,10 @@ FoldableRoute? matchRoute(Uri uri) {
     '/inbox' => const InboxRoute(),
     '/settings' => const SettingsRoute(),
     '/details' => DetailsRoute(id: RouteQuery.fromUri(uri).string('id')),
+    // Matched, but not deepLinkable: the router ignores it for URLs.
+    '/checkout' => const CheckoutRoute(),
+    '/checkout/review' => const CheckoutReviewRoute(),
+    '/pick' => const PickRoute(),
     '/admin' => const AdminRoute(),
     '/forbidden' => const ForbiddenRoute(),
     _ => null,

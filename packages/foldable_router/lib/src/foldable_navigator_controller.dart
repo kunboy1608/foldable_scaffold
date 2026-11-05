@@ -123,6 +123,20 @@ class FoldableNavigatorController extends ChangeNotifier {
     return future;
   }
 
+  /// Replaces the top page of [branch] (default: the current one) with [page],
+  /// like [Navigator.pushReplacement]. One update, so one transition.
+  ///
+  /// The replaced page completes with null. The first page of a branch can be
+  /// replaced too.
+  Future<T?> pushAndReplace<T extends Object?>(Page<T> page, {int? branch}) {
+    final pages = _branches[branch ?? _currentIndex];
+    final future = _track(page);
+    if (pages.isNotEmpty) _complete(pages.removeLast(), null);
+    pages.add(page);
+    notifyListeners();
+    return future;
+  }
+
   /// Removes the top page of the current branch, unless it is the last one
   /// or its [Page.canPop] is false.
   ///
