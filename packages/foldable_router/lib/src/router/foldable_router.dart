@@ -28,14 +28,14 @@ mixin FoldableRouterBase on Listenable {
   Uri get currentUri;
 
   /// Applies a URL that came from outside (browser back and forward, a link).
-  void goUri(Uri uri);
+  void openUri(Uri uri);
 
   /// Whether system back should show something inside the app instead of
   /// leaving it.
-  bool get backGoesToRoot;
+  bool get backHasTarget;
 
-  /// Shows the route [backGoesToRoot] promised, usually a branch root.
-  void goBackToRoot();
+  /// Shows the route [backHasTarget] promised, usually a branch root.
+  void openBackTarget();
 
   /// A snapshot of the page stacks for state restoration, or null when this
   /// router has nothing to save.
@@ -79,10 +79,10 @@ mixin FoldableRouterBase on Listenable {
     FoldableRoute? route,
   }) => throw UnsupportedError('$runtimeType does not support sessions.');
 
-  /// See [FoldableRouter.go]. Needed by [FoldableRoute.go]; the default
+  /// See [FoldableRouter.open]. Needed by [FoldableRoute.open]; the default
   /// throws.
-  void go(BuildContext? context, FoldableRoute route) =>
-      throw UnsupportedError('$runtimeType does not support go.');
+  void open(BuildContext? context, FoldableRoute route) =>
+      throw UnsupportedError('$runtimeType does not support open.');
 
   /// See [FoldableRouter.push]. Needed by [FoldableRoute.push]; the default
   /// throws.
@@ -145,7 +145,7 @@ class FoldableRouterScope extends InheritedWidget {
 ///
 /// // From code:
 /// router.push(const DetailsRoute());
-/// router.go(context, const SettingsRoute());
+/// router.open(context, const SettingsRoute());
 ///
 /// // In MaterialApp.router:
 /// routerDelegate: FoldableRouterDelegate(
@@ -161,10 +161,10 @@ class FoldableRouterScope extends InheritedWidget {
 ///
 /// * [push] adds it on top of the current branch and leaves everything below
 ///   untouched.
-/// * [go] replaces the children of the page that navigated, so back returns to
+/// * [open] replaces the children of the page that navigated, so back returns to
 ///   that page instead of to the branch root.
 ///
-/// Only [go] follows the redirects ([FoldableRoute.redirect] and
+/// Only [open] follows the redirects ([FoldableRoute.redirect] and
 /// [FoldableRouterConfig.redirect]), so the URL and the login state stay in
 /// charge of what a navigation actually shows.
 class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
@@ -301,7 +301,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   /// Pages of the current branch, bottom first.
   List<Page<Object?>> get pages => _controller.pages;
 
-  /// Number of the latest [go]. Used to drop the result of a redirect that
+  /// Number of the latest [open]. Used to drop the result of a redirect that
   /// finished after the user navigated again.
   int _navigations = 0;
 
@@ -314,12 +314,12 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   FoldableRoute? get backTarget => config.backTarget?.call(this);
 
   @override
-  bool get backGoesToRoot => !_controller.canPop && backTarget != null;
+  bool get backHasTarget => !_controller.canPop && backTarget != null;
 
   @override
-  void goBackToRoot() {
+  void openBackTarget() {
     final target = backTarget;
-    if (target != null) go(null, target);
+    if (target != null) open(null, target);
   }
 
   /// The route for [location] (`/record?recordId=1`), or a not-found route.
@@ -344,7 +344,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   /// and a [Future] as soon as one of them returns one.
   ///
   /// An exception thrown by a redirect reaches the caller, as an error of the
-  /// [Future] once a redirect is asynchronous. [go] and the other navigations
+  /// [Future] once a redirect is asynchronous. [open] and the other navigations
   /// of the router report it with [FlutterError.reportError] and abandon the
   /// navigation instead.
   ///
@@ -447,23 +447,23 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   ///
   /// That page stays, every page above it is dropped, and back from [route]
   /// returns to it. Without a [context] — or with one outside the navigator,
-  /// as in [goUri] — the branch root is the parent instead.
+  /// as in [openUri] — the branch root is the parent instead.
   @override
-  void go(BuildContext? context, FoldableRoute route) {
-    _go(
+  void open(BuildContext? context, FoldableRoute route) {
+    _open(
       route,
       context == null ? null : FoldableNavigator.pageOf(context),
       context: context,
     );
   }
 
-  /// [go] with the parent page already known: the page whose children are
+  /// [open] with the parent page already known: the page whose children are
   /// replaced.
   @visibleForTesting
-  void goFromPage(Page<Object?>? parent, FoldableRoute route) =>
-      _go(route, parent);
+  void openFromPage(Page<Object?>? parent, FoldableRoute route) =>
+      _open(route, parent);
 
-  void _go(
+  void _open(
     FoldableRoute route,
     Page<Object?>? parent, {
     BuildContext? context,
@@ -532,7 +532,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   /// Shows [target] at the position of [parent] (default: the branch root),
   /// switching branch when [target] is a branch root.
   ///
-  /// The result of a redirect, and what [go] ends up calling.
+  /// The result of a redirect, and what [open] ends up calling.
   void apply(FoldableRoute target, {Page<Object?>? parent}) {
     // An empty stack has no branch root to switch to yet: show the target as
     // its first page, even when it is a tab root.
@@ -545,13 +545,13 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
         // already at its root.
         _controller.batch(() {
           _controller.popToRoot(branch: branch);
-          _controller.goBranch(branch);
+          _controller.openBranch(branch);
         });
       } else {
         _replaceChildren(parent, target);
       }
     });
-    _emit(FoldableNavigationKind.go, target);
+    _emit(FoldableNavigationKind.open, target);
   }
 
   int? _defaultBranchOf(FoldableRoute route) {
@@ -576,25 +576,25 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   }
 
   /// Shows the route for [location].
-  void goLocation(String location) {
-    _go(routeOf(location), null, uri: Uri.parse(location));
+  void openLocation(String location) {
+    _open(routeOf(location), null, uri: Uri.parse(location));
   }
 
   /// Adds [route] on top of the current branch. Completes with the result of
   /// the page, like `Navigator.push`.
   ///
-  /// The redirects run first, like for [go], so a guard cannot be skipped by
+  /// The redirects run first, like for [open], so a guard cannot be skipped by
   /// pushing. When one sends the user elsewhere, that route is pushed instead
   /// and the future completes with its result, or null when it is not a [T].
-  /// Unlike [go] this never switches branch: the page is added exactly where
+  /// Unlike [open] this never switches branch: the page is added exactly where
   /// the user is, even when it is the root of another branch. A push that has
   /// to wait for a redirect still lands on the branch that was on screen when
   /// it was made, and pushes are applied in the order they were made.
   ///
-  /// [context] is handed to the redirects, like in [go]; without it they get
+  /// [context] is handed to the redirects, like in [open]; without it they get
   /// the router's navigator. While neither exists (before the first frame) the
   /// push waits for the next frame. It completes with null when a redirect
-  /// abandons it, when [go] ran meanwhile, or when the router is disposed.
+  /// abandons it, when [open] ran meanwhile, or when the router is disposed.
   ///
   /// Redirects that are all synchronous add the page before this returns.
   /// Pushing a page straight onto [controller] skips the redirects, on
@@ -641,7 +641,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   }
 
   /// Follows the redirects of [route] and then calls [add] with the route that
-  /// stays, unless a [go] started in the meantime. The push counterpart of
+  /// stays, unless an [open] started in the meantime. The push counterpart of
   /// [_resolveAndApply].
   ///
   /// When every redirect is synchronous and no earlier push is waiting, [add]
@@ -655,7 +655,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
     Future<T?> Function(FoldableRoute target) add,
   ) {
     if (_disposed) return Future.value();
-    // A later push does not cancel this one, a later go does.
+    // A later push does not cancel this one, a later open does.
     final navigation = _navigations;
     FutureOr<FoldableRoute?>? resolving;
     final context = callerContext ?? rootContextOf?.call();
@@ -704,7 +704,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
 
   /// [resolve] with the context of the caller, else the router's navigator;
   /// waits for frames until one exists, and gives up with null when the router
-  /// is disposed or a [go] (newer than [navigation]) started meanwhile.
+  /// is disposed or an [open] (newer than [navigation]) started meanwhile.
   Future<FoldableRoute?> _resolveWhenReady(
     FoldableRoute route,
     BuildContext? callerContext,
@@ -842,7 +842,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
       return;
     }
     final target = fallback ?? backTarget;
-    if (target != null) _go(target, null);
+    if (target != null) _open(target, null);
   }
 
   /// A snapshot of the page stacks, for state restoration.
@@ -900,7 +900,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
           final pages = _restoredPages(branch, stacks[branch]);
           if (pages.isNotEmpty) _controller.setPages(pages, branch: branch);
         }
-        _controller.goBranch(index);
+        _controller.openBranch(index);
       });
     });
   }
@@ -940,7 +940,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   }
 
   @override
-  void goUri(Uri uri) {
+  void openUri(Uri uri) {
     // A stack that started empty has no URL yet: let its first navigation
     // fill it, even when the URL is `/`.
     if (_controller.pages.isNotEmpty &&
@@ -956,7 +956,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
       }
       return;
     }
-    _go(_routeOfUri(uri), null, uri: uri);
+    _open(_routeOfUri(uri), null, uri: uri);
   }
 
   /// Runs a change of the controller that the caller announces itself with
@@ -985,7 +985,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   }
 
   /// Reports what changed on the controller without the router announcing
-  /// it: a pop from a back button, system back or swipe, `goBranch` from a
+  /// it: a pop from a back button, system back or swipe, `openBranch` from a
   /// navigation rail, or any other direct use of the controller.
   ///
   /// One event for the whole change, so the controller's `batch` stays one
@@ -1003,7 +1003,7 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
         ? FoldableNavigationKind.pop
         : pages.length > previousPages.length
         ? FoldableNavigationKind.push
-        : FoldableNavigationKind.go;
+        : FoldableNavigationKind.open;
     _emit(kind, null);
   }
 

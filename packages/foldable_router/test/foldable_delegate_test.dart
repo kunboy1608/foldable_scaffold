@@ -382,8 +382,8 @@ void main() {
       final context = await _pumpContext(tester);
       final router = _router(backTarget: backToHome);
       final delegate = delegateOf(router, context);
-      router.controller.goBranch(1);
-      expect(router.backGoesToRoot, isTrue);
+      router.controller.openBranch(1);
+      expect(router.backHasTarget, isTrue);
 
       delegate.onPopInvoked(true);
 
@@ -394,8 +394,8 @@ void main() {
       final context = await _pumpContext(tester);
       final router = _router(backTarget: backToHome);
       final delegate = delegateOf(router, context);
-      router.controller.goBranch(1);
-      expect(router.backGoesToRoot, isTrue);
+      router.controller.openBranch(1);
+      expect(router.backHasTarget, isTrue);
 
       delegate.onPopInvoked(false);
 
@@ -409,7 +409,7 @@ void main() {
       final context = await _pumpContext(tester);
       final router = _router();
       final delegate = delegateOf(router, context);
-      expect(router.backGoesToRoot, isFalse);
+      expect(router.backHasTarget, isFalse);
 
       delegate.onPopInvoked(false);
 
@@ -423,10 +423,10 @@ void main() {
       final context = await _pumpContext(tester);
       final router = _router(backTarget: backToHome);
       final delegate = delegateOf(router, context);
-      router.controller.goBranch(1);
+      router.controller.openBranch(1);
       router.push<void>(const _DetailRoute(id: '1'));
       // The page above the root can pop, so back must not leave the branch.
-      expect(router.backGoesToRoot, isFalse);
+      expect(router.backHasTarget, isFalse);
 
       delegate.onPopInvoked(false);
 

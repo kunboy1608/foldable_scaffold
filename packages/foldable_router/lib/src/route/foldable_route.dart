@@ -52,7 +52,7 @@ abstract class FoldableRoute {
   ///   deep link, and its URL ([urlLocation]) is shown in the address bar.
   /// * false: a URL never opens it (the router treats it as not matched, so
   ///   [FoldableRouterConfig.notFound] is shown) and it has no URL in the
-  ///   address bar. It can only be pushed or `go`ne to from code, with any
+  ///   address bar. It can only be pushed or opened from code, with any
   ///   object passed to its constructor.
   ///
   /// Use false for routes that need an object argument or must not be reachable
@@ -62,7 +62,7 @@ abstract class FoldableRoute {
   /// The id of the `FoldableSession` that shows this route, or null for the
   /// session on screen.
   ///
-  /// With a `FoldableSessionRouter`, `go`/`push` of a route that names another
+  /// With a `FoldableSessionRouter`, `open`/`push` of a route that names another
   /// session first puts that session on top: it is created when it is not
   /// open, or moved to the top when it is. Redirects and the route then run in
   /// that session. URLs ignore it: a location is matched in the session on
@@ -84,9 +84,9 @@ abstract class FoldableRoute {
 
   /// The route to show instead of this one, or null to show this one.
   ///
-  /// Runs on every `go`, before the router's global redirect, like a
+  /// Runs on every `open`, before the router's global redirect, like a
   /// route-level redirect in go_router. [context] is a [BuildContext] of the
-  /// app — the page that called `go`, else the router's navigator — so a
+  /// app — the page that called `open`, else the router's navigator — so a
   /// redirect can read providers. [state] says what is being opened.
   ///
   /// Return a future to redirect asynchronously: the navigation waits for it.
@@ -112,9 +112,9 @@ abstract class FoldableRoute {
   }
 
   /// Shows this route in place of the children of the page that owns
-  /// [context]. See [FoldableRouter.go].
-  void go(BuildContext context) =>
-      FoldableRouterScope.of(context).go(context, this);
+  /// [context]. Shorthand for [FoldableRouter.open].
+  void open(BuildContext context) =>
+      FoldableRouterScope.of(context).open(context, this);
 
   /// Adds this route on top of the current branch. See [FoldableRouter.push].
   Future<T?> push<T extends Object?>(BuildContext context) =>

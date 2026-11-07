@@ -261,10 +261,10 @@ void main() {
     );
     addTearDown(router.dispose);
 
-    router.goUri(Uri.parse('/home'));
+    router.openUri(Uri.parse('/home'));
     expect(router.activeSessionId, 'guest');
 
-    router.goUri(Uri.parse('/welcome'));
+    router.openUri(Uri.parse('/welcome'));
     expect(router.activeSessionId, 'onboarding');
   });
 
@@ -416,7 +416,7 @@ void main() {
       final router = conditional();
       addTearDown(router.dispose);
 
-      router.goUri(Uri.parse('/detail'));
+      router.openUri(Uri.parse('/detail'));
       expect(router.currentUri.path, '/detail');
       await pumpApp(tester, router);
       expect(find.text('screen /home'), findsNothing);
@@ -443,7 +443,7 @@ void main() {
       addTearDown(router.dispose);
       await pumpApp(tester, router);
 
-      router.goUri(Uri.parse('/home'));
+      router.openUri(Uri.parse('/home'));
       await router.refresh();
       await tester.pumpAndSettle();
       expect(router.activeSessionId, 'guest');
@@ -588,7 +588,7 @@ void main() {
       expect(denied, ['checkout', 'main', 'main']);
 
       // So does a route that names it: the navigation is dropped.
-      router.go(null, const _R('/cart', session: 'checkout'));
+      router.open(null, const _R('/cart', session: 'checkout'));
       expect(
         await router.push<Object>(const _R('/cart', session: 'checkout')),
         isNull,
@@ -656,7 +656,7 @@ void main() {
 
       // The last page is not popped, like the last route of a Navigator.
       expect(router.pop(), isFalse);
-      router.go(null, const _R('/next'));
+      router.open(null, const _R('/next'));
       await tester.pumpAndSettle();
       expect(router.active.pages.length, 2);
 
@@ -674,7 +674,7 @@ void main() {
       addTearDown(router.dispose);
       await pumpApp(tester, router);
 
-      router.go(null, const _R('/step', session: 'flow'));
+      router.open(null, const _R('/step', session: 'flow'));
       await tester.pumpAndSettle();
 
       expect(router.openSessionIds, ['main', 'flow']);
@@ -735,7 +735,7 @@ void main() {
       await pumpApp(tester, router);
 
       // No session: the one on screen.
-      router.go(null, const _R('/a'));
+      router.open(null, const _R('/a'));
       expect(router.openSessionIds, ['main']);
 
       // Another session: created over the current one.
@@ -745,13 +745,13 @@ void main() {
       expect(find.text('screen /pay'), findsOneWidget);
 
       // A route of the session below moves it to the top.
-      router.go(null, const _R('/b', session: 'main'));
+      router.open(null, const _R('/b', session: 'main'));
       await tester.pumpAndSettle();
       expect(router.openSessionIds, ['checkout', 'main']);
       expect(router.activeSessionId, 'main');
 
       // And back again, reusing the stack that is still there.
-      router.go(null, const _R('/c', session: 'checkout'));
+      router.open(null, const _R('/c', session: 'checkout'));
       await tester.pumpAndSettle();
       expect(router.openSessionIds, ['main', 'checkout']);
       expect(router.closeSession(), isTrue);
@@ -788,11 +788,11 @@ void main() {
 
       router.openSession<void>('checkout');
       await tester.pump();
-      expect(router.backGoesToRoot, isTrue);
+      expect(router.backHasTarget, isTrue);
 
-      router.goBackToRoot();
+      router.openBackTarget();
       expect(router.openSessionIds, ['main']);
-      expect(router.backGoesToRoot, isFalse);
+      expect(router.backHasTarget, isFalse);
     });
 
     testWidgets('FoldableSessionBackButton shows only with stacked sessions', (

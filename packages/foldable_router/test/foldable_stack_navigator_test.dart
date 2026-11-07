@@ -70,7 +70,7 @@ void main() {
     expect(find.text('second tab', skipOffstage: false), findsNothing);
     expect(find.text('second tab detail', skipOffstage: false), findsNothing);
 
-    controller.goBranch(1);
+    controller.openBranch(1);
     await tester.pump();
 
     expect(find.text('second tab detail'), findsOneWidget);

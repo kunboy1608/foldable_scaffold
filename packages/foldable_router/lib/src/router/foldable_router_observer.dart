@@ -6,15 +6,15 @@ import '../route/foldable_route.dart';
 ///
 /// Every user-visible navigation produces exactly one event, whether it went
 /// through the router or straight through the controller: a back button,
-/// system back or a swipe back, `goBranch` from a navigation rail, or a
+/// system back or a swipe back, `openBranch` from a navigation rail, or a
 /// `controller.pop`. A `controller.batch` is reported as one event.
 enum FoldableNavigationKind {
   /// A route replaced the pages above its parent, or switched to a branch
-  /// root: `go`, `goLocation`, `goUri` and the redirects behind them.
+  /// root: `open`, `openLocation`, `openUri` and the redirects behind them.
   ///
-  /// Going to the root of a tab is one `go`, not a [branch] plus a [pop]. Also
+  /// Going to the root of a tab is one `open`, not a [branch] plus a [pop]. Also
   /// the kind of a direct `controller.setPages` that keeps the page count.
-  go,
+  open,
 
   /// A page was added on top of the current branch: `push`, `pushLocation`,
   /// `pushAndRemoveUntil` and `pushAndReplace`.
@@ -28,10 +28,10 @@ enum FoldableNavigationKind {
   /// Its [FoldableNavigationEvent.route] is null.
   pop,
 
-  /// Another branch (tab) is shown, as by `controller.goBranch` or by a
+  /// Another branch (tab) is shown, as by `controller.openBranch` or by a
   /// navigation rail. Its [FoldableNavigationEvent.route] is null.
   ///
-  /// Going to a route that is a branch root is a [go], not a [branch].
+  /// Going to a route that is a branch root is an [open], not a [branch].
   branch,
 }
 
@@ -50,7 +50,7 @@ class FoldableNavigationEvent {
   final FoldableNavigationKind kind;
 
   /// The route that was opened, when the router knows it: a
-  /// [FoldableNavigationKind.go] or [FoldableNavigationKind.push] made through
+  /// [FoldableNavigationKind.open] or [FoldableNavigationKind.push] made through
   /// the router. Null for pops, branch switches and changes made directly on
   /// the controller.
   final FoldableRoute? route;

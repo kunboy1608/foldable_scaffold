@@ -63,7 +63,7 @@ class FoldableNavigatorController extends ChangeNotifier {
   bool get canPop => _branches[_currentIndex].length > 1;
 
   /// Shows branch [index]. Its pages are kept as they were.
-  void goBranch(int index) {
+  void openBranch(int index) {
     assert(index >= 0 && index < _branches.length);
     if (index == _currentIndex) return;
     _currentIndex = index;

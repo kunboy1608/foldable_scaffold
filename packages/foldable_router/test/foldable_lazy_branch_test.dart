@@ -74,7 +74,7 @@ void main() {
     expect(find.text('inbox', skipOffstage: false), findsNothing);
     expect(find.text('profile', skipOffstage: false), findsNothing);
 
-    router.controller.goBranch(1);
+    router.controller.openBranch(1);
     await tester.pump();
 
     expect(_built, ['home', 'inbox']);
@@ -89,9 +89,9 @@ void main() {
     final router = _router(lazy: true);
     await tester.pumpWidget(_app(router.controller));
 
-    router.controller.goBranch(1);
+    router.controller.openBranch(1);
     await tester.pump();
-    router.controller.goBranch(0);
+    router.controller.openBranch(0);
     await tester.pump();
 
     // Still mounted, offstage, and not built a second time.
@@ -100,7 +100,7 @@ void main() {
     expect(find.text('home'), findsOneWidget);
     expect(_built, ['home', 'inbox']);
 
-    router.controller.goBranch(1);
+    router.controller.openBranch(1);
     await tester.pump();
 
     expect(find.text('inbox'), findsOneWidget);
@@ -150,7 +150,7 @@ void main() {
     expect(_built, ['a']);
 
     // Showing branch 2 builds only branch 2.
-    controller.goBranch(2);
+    controller.openBranch(2);
     await tester.pump();
 
     expect(_built, ['a', 'c']);

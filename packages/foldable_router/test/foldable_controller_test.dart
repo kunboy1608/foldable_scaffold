@@ -352,7 +352,7 @@ void main() {
       controller.push(_page('a'), branch: 0);
       controller.push(_page('b'), branch: 0);
       controller.push(_page('c'), branch: 1);
-      controller.goBranch(1);
+      controller.openBranch(1);
       final pageA = controller.pagesOf(0)[1];
 
       expect(controller.popPage(pageA), isTrue);
@@ -476,7 +476,7 @@ void main() {
       expect(notified, 2);
     });
 
-    test('goBranch inside a batch is deferred too', () {
+    test('openBranch inside a batch is deferred too', () {
       final controller = FoldableNavigatorController(
         branches: [
           [_page('home')],
@@ -489,7 +489,7 @@ void main() {
 
       controller.batch(() {
         controller.popToRoot(branch: 1);
-        controller.goBranch(1);
+        controller.openBranch(1);
         expect(notified, 0);
       });
 
@@ -498,7 +498,7 @@ void main() {
     });
   });
 
-  test('goBranch to the branch on screen does not notify', () {
+  test('openBranch to the branch on screen does not notify', () {
     final controller = FoldableNavigatorController(
       branches: [
         [_page('home')],
@@ -509,10 +509,10 @@ void main() {
     var notified = 0;
     controller.addListener(() => notified++);
 
-    controller.goBranch(0);
+    controller.openBranch(0);
     expect(notified, 0);
 
-    controller.goBranch(1);
+    controller.openBranch(1);
     expect(notified, 1);
     expect(controller.currentIndex, 1);
   });

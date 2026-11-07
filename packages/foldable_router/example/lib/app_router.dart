@@ -53,7 +53,7 @@ Widget _buildMainShell(
         return NavigationRail(
           selectedIndex: controller.currentIndex,
           labelType: NavigationRailLabelType.all,
-          onDestinationSelected: (index) => appRouter.go(null, tabs[index]),
+          onDestinationSelected: (index) => appRouter.open(null, tabs[index]),
           destinations: const [
             NavigationRailDestination(
               icon: Icon(Icons.home),
@@ -73,7 +73,7 @@ Widget _buildMainShell(
       bottomNavigationBuilder: (context, constraints) {
         return NavigationBar(
           selectedIndex: controller.currentIndex,
-          onDestinationSelected: (index) => appRouter.go(null, tabs[index]),
+          onDestinationSelected: (index) => appRouter.open(null, tabs[index]),
           destinations: const [
             NavigationDestination(icon: Icon(Icons.home), label: 'Home'),
             NavigationDestination(icon: Icon(Icons.inbox), label: 'Inbox'),

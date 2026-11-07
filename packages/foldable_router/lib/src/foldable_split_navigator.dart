@@ -55,7 +55,7 @@ part of 'foldable_navigator.dart';
 ///     primaryNavigationBuilder: (context, constraints, padding) =>
 ///         NavigationRail(
 ///           selectedIndex: _controller.currentIndex,
-///           onDestinationSelected: _controller.goBranch,
+///           onDestinationSelected: _controller.openBranch,
 ///           ...
 ///         ),
 ///   ),

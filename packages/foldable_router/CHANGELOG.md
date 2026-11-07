@@ -1,3 +1,13 @@
+## 0.2.0-dev.1
+
+* Breaking: the `go` family of navigations is renamed to `open`:
+  `FoldableRouter.go` becomes `open`, `goLocation` becomes `openLocation`,
+  `goUri` becomes `openUri`, `goFromPage` becomes `openFromPage`,
+  `goBackToRoot` becomes `openBackTarget`, `backGoesToRoot` becomes
+  `backHasTarget`, `FoldableNavigatorController.goBranch` becomes `openBranch`,
+  `FoldableNavigationKind.go` becomes `open`, and `FoldableRoute.go` becomes
+  `FoldableRoute.open`.
+
 ## 0.1.0-dev.2
 
 * `FoldableSessionStack.initRoute` is optional: without it the session starts

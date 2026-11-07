@@ -103,18 +103,18 @@ Future<BuildContext> _pumpContext(WidgetTester tester) async {
 
 void main() {
   group('FoldableRouter observers', () {
-    testWidgets('push, go and back each emit one event', (tester) async {
+    testWidgets('push, open and back each emit one event', (tester) async {
       final context = await _pumpContext(tester);
       final recorder = _Recorder();
       final router = _router(recorder)..rootContextOf = () => context;
       addTearDown(router.dispose);
 
-      router.go(context, const _SecondRoute());
-      expect(recorder.kinds, [FoldableNavigationKind.go]);
+      router.open(context, const _SecondRoute());
+      expect(recorder.kinds, [FoldableNavigationKind.open]);
 
       router.push<void>(const _DetailRoute(id: '7'));
       expect(recorder.kinds, [
-        FoldableNavigationKind.go,
+        FoldableNavigationKind.open,
         FoldableNavigationKind.push,
       ]);
       expect(recorder.events.last.route, isA<_DetailRoute>());
@@ -123,7 +123,7 @@ void main() {
 
       router.back();
       expect(recorder.kinds, [
-        FoldableNavigationKind.go,
+        FoldableNavigationKind.open,
         FoldableNavigationKind.push,
         FoldableNavigationKind.pop,
       ]);
@@ -169,7 +169,7 @@ void main() {
       expect(recorder.events.single.uri.toString(), '/detail?id=2');
     });
 
-    testWidgets('goUri emits one go, or one pop when it returns', (
+    testWidgets('openUri emits one open, or one pop when it returns', (
       tester,
     ) async {
       final context = await _pumpContext(tester);
@@ -177,20 +177,20 @@ void main() {
       final router = _router(recorder)..rootContextOf = () => context;
       addTearDown(router.dispose);
 
-      router.goUri(Uri.parse('/detail?id=1'));
-      expect(recorder.kinds, [FoldableNavigationKind.go]);
+      router.openUri(Uri.parse('/detail?id=1'));
+      expect(recorder.kinds, [FoldableNavigationKind.open]);
       expect(recorder.events.single.uri.toString(), '/detail?id=1');
 
       // The URL of the page below: the browser went back.
-      router.goUri(Uri.parse('/home'));
+      router.openUri(Uri.parse('/home'));
       expect(recorder.kinds, [
-        FoldableNavigationKind.go,
+        FoldableNavigationKind.open,
         FoldableNavigationKind.pop,
       ]);
       expect(recorder.events.last.uri.toString(), '/home');
     });
 
-    testWidgets('going to a tab root emits a single go', (tester) async {
+    testWidgets('opening a tab root emits a single open', (tester) async {
       final context = await _pumpContext(tester);
       final recorder = _Recorder();
       final router = _router(recorder)..rootContextOf = () => context;
@@ -199,9 +199,9 @@ void main() {
       router.push<void>(const _DetailRoute(id: '7'));
       recorder.events.clear();
 
-      router.go(context, const _SecondRoute());
+      router.open(context, const _SecondRoute());
 
-      expect(recorder.kinds, [FoldableNavigationKind.go]);
+      expect(recorder.kinds, [FoldableNavigationKind.open]);
       expect(recorder.events.single.branch, 1);
       expect(recorder.events.single.depth, 1);
       expect(recorder.events.single.uri.toString(), '/second');
@@ -261,7 +261,7 @@ void main() {
       expect(recorder.events, hasLength(3));
     });
 
-    testWidgets('goBranch through the controller emits one branch', (
+    testWidgets('openBranch through the controller emits one branch', (
       tester,
     ) async {
       final context = await _pumpContext(tester);
@@ -269,7 +269,7 @@ void main() {
       final router = _router(recorder)..rootContextOf = () => context;
       addTearDown(router.dispose);
 
-      router.controller.goBranch(1);
+      router.controller.openBranch(1);
 
       expect(recorder.kinds, [FoldableNavigationKind.branch]);
       expect(recorder.events.single.branch, 1);
@@ -277,10 +277,10 @@ void main() {
       expect(recorder.events.single.route, isNull);
 
       // The same branch again changes nothing.
-      router.controller.goBranch(1);
+      router.controller.openBranch(1);
       expect(recorder.events, hasLength(1));
 
-      router.controller.goBranch(0);
+      router.controller.openBranch(0);
       expect(recorder.kinds, [
         FoldableNavigationKind.branch,
         FoldableNavigationKind.branch,
@@ -316,7 +316,7 @@ void main() {
 
       router.controller.batch(() {
         router.controller.popToRoot();
-        router.controller.goBranch(1);
+        router.controller.openBranch(1);
       });
 
       expect(recorder.kinds, [FoldableNavigationKind.branch]);
@@ -354,9 +354,9 @@ void main() {
       final extra = _Recorder();
 
       router.addObserver(extra);
-      router.controller.goBranch(1);
+      router.controller.openBranch(1);
       router.removeObserver(extra);
-      router.controller.goBranch(0);
+      router.controller.openBranch(0);
 
       expect(extra.kinds, [FoldableNavigationKind.branch]);
     });
@@ -377,8 +377,8 @@ void main() {
       )..rootContextOf = () => context;
       addTearDown(router.dispose);
 
-      // Does not throw out of go.
-      router.go(context, const _DetailRoute(id: '1'));
+      // Does not throw out of open.
+      router.open(context, const _DetailRoute(id: '1'));
 
       expect(tester.takeException(), isA<StateError>());
       expect(router.pages, hasLength(1));
@@ -386,10 +386,10 @@ void main() {
       expect(recorder.events, isEmpty);
 
       // Later navigations still work.
-      router.go(context, const _SecondRoute());
+      router.open(context, const _SecondRoute());
       expect(tester.takeException(), isNull);
       expect(router.currentIndex, 1);
-      expect(recorder.kinds, [FoldableNavigationKind.go]);
+      expect(recorder.kinds, [FoldableNavigationKind.open]);
     });
 
     testWidgets('an async redirect that fails is reported and abandons the '
@@ -407,7 +407,7 @@ void main() {
       )..rootContextOf = () => context;
       addTearDown(router.dispose);
 
-      router.go(context, const _DetailRoute(id: '1'));
+      router.open(context, const _DetailRoute(id: '1'));
       await tester.pump();
 
       expect(tester.takeException(), isA<StateError>());
@@ -415,10 +415,10 @@ void main() {
       expect(router.currentUri.toString(), '/home');
       expect(recorder.events, isEmpty);
 
-      router.go(context, const _SecondRoute());
+      router.open(context, const _SecondRoute());
       expect(tester.takeException(), isNull);
       expect(router.currentIndex, 1);
-      expect(recorder.kinds, [FoldableNavigationKind.go]);
+      expect(recorder.kinds, [FoldableNavigationKind.open]);
     });
 
     testWidgets('an async redirect that throws later is reported', (
@@ -436,18 +436,18 @@ void main() {
       )..rootContextOf = () => context;
       addTearDown(router.dispose);
 
-      router.go(context, const _DetailRoute(id: '1'));
+      router.open(context, const _DetailRoute(id: '1'));
       await tester.pump(const Duration(milliseconds: 20));
 
       expect(tester.takeException(), isA<StateError>());
       expect(router.pages, hasLength(1));
       expect(recorder.events, isEmpty);
 
-      router.go(context, const _SecondRoute());
+      router.open(context, const _SecondRoute());
       await tester.pump();
       expect(tester.takeException(), isNull);
       expect(router.currentIndex, 1);
-      expect(recorder.kinds, [FoldableNavigationKind.go]);
+      expect(recorder.kinds, [FoldableNavigationKind.open]);
     });
 
     testWidgets('resolve still throws to its direct caller', (tester) async {

@@ -35,7 +35,7 @@ plumbing comes from
 - **Deep links.** A `FoldableRoute` has a URL; a matcher turns a URL back into
   a route.
 - **Redirects and guards.** Per-route and global, synchronous or async, for
-  `go` and `push` alike, with a loop cap that throws while you develop, like
+  `open` and `push` alike, with a loop cap that throws while you develop, like
   go_router.
 - **Back policy.** Choose what the system back button does when a branch has
   nothing to pop.
@@ -141,7 +141,7 @@ final delegate = FoldableRouterDelegate(
           NavigationRail(
             selectedIndex: router.currentIndex,
             onDestinationSelected: (index) =>
-                router.go(null, router.roots[index]),
+                router.open(null, router.roots[index]),
             destinations: const [/* ... */],
           ),
     ),
@@ -155,21 +155,21 @@ MaterialApp.router(
 );
 ```
 
-## `go` and `push`
+## `open` and `push`
 
 - `push(route)` adds the route on top of the current branch and leaves
-  everything below it alone. It follows the redirects like `go`, so a guard
+  everything below it alone. It follows the redirects like `open`, so a guard
   cannot be skipped, but it never switches tab. Pushes are applied in the order
   they were made, even when a redirect is async.
-- `go(context, route)` resolves the redirects, then replaces the pages above
-  the page that navigated. `go(null, route)` uses the branch root as the
+- `open(context, route)` resolves the redirects, then replaces the pages above
+  the page that navigated. `open(null, route)` uses the branch root as the
   parent. Going to a branch root switches to that tab and pops it to its root
   in one update, so it is rendered once.
 
 ```dart
 router.push(const DetailsRoute(id: '3'));
-router.go(context, const SettingsRoute());
-router.goLocation('/details?id=3'); // from a link
+router.open(context, const SettingsRoute());
+router.openLocation('/details?id=3'); // from a link
 ```
 
 ## Navigators
@@ -468,8 +468,8 @@ final router = FoldableSessionRouter(
           primaryNavigationBuilder: (context, constraints, padding) =>
               NavigationRail(
                 selectedIndex: controller.currentIndex,
-                // router.go(null, tabs[index]) runs redirects.
-                onDestinationSelected: controller.goBranch,
+                // router.open(null, tabs[index]) runs redirects.
+                onDestinationSelected: controller.openBranch,
                 destinations: const [/* ... */],
               ),
         ),
@@ -505,7 +505,7 @@ frame it waits for that context):
   `canBeBase: false` becomes the base, and when there is none `onNoSession` is
   called;
 - until the first `refresh()` completes nothing is on screen (`buildShell` draws
-  nothing, so show your own splash). URLs and `go`/`push` calls that arrive
+  nothing, so show your own splash). URLs and `open`/`push` calls that arrive
   meanwhile wait, and so they do while any later `refresh()` runs. A URL for a
   session that does not exist yet is kept until it does.
 
@@ -518,14 +518,14 @@ A `FoldableSessionStack` without an `initRoute` starts with no page, like a
 (`openSession('flow', route: ...)`, or a route that names it). The last page is
 not popped, and back at it closes the session.
 
-A route names the session that shows it with `FoldableRoute.session`. `go`,
+A route names the session that shows it with `FoldableRoute.session`. `open`,
 `push` and the other route methods of a route of another session create that
 session over the current one, or move it to the top if it is open; null keeps
 the session on screen. `router.closeSession(result)` closes the top session
 (the one below keeps its stacks), and `FoldableSessionBackButton` in an app bar
 does the same, shown only while a session can be closed. `router.resetSession('main')` starts over from one existing session, and
 `replaceSession('main', route: const HomeRoute())` replaces just
-the one on screen. `go`, `push` and `back` act on the session on screen. A URL
+the one on screen. `open`, `push` and `back` act on the session on screen. A URL
 the active session does not know can switch to another session, but only one
 marked `deepLinkable`.
 
@@ -604,7 +604,7 @@ A custom `FoldableRouterBase` saves nothing unless it overrides `saveState` and
 
 Run the [example](example/) for three sessions: signed out (sign in,
 sign up), onboarding, and a tabbed home that has a button for every way to
-navigate (`push`, `push` with a result, `go` with and without a context,
-`goLocation`, `pushLocation`, `batch`, `pushAndRemoveUntil`, `popUntil`,
+navigate (`push`, `push` with a result, `open` with and without a context,
+`openLocation`, `pushLocation`, `batch`, `pushAndRemoveUntil`, `popUntil`,
 redirects), with swipe back and deep links. The first two sessions use the stack
 navigator, so they fill the screen with only the top page.

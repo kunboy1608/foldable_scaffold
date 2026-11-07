@@ -4,7 +4,7 @@ description: >-
   Experimental. Router for foldable apps: one page stack per branch (tab), Cupertino page
   slides, swipe back, deep links, redirects and guards. Works with
   foldable_scaffold without depending on it.
-version: 0.1.0-dev.2
+version: 0.2.0-dev.1
 repository: https://github.com/kunboy1608/foldable_scaffold/tree/main/packages/foldable_router
 
 environment:

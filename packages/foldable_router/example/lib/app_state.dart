@@ -55,7 +55,7 @@ Future<void> completeOnboarding(
   final router = AppRouterScope.of(context);
   _onboarded = true;
   final refreshed = router.refresh();
-  router.go(null, route);
+  router.open(null, route);
   await refreshed;
 }
 

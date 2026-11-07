@@ -119,12 +119,12 @@ void main() {
       final router = _router();
       addTearDown(router.dispose);
 
-      router.go(context, const _SecondRoute());
+      router.open(context, const _SecondRoute());
 
       expect(router.currentIndex, 1);
       expect(router.canPop, isFalse);
       expect(router.currentUri.toString(), '/second');
-      expect(router.backGoesToRoot, isTrue);
+      expect(router.backHasTarget, isTrue);
     });
 
     testWidgets('pushing keeps the branch and names the page URL', (
@@ -144,14 +144,14 @@ void main() {
       final router = _router()..rootContextOf = () => context;
       addTearDown(router.dispose);
 
-      router.go(context, const _SecondRoute());
+      router.open(context, const _SecondRoute());
       router.push<void>(const _DetailRoute(id: '7'));
 
       expect(router.currentIndex, 1);
       expect(router.pages, hasLength(2));
       expect(router.currentUri.toString(), '/detail?id=7');
       expect(router.canPop, isTrue);
-      expect(router.backGoesToRoot, isFalse);
+      expect(router.backHasTarget, isFalse);
     });
 
     testWidgets('back pops, then shows the back target', (tester) async {
@@ -169,7 +169,7 @@ void main() {
       final router = _router()..rootContextOf = () => context;
       addTearDown(router.dispose);
 
-      router.go(context, const _SecondRoute());
+      router.open(context, const _SecondRoute());
       router.push<void>(const _DetailRoute(id: '7'));
       router.back();
       expect(router.currentIndex, 1);
@@ -197,7 +197,7 @@ void main() {
       final router = _router()..rootContextOf = () => context;
       addTearDown(router.dispose);
 
-      router.goUri(Uri.parse('/nothing?a=1'));
+      router.openUri(Uri.parse('/nothing?a=1'));
 
       expect(router.pages, hasLength(2));
       expect(router.currentUri.toString(), '/nothing?a=1');
@@ -272,13 +272,13 @@ void main() {
       expect(await result, isNull);
     });
 
-    testWidgets('go before the first build waits for a context', (
+    testWidgets('open before the first build waits for a context', (
       tester,
     ) async {
       final router = _router();
       addTearDown(router.dispose);
 
-      router.goLocation('/second');
+      router.openLocation('/second');
       expect(router.currentIndex, 0);
 
       late BuildContext context;

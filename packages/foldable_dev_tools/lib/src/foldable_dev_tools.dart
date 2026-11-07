@@ -33,7 +33,7 @@ class FoldableDevToolsScope
 /// ```dart
 /// MaterialApp(
 ///   builder: (context, child) => FoldableDevTools(
-///     router: router, // optional: logs push/pop/go
+///     router: router, // optional: logs push/pop/open
 ///     child: child!,
 ///   ),
 /// )

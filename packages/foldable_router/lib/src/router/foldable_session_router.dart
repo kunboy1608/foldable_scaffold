@@ -88,7 +88,7 @@ abstract class FoldableSession {
   final bool disposeOnLeave;
 
   /// Whether a URL that the session on screen does not know may switch to this
-  /// session, see [FoldableSessionRouter.goUri].
+  /// session, see [FoldableSessionRouter.openUri].
   ///
   /// Leave it false for sessions a URL must never reach by itself, like a
   /// signed in area.
@@ -246,7 +246,7 @@ class FoldableSessionStack extends FoldableSession {
 /// );
 /// ```
 ///
-/// Navigation ([go], [push], [back], …) acts on the session on screen, except
+/// Navigation ([open], [push], [back], …) acts on the session on screen, except
 /// for a route that names another session with [FoldableRoute.session]: that
 /// session is created, or moved to the top if it is open, and shows the route.
 ///
@@ -464,7 +464,7 @@ class FoldableSessionRouter extends ChangeNotifier with FoldableRouterBase {
       final owner = _config?.match(uri)?.session;
       if (owner == null || allowed.contains(owner)) {
         _pendingUri = null;
-        _goUriNow(uri);
+        _openUriNow(uri);
       }
     }
   }
@@ -618,7 +618,7 @@ class FoldableSessionRouter extends ChangeNotifier with FoldableRouterBase {
   /// shows [route] in it.
   ///
   /// Use it for a hand-off, like the last step of an onboarding. [route] is
-  /// shown with [FoldableRouter.go], so its redirects run and they apply to the
+  /// shown with [FoldableRouter.open], so its redirects run and they apply to the
   /// new session. Only the session on screen is replaced; the ones below it
   /// stay. See [resetSession] to drop all of them.
   ///
@@ -628,7 +628,7 @@ class FoldableSessionRouter extends ChangeNotifier with FoldableRouterBase {
     _sessionById(id);
     if (!_allows(id)) return false;
     _switchTo(id);
-    if (route != null) active.go(null, route);
+    if (route != null) active.open(null, route);
     return true;
   }
 
@@ -648,7 +648,7 @@ class FoldableSessionRouter extends ChangeNotifier with FoldableRouterBase {
     if (!_allows(id)) return false;
     _removeFrom(0, keep: id);
     notifyListeners();
-    if (route != null) active.go(null, route);
+    if (route != null) active.open(null, route);
     return true;
   }
 
@@ -670,7 +670,7 @@ class FoldableSessionRouter extends ChangeNotifier with FoldableRouterBase {
       final fresh = !_routers.containsKey(id);
       final completer = _bringToTop(id);
       final target = route ?? (fresh ? session.initialRoute : null);
-      if (target != null) active.go(null, target);
+      if (target != null) active.open(null, target);
       return completer.future.then((value) => value is T ? value : null);
     });
   }
@@ -793,25 +793,25 @@ class FoldableSessionRouter extends ChangeNotifier with FoldableRouterBase {
     Uri? uri,
   }) => active.resolve(route, context: context, uri: uri);
 
-  /// See [FoldableRouter.go].
+  /// See [FoldableRouter.open].
   @override
-  void go(BuildContext? context, FoldableRoute route) {
+  void open(BuildContext? context, FoldableRoute route) {
     // The context belongs to the session that was on screen: its page cannot
     // be the parent in another one.
     _later(() {
       final switches = _switchesSession(route);
-      _routerFor(route)?.go(switches ? null : context, route);
+      _routerFor(route)?.open(switches ? null : context, route);
     });
   }
 
-  /// See [FoldableRouter.goLocation].
+  /// See [FoldableRouter.openLocation].
   ///
   /// A location only another [FoldableSession.deepLinkable] session knows
   /// switches to that session first.
-  void goLocation(String location) {
+  void openLocation(String location) {
     _later(() {
       _switchToClaiming(Uri.parse(location));
-      active.goLocation(location);
+      active.openLocation(location);
     });
   }
 
@@ -880,7 +880,7 @@ class FoldableSessionRouter extends ChangeNotifier with FoldableRouterBase {
   void back([FoldableRoute? fallback]) {
     final router = active;
     if (!router.canPop &&
-        !router.backGoesToRoot &&
+        !router.backHasTarget &&
         fallback == null &&
         closeSession()) {
       return;
@@ -909,18 +909,18 @@ class FoldableSessionRouter extends ChangeNotifier with FoldableRouterBase {
   /// A URL only another [FoldableSession.deepLinkable] session knows switches
   /// to that session first.
   @override
-  void goUri(Uri uri) {
+  void openUri(Uri uri) {
     // Before a session is on screen the latest URL wins.
     if (_allowed == null || !isResolved) {
       _pendingUri = uri;
       return;
     }
-    _later(() => _goUriNow(uri));
+    _later(() => _openUriNow(uri));
   }
 
-  void _goUriNow(Uri uri) {
+  void _openUriNow(Uri uri) {
     _switchToClaiming(uri);
-    active.goUri(uri);
+    active.openUri(uri);
   }
 
   void _switchToClaiming(Uri uri) {
@@ -961,15 +961,15 @@ class FoldableSessionRouter extends ChangeNotifier with FoldableRouterBase {
   static const _routerKey = 'router';
 
   @override
-  bool get backGoesToRoot =>
+  bool get backHasTarget =>
       isResolved &&
-      (active.backGoesToRoot || (canCloseSession && !active.canPop));
+      (active.backHasTarget || (canCloseSession && !active.canPop));
 
   @override
-  void goBackToRoot() {
+  void openBackTarget() {
     if (!isResolved) return;
-    if (active.backGoesToRoot) {
-      active.goBackToRoot();
+    if (active.backHasTarget) {
+      active.openBackTarget();
     } else {
       closeSession();
     }

@@ -119,7 +119,7 @@ class FoldableRouterDelegate extends RouterDelegate<Uri>
       // stacks that are about to return: wait for them.
       _pendingRoute = configuration;
     } else {
-      router.goUri(configuration);
+      router.openUri(configuration);
     }
     return SynchronousFuture(null);
   }
@@ -142,7 +142,7 @@ class FoldableRouterDelegate extends RouterDelegate<Uri>
       pages: [
         MaterialPage<void>(
           child: PopScope(
-            canPop: !router.backGoesToRoot,
+            canPop: !router.backHasTarget,
             onPopInvokedWithResult: (didPop, _) => onPopInvoked(didPop),
             child: FoldableRouterScope(
               router: router,
@@ -178,7 +178,7 @@ class FoldableRouterDelegate extends RouterDelegate<Uri>
     // After the frame the router can run redirects with a live context, and
     // nothing changes when [route] is the page the restore left on top.
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!_disposed) router.goUri(route);
+      if (!_disposed) router.openUri(route);
     });
   }
 
@@ -186,13 +186,13 @@ class FoldableRouterDelegate extends RouterDelegate<Uri>
   ///
   /// Every [PopScope] of the route reports `didPop: false` when any of them
   /// refuses the pop, so a page inside the navigator refusing one also
-  /// reaches this callback. Only go to the root when this scope is the one
+  /// reaches this callback. Only open the root when this scope is the one
   /// refusing, or a back that pops a single page would also empty the whole
   /// stack.
   @visibleForTesting
   void onPopInvoked(bool didPop) {
-    if (didPop || !router.backGoesToRoot) return;
-    router.goBackToRoot();
+    if (didPop || !router.backHasTarget) return;
+    router.openBackTarget();
   }
 
   @override

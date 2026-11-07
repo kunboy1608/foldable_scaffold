@@ -236,7 +236,7 @@ void main() {
       await _attach(tester, router);
 
       router.push<void>(const _R('/slow'));
-      router.controller.goBranch(1);
+      router.controller.openBranch(1);
       gate.complete(null);
       await tester.pump();
 
@@ -244,7 +244,7 @@ void main() {
       expect(_names(router, 1), ['/settings']);
     });
 
-    testWidgets('a go that starts meanwhile cancels a waiting push', (
+    testWidgets('an open that starts meanwhile cancels a waiting push', (
       tester,
     ) async {
       final gate = Completer<FoldableRoute?>();
@@ -255,7 +255,7 @@ void main() {
       await _attach(tester, router);
 
       final result = router.push<void>(const _R('/slow'));
-      router.go(null, const _R('/elsewhere'));
+      router.open(null, const _R('/elsewhere'));
       await tester.pump();
       gate.complete(null);
       await tester.pump();
@@ -326,7 +326,7 @@ void main() {
       final router = _make(redirect: pingPong());
       await _attach(tester, router);
 
-      router.go(null, const _R('/a'));
+      router.open(null, const _R('/a'));
       await tester.pump();
 
       expect(_names(router), ['/home']);
@@ -342,7 +342,7 @@ void main() {
       final router = _make(redirect: pingPong(), throwOnRedirectLoop: false);
       await _attach(tester, router);
 
-      router.go(null, const _R('/a'));
+      router.open(null, const _R('/a'));
       await tester.pump();
 
       expect(_names(router), ['/home', '/not-found/a']);
@@ -370,9 +370,9 @@ void main() {
     ) async {
       final router = _make(matcher: knowsNoRoot);
       await _attach(tester, router);
-      router.controller.goBranch(1);
+      router.controller.openBranch(1);
 
-      router.goUri(Uri.parse('/'));
+      router.openUri(Uri.parse('/'));
       await tester.pump();
 
       expect(router.currentIndex, 0);
@@ -383,7 +383,7 @@ void main() {
       final router = _make(matcher: knowsNoRoot);
       await _attach(tester, router);
 
-      router.goUri(Uri.parse('/missing'));
+      router.openUri(Uri.parse('/missing'));
       await tester.pump();
 
       expect(_names(router), ['/home', '/not-found/missing']);
@@ -396,7 +396,7 @@ void main() {
       );
       await _attach(tester, router);
 
-      router.goUri(Uri.parse('/'));
+      router.openUri(Uri.parse('/'));
       await tester.pump();
 
       expect(_names(router), ['/home', '/welcome']);
@@ -419,35 +419,38 @@ void main() {
   });
 
   group('a route navigates itself', () {
-    testWidgets('push, pushAndReplace and go use the router of the delegate', (
-      tester,
-    ) async {
-      final router = _make();
-      late BuildContext context;
-      await tester.pumpWidget(
-        MaterialApp.router(
-          routerDelegate: FoldableRouterDelegate(
-            router: router,
-            navigatorKey: GlobalKey<NavigatorState>(),
-            builder: (c) {
-              context = c;
-              return const SizedBox.shrink();
-            },
+    testWidgets(
+      'push, pushAndReplace and open use the router of the delegate',
+      (tester) async {
+        final router = _make();
+        late BuildContext context;
+        await tester.pumpWidget(
+          MaterialApp.router(
+            routerDelegate: FoldableRouterDelegate(
+              router: router,
+              navigatorKey: GlobalKey<NavigatorState>(),
+              builder: (c) {
+                context = c;
+                return const SizedBox.shrink();
+              },
+            ),
+            routeInformationParser: const FoldableRouteInformationParser(),
           ),
-          routeInformationParser: const FoldableRouteInformationParser(),
-        ),
-      );
+        );
 
-      unawaited(const _R('/a').push<void>(context));
-      expect(_names(router).last, '/a');
+        unawaited(const _R('/a').push<void>(context));
+        expect(_names(router).last, '/a');
 
-      unawaited(const _R('/b').pushAndReplace<void>(context));
-      expect(_names(router).last, '/b');
-      expect(_names(router), isNot(contains('/a')));
+        unawaited(const _R('/b').pushAndReplace<void>(context));
+        expect(_names(router).last, '/b');
+        expect(_names(router), isNot(contains('/a')));
 
-      unawaited(const _R('/c').pushAndRemoveUntil<void>(context, (_) => false));
-      expect(_names(router).last, '/c');
-    });
+        unawaited(
+          const _R('/c').pushAndRemoveUntil<void>(context, (_) => false),
+        );
+        expect(_names(router).last, '/c');
+      },
+    );
   });
 
   testWidgets('a route that is not deepLinkable cannot be opened by URL', (
@@ -461,7 +464,7 @@ void main() {
 
     expect(router.routeOf('/private').path, '/not-found/private');
 
-    router.goUri(Uri.parse('/private'));
+    router.openUri(Uri.parse('/private'));
     expect(_names(router).last, '/not-found/private');
 
     // From code it still works, and has no URL.

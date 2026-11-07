@@ -227,7 +227,7 @@ Future<void> _navigate(WidgetTester tester, FoldableRouter router) async {
   await tester.pump();
   router.push<void>(const _R('/a/2'));
   await tester.pump();
-  router.controller.goBranch(1);
+  router.controller.openBranch(1);
   router.push<void>(const _R('/b/1'));
   await tester.pump();
 }
@@ -478,7 +478,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // After the restore a link is a normal navigation.
-    runs.router.goUri(Uri.parse('/b/1'));
+    runs.router.openUri(Uri.parse('/b/1'));
     await tester.pumpAndSettle();
     expect(runs.router.currentUri.toString(), '/b/1');
   });
@@ -549,7 +549,7 @@ void main() {
       final runs = await _start(tester, sessions: true);
       final router = runs.sessionRouter;
       router.push<void>(const _R('/a/1'));
-      router.controller.goBranch(1);
+      router.controller.openBranch(1);
       router.push<void>(const _R('/b/1'));
       router.push<void>(const _R('/b/2'));
       await tester.pumpAndSettle();
@@ -634,13 +634,13 @@ class _PlainRouter extends ChangeNotifier with FoldableRouterBase {
   Uri get currentUri => Uri.parse('/');
 
   @override
-  void goUri(Uri uri) {}
+  void openUri(Uri uri) {}
 
   @override
-  bool get backGoesToRoot => false;
+  bool get backHasTarget => false;
 
   @override
-  void goBackToRoot() {}
+  void openBackTarget() {}
 
   @override
   void restoreState(Map<String, Object?> state) => restored.add(state);

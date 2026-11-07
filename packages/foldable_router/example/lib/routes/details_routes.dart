@@ -46,9 +46,9 @@ class DetailsRoute extends AppRoute {
             onTap: () => DetailsRoute(id: next).push(context),
           ),
           LabAction(
-            title: 'go(context) Details $next',
+            title: 'open(context) Details $next',
             subtitle: 'Replaces the pages above this one, keeps this one.',
-            onTap: () => DetailsRoute(id: next).go(context),
+            onTap: () => DetailsRoute(id: next).open(context),
           ),
           LabAction(
             title: 'pushAndRemoveUntil Details $next',
@@ -119,7 +119,7 @@ class PickRoute extends AppRoute {
   }
 }
 
-/// Always redirects: `go` ends on [ForbiddenRoute], `push` shows this page.
+/// Always redirects: `open` ends on [ForbiddenRoute], `push` shows this page.
 class AdminRoute extends AppRoute {
   const AdminRoute();
 

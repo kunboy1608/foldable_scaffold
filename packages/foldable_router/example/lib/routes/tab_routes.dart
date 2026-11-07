@@ -62,38 +62,38 @@ class HomeRoute extends TabRoute {
             logAction('batch(push x3)');
           },
         ),
-        const LabSection('go: replace the children of a page'),
+        const LabSection('open: replace the children of a page'),
         LabAction(
-          title: 'route.go(context)',
+          title: 'route.open(context)',
           subtitle: 'Drops what is above this page, then shows the route.',
           onTap: () {
-            const DetailsRoute(id: '10').go(context);
-            logAction('route.go(context)');
+            const DetailsRoute(id: '10').open(context);
+            logAction('route.open(context)');
           },
         ),
         LabAction(
-          title: 'go(null, route)',
+          title: 'open(null, route)',
           subtitle: 'No context: the tab root is the parent.',
           onTap: () {
-            router.go(null, const DetailsRoute(id: '11'));
-            logAction('go(null, Details 11)');
+            router.open(null, const DetailsRoute(id: '11'));
+            logAction('open(null, Details 11)');
           },
         ),
         LabAction(
-          title: 'go to another tab',
+          title: 'open another tab',
           subtitle: 'A tab root switches tab and pops it to its root.',
           onTap: () {
-            router.go(null, const InboxRoute());
-            logAction('go(null, Inbox)');
+            router.open(null, const InboxRoute());
+            logAction('open(null, Inbox)');
           },
         ),
         const LabSection('From a string'),
         LabAction(
-          title: 'goLocation("/details?id=42")',
+          title: 'openLocation("/details?id=42")',
           subtitle: 'Matched like a deep link, redirects apply.',
           onTap: () {
-            router.goLocation('/details?id=42');
-            logAction('goLocation(/details?id=42)');
+            router.openLocation('/details?id=42');
+            logAction('openLocation(/details?id=42)');
           },
         ),
         LabAction(
@@ -105,12 +105,12 @@ class HomeRoute extends TabRoute {
           },
         ),
         LabAction(
-          title: 'goLocation("/pick")',
+          title: 'openLocation("/pick")',
           subtitle:
               'PickRoute is not deepLinkable: a URL shows the not found page.',
           onTap: () {
-            router.goLocation('/pick');
-            logAction('goLocation(/pick) -> not found');
+            router.openLocation('/pick');
+            logAction('openLocation(/pick) -> not found');
           },
         ),
         const LabSection('Sessions'),
@@ -126,11 +126,11 @@ class HomeRoute extends TabRoute {
         ),
         const LabSection('Redirects'),
         LabAction(
-          title: 'go to a guarded page',
-          subtitle: 'AdminRoute.redirect sends go to the Forbidden page.',
+          title: 'open a guarded page',
+          subtitle: 'AdminRoute.redirect opens the Forbidden page instead.',
           onTap: () {
-            router.go(context, const AdminRoute());
-            logAction('go(Admin) -> redirected');
+            router.open(context, const AdminRoute());
+            logAction('open(Admin) -> redirected');
           },
         ),
         LabAction(
