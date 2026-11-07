@@ -37,8 +37,8 @@ FoldableRouter _make({
   bool throwOnRedirectLoop = true,
   List<FoldableRoute> roots = _roots,
 }) {
-  final router = FoldableRouter(
-    roots: roots,
+  final router = FoldableRouter.branches(
+    branches: roots,
     config: FoldableRouterConfig(
       matcher: matcher ?? (uri) => _R(uri.path),
       notFound: (uri) => _R('/not-found${uri.path}'),
@@ -297,8 +297,8 @@ void main() {
     });
 
     testWidgets('a disposed router drops the waiting push', (tester) async {
-      final router = FoldableRouter(
-        roots: _roots,
+      final router = FoldableRouter.branches(
+        branches: _roots,
         config: FoldableRouterConfig(
           matcher: (uri) => _R(uri.path),
           notFound: (uri) => _R(uri.path),
@@ -403,8 +403,8 @@ void main() {
     });
 
     testWidgets('a router with no roots still uses notFound', (tester) async {
-      final router = FoldableRouter(
-        roots: const [],
+      final router = FoldableRouter.branches(
+        branches: const [],
         allowEmptyRoots: true,
         config: FoldableRouterConfig(
           matcher: (_) => null,

@@ -73,8 +73,8 @@ class _Recorder extends FoldableRouterObserver {
 }
 
 FoldableRouter _router(_Recorder recorder, {FoldableRedirect? redirect}) {
-  return FoldableRouter(
-    roots: const [_HomeRoute(), _SecondRoute()],
+  return FoldableRouter.branches(
+    branches: const [_HomeRoute(), _SecondRoute()],
     config: FoldableRouterConfig(
       matcher: _match,
       notFound: _NotFoundRoute.new,

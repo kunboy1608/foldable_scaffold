@@ -56,7 +56,7 @@ FoldableRoute? _match(Uri uri) {
   };
 }
 
-final _router = FoldableRouter(roots: const [ListRoute()]);
+final _router = FoldableRouter.branches(branches: const [ListRoute()]);
 
 final _navigatorKey = GlobalKey<NavigatorState>();
 

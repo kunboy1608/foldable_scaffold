@@ -1,3 +1,34 @@
+## Unreleased
+
+* New: `NormalRoute`, a go_router style route declared with `path`, `builder`
+  and nested `routes`. Nested routes form a branch stack: a deep link to a leaf
+  (`/home/calendar/event/1`) rebuilds the whole `Home > Calendar > Event`
+  stack and activates the right branch and shell.
+* New: several top-level `FoldableShellRoute`s in one `FoldableRouter` (e.g. a
+  `MainShellRoute` and a `StatisticShellRoute`). Their branch stacks are kept
+  independently, so `router.showShell(statisticShell)` switches shell while the
+  shell being left keeps its state. `FoldableRouter.shells` lists them.
+* New: when `FoldableRouterConfig.matcher` is null, the router matches URLs
+  against the declared route tree itself, so a tree-only app needs no matcher.
+* `FoldableRoute.routes` declares the routes nested under a route, for the
+  ancestor stack a deep link rebuilds.
+* `FoldableRouterBase` gains `openLocation`, `pushLocation`, `showShell` and
+  `shells`, so a route seen through `FoldableRouterScope` can switch shell and
+  navigate by location.
+* Breaking: the session layer is removed. `FoldableSession`,
+  `FoldableSessionSplit`, `FoldableSessionStack`, `FoldableSessionRouter`,
+  `FoldableSessionBackButton`, `FoldableRoute.session`, and the
+  `FoldableRouterBase.canCloseSession`/`closeSession`/`openSession` members are
+  gone.
+* Breaking: `FoldableRouter` now takes a route tree. Its constructor takes
+  `routes: List<FoldableRouteBase>` instead of `roots`. Group the tabs in a
+  `FoldableShellRoute(branches:, builder:)`, or use
+  `FoldableRouter.branches(branches: ...)` for the common tabbed app. Pass
+  `FoldableRouter.buildShell` as the delegate `builder`.
+* New: `FoldableShellRoute` groups the root of every branch (tab) behind a
+  shell and keeps the split two-pane navigator, like go_router's `ShellRoute`.
+  Plain top-level `FoldableRoute`s next to it are shown full screen.
+
 ## 0.2.0-dev.1
 
 * Breaking: the `go` family of navigations is renamed to `open`:

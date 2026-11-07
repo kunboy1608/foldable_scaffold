@@ -40,8 +40,12 @@ class _TabRoute extends FoldableRoute {
 }
 
 FoldableRouter _router({required bool lazy}) {
-  final router = FoldableRouter(
-    roots: const [_TabRoute('home'), _TabRoute('inbox'), _TabRoute('profile')],
+  final router = FoldableRouter.branches(
+    branches: const [
+      _TabRoute('home'),
+      _TabRoute('inbox'),
+      _TabRoute('profile'),
+    ],
     config: FoldableRouterConfig(
       matcher: (uri) => null,
       notFound: (uri) => const _TabRoute('missing'),

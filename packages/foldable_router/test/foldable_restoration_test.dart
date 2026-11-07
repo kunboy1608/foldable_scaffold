@@ -24,17 +24,6 @@ class _R extends FoldableRoute {
   }
 }
 
-/// The root of a branch.
-class _B extends BranchRoute {
-  const _B(this.path);
-
-  @override
-  final String path;
-
-  @override
-  Widget build(BuildContext context) => Text('screen $location');
-}
-
 /// A route that cannot be written into a URL.
 class _Hidden extends FoldableRoute {
   const _Hidden();
@@ -53,7 +42,6 @@ class _Hidden extends FoldableRoute {
 /// that exist after `restartAndRestore`.
 class _Runs {
   final routers = <FoldableRouter>[];
-  final sessionRouters = <FoldableSessionRouter>[];
   final events = <FoldableNavigationEvent>[];
   var redirects = 0;
 
@@ -71,11 +59,6 @@ class _Runs {
   };
 
   FoldableRouter get router => routers.last;
-  FoldableSessionRouter get sessionRouter => sessionRouters.last;
-
-  List<BranchRoute> branchesOf(List<String> roots) => [
-    for (final root in roots) _B(root),
-  ];
 
   List<FoldableRoute> rootsOf(List<String> roots) => [
     for (final root in roots) _R(root, onRedirect: () => redirects++),
@@ -111,11 +94,10 @@ class _Log extends FoldableRouterObserver {
 /// `restartAndRestore` (which unmounts and mounts the app) gets new ones, like
 /// a process that starts again.
 class _App extends StatefulWidget {
-  const _App({required this.runs, this.restorationId, this.sessions = false});
+  const _App({required this.runs, this.restorationId});
 
   final _Runs runs;
   final String? restorationId;
-  final bool sessions;
 
   @override
   State<_App> createState() => _AppState();
@@ -137,47 +119,18 @@ class _AppState extends State<_App> {
       );
     }
 
-    if (widget.sessions) {
-      final router = FoldableSessionRouter(
-        config: runs.config(['/a', '/b']),
-        sessions: [
-          // The one `_session` names comes first, so it is the base.
-          FoldableSessionSplit(
-            id: 'guest',
-            branches: runs.branchesOf(['/g']),
-            deepLinkable: true,
-            canActivate: (_) => _session == 'guest',
-          ),
-          FoldableSessionSplit(
-            id: 'main',
-            branches: runs.branchesOf(['/a', '/b']),
-            shell: (context, controller, navigator) =>
-                navigator((context, body, secondary) => secondary ?? body),
-          ),
-        ],
-      )..refresh();
-      runs.sessionRouters.add(router);
-      _router = router;
-      _delegate = FoldableRouterDelegate(
-        router: router,
-        navigatorKey: _navigatorKey,
-        builder: router.buildShell,
-        restorationId: widget.restorationId,
-      );
-    } else {
-      final router = FoldableRouter(
-        roots: runs.rootsOf(['/a', '/b', '/c']),
-        config: runs.config(['/a', '/b', '/c']),
-      );
-      runs.routers.add(router);
-      _router = router;
-      _delegate = FoldableRouterDelegate(
-        router: router,
-        navigatorKey: _navigatorKey,
-        builder: (context) => screen(router.controller),
-        restorationId: widget.restorationId,
-      );
-    }
+    final router = FoldableRouter.branches(
+      branches: runs.rootsOf(['/a', '/b', '/c']),
+      config: runs.config(['/a', '/b', '/c']),
+    );
+    runs.routers.add(router);
+    _router = router;
+    _delegate = FoldableRouterDelegate(
+      router: router,
+      navigatorKey: _navigatorKey,
+      builder: (context) => screen(router.controller),
+      restorationId: widget.restorationId,
+    );
   }
 
   @override
@@ -197,9 +150,6 @@ class _AppState extends State<_App> {
   }
 }
 
-/// The initial session of the session tests.
-String _session = 'main';
-
 List<String?> _names(FoldableRouter router, int branch) => [
   for (final page in router.controller.pagesOf(branch)) page.name,
 ];
@@ -207,12 +157,9 @@ List<String?> _names(FoldableRouter router, int branch) => [
 Future<_Runs> _start(
   WidgetTester tester, {
   String? restorationId = 'foldable_router',
-  bool sessions = false,
 }) async {
   final runs = _Runs();
-  await tester.pumpWidget(
-    _App(runs: runs, restorationId: restorationId, sessions: sessions),
-  );
+  await tester.pumpWidget(_App(runs: runs, restorationId: restorationId));
   await tester.pumpAndSettle();
   return runs;
 }
@@ -233,8 +180,6 @@ Future<void> _navigate(WidgetTester tester, FoldableRouter router) async {
 }
 
 void main() {
-  setUp(() => _session = 'main');
-
   testWidgets('restores every branch and the current branch', (tester) async {
     final runs = await _start(tester);
     await _navigate(tester, runs.router);
@@ -334,8 +279,8 @@ void main() {
 
     // Another version of the app: two tabs instead of three.
     final saved = runs.router.saveState();
-    final other = FoldableRouter(
-      roots: runs.rootsOf(['/a', '/b']),
+    final other = FoldableRouter.branches(
+      branches: runs.rootsOf(['/a', '/b']),
       config: runs.config(['/a', '/b']),
     );
     addTearDown(other.dispose);
@@ -541,61 +486,6 @@ void main() {
       runs.router.pop();
       expect(runs.events, hasLength(1));
       expect(runs.events.single.kind, FoldableNavigationKind.pop);
-    });
-  });
-
-  group('FoldableSessionRouter', () {
-    testWidgets('restores the active session and its stacks', (tester) async {
-      final runs = await _start(tester, sessions: true);
-      final router = runs.sessionRouter;
-      router.push<void>(const _R('/a/1'));
-      router.controller.openBranch(1);
-      router.push<void>(const _R('/b/1'));
-      router.push<void>(const _R('/b/2'));
-      await tester.pumpAndSettle();
-
-      await tester.restartAndRestore();
-      await tester.pumpAndSettle();
-
-      final restored = runs.sessionRouter;
-      expect(runs.sessionRouters, hasLength(2));
-      expect(restored.activeSessionId, 'main');
-      expect(restored.active.currentIndex, 1);
-      expect(_names(restored.active, 0), ['/a', '/a/1']);
-      expect(_names(restored.active, 1), ['/b', '/b/1', '/b/2']);
-      expect(restored.currentUri.toString(), '/b/2');
-      expect(find.text('screen /b/2'), findsOneWidget);
-    });
-
-    testWidgets('saves the active session only', (tester) async {
-      final runs = await _start(tester, sessions: true);
-      runs.sessionRouter.push<void>(const _R('/a/1'));
-      await tester.pump();
-
-      final state = runs.sessionRouter.saveState();
-
-      expect(state['session'], 'main');
-      expect((state['router'] as Map<String, Object?>)['branches'], [
-        ['/a/1'],
-        <String>[],
-      ]);
-      expect(state.keys, unorderedEquals(['session', 'router']));
-    });
-
-    testWidgets('the saved session wins over the initial one', (tester) async {
-      final runs = await _start(tester, sessions: true);
-      runs.sessionRouter.push<void>(const _R('/a/1'));
-      await tester.pumpAndSettle();
-
-      // The app starts on another session when it comes back.
-      _session = 'guest';
-      await tester.restartAndRestore();
-      await tester.pumpAndSettle();
-
-      final restored = runs.sessionRouter;
-      expect(restored.activeSessionId, 'main');
-      expect(restored.openSessionIds, ['main']);
-      expect(restored.active.pages, hasLength(2));
     });
   });
 

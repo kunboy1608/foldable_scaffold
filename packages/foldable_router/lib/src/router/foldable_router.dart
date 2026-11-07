@@ -4,7 +4,10 @@ import 'package:material_ui/material_ui.dart';
 
 import '../foldable_navigator.dart';
 import '../lazy_branch.dart';
+import '../route/foldable_path.dart';
 import '../route/foldable_route.dart';
+import '../route/foldable_route_base.dart';
+import '../route/foldable_shell_route.dart';
 import 'foldable_router_config.dart';
 import 'foldable_router_observer.dart';
 
@@ -13,7 +16,7 @@ import 'foldable_router_observer.dart';
 /// touching the delegate.
 ///
 /// [FoldableRouter] implements it; apps that own more than one router can mix
-/// it into their own coordinator, like a session router.
+/// it into their own coordinator.
 mixin FoldableRouterBase on Listenable {
   /// Where redirects get a [BuildContext] when a navigation starts without
   /// one.
@@ -64,21 +67,6 @@ mixin FoldableRouterBase on Listenable {
   /// nothing.
   void attachConfig(FoldableRouterConfig config) {}
 
-  /// Whether [closeSession] would close a session. False unless the router
-  /// stacks sessions, see [FoldableSessionRouter].
-  bool get canCloseSession => false;
-
-  /// Closes the session on screen and shows the one below, with [result] for
-  /// the future of [openSession]. Returns whether one was closed.
-  bool closeSession([Object? result]) => false;
-
-  /// Opens session [id] over the one on screen. See
-  /// [FoldableSessionRouter.openSession]; the default throws.
-  Future<T?> openSession<T extends Object?>(
-    String id, {
-    FoldableRoute? route,
-  }) => throw UnsupportedError('$runtimeType does not support sessions.');
-
   /// See [FoldableRouter.open]. Needed by [FoldableRoute.open]; the default
   /// throws.
   void open(BuildContext? context, FoldableRoute route) =>
@@ -107,6 +95,21 @@ mixin FoldableRouterBase on Listenable {
   }) => throw UnsupportedError(
     '$runtimeType does not support pushAndRemoveUntil.',
   );
+
+  /// See [FoldableRouter.openLocation]. The default throws.
+  void openLocation(String location) =>
+      throw UnsupportedError('$runtimeType does not support openLocation.');
+
+  /// See [FoldableRouter.pushLocation]. The default throws.
+  Future<void> pushLocation(String location, {BuildContext? context}) =>
+      throw UnsupportedError('$runtimeType does not support pushLocation.');
+
+  /// See [FoldableRouter.showShell]. The default throws.
+  void showShell(FoldableShellRoute shell, {int? branch}) =>
+      throw UnsupportedError('$runtimeType does not support showShell.');
+
+  /// The shell routes of the tree. Empty by default.
+  List<FoldableShellRoute> get shells => const [];
 }
 
 /// Gives the pages below a [FoldableRouterDelegate] their router, so a route
@@ -137,11 +140,38 @@ class FoldableRouterScope extends InheritedWidget {
       router != oldWidget.router;
 }
 
+/// Builds the default shell of [FoldableRouter.branches]: the top page full
+/// screen, or the two panes when the window is split.
+Widget _defaultShellBuilder(
+  BuildContext context,
+  FoldableNavigatorController controller,
+  Widget body,
+  Widget? secondaryBody,
+) => secondaryBody ?? body;
+
 /// Navigation on top of [FoldableNavigator]: one page stack per branch
 /// (tab), deep links, redirects and guards.
 ///
+/// Its [routes] are the top-level nodes of a route tree, like go_router:
+///
+/// * a [FoldableShellRoute] groups the roots of the branches (tabs) and draws
+///   them inside a shell, keeping the split two-pane behavior.
+/// * plain [FoldableRoute]s next to it are shown full screen, over the shell.
+///
 /// ```dart
-/// final router = FoldableRouter(roots: const [HomeRoute(), SettingsRoute()]);
+/// final router = FoldableRouter(
+///   routes: [
+///     FoldableShellRoute(
+///       branches: const [HomeRoute(), SettingsRoute()],
+///       builder: (context, controller, body, secondaryBody) =>
+///           FoldableScaffold(
+///             bodyBuilder: (_, _) => body,
+///             secondaryBodyBuilder: (_, _) => secondaryBody,
+///             hasSecondaryBody: secondaryBody != null,
+///           ),
+///     ),
+///   ],
+/// );
 ///
 /// // From code:
 /// router.push(const DetailsRoute());
@@ -152,7 +182,7 @@ class FoldableRouterScope extends InheritedWidget {
 ///   router: router,
 ///   config: FoldableRouterConfig(matcher: matchRoute, notFound: NotFoundRoute.new),
 ///   navigatorKey: rootNavigatorKey,
-///   builder: (context) => MyScaffold(controller: router.controller),
+///   builder: router.buildShell,
 /// ),
 /// routeInformationParser: const FoldableRouteInformationParser(),
 /// ```
@@ -169,21 +199,96 @@ class FoldableRouterScope extends InheritedWidget {
 /// charge of what a navigation actually shows.
 class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   FoldableRouter({
-    required this.roots,
+    required this.routes,
     FoldableRouterConfig? config,
     this.allowEmptyRoots = false,
   }) : _config = config,
        _observers = List.of(config?.observers ?? const []) {
     _remember();
-    _controller.addListener(_onControllerChanged);
+    for (final controller in _allControllers) {
+      controller.addListener(_onControllerChanged);
+    }
   }
 
-  /// The bottom page of every branch: the tabs of this router.
+  /// A router whose route tree is a single shell of [branches].
+  ///
+  /// Shorthand for the common tabbed app, where the route tree has one
+  /// [FoldableShellRoute] and no full-screen siblings. The shell builder shows
+  /// the top page full screen when the window is not split.
+  FoldableRouter.branches({
+    required List<FoldableRoute> branches,
+    FoldableRouterConfig? config,
+    bool allowEmptyRoots = false,
+  }) : this(
+         routes: branches.isEmpty
+             ? const []
+             : [
+                 FoldableShellRoute(
+                   branches: branches,
+                   builder: _defaultShellBuilder,
+                 ),
+               ],
+         config: config,
+         allowEmptyRoots: allowEmptyRoots,
+       );
+
+  /// The top-level nodes of the route tree: a [FoldableShellRoute] for the
+  /// tabs, and plain [FoldableRoute]s shown full screen.
+  final List<FoldableRouteBase> routes;
+
+  /// The shell routes of the tree, in declaration order.
+  ///
+  /// A router can hold several (e.g. a `MainShellRoute` and a
+  /// `StatisticShellRoute`); exactly one is shown at a time. Their branch
+  /// stacks are kept independently, so switching shells keeps each one's
+  /// state, see [showShell].
+  late final List<FoldableShellRoute> _shells = [
+    for (final route in routes)
+      if (route is FoldableShellRoute) route,
+  ];
+
+  /// The shell routes of the tree, in declaration order.
+  @override
+  List<FoldableShellRoute> get shells => List.unmodifiable(_shells);
+
+  /// The shell on screen, or null when the tree has none.
+  FoldableShellRoute? get shell =>
+      _shells.isEmpty ? null : _shells[_activeShell.clamp(0, _shells.length - 1)];
+
+  /// One controller per shell, keeping every shell's branch stacks alive
+  /// across switches.
+  late final List<FoldableNavigatorController> _shellControllers = [
+    for (final shellRoute in _shells)
+      _createController(shellRoute.branches, allowEmptyRoots),
+  ];
+
+  /// Used as the active controller when the tree has no shell at all.
+  final FoldableNavigatorController _emptyController =
+      FoldableNavigatorController.empty();
+
+  /// Index into [_shells] of the shell on screen.
+  int _activeShell = 0;
+
+  List<FoldableNavigatorController> get _allControllers => [
+    ..._shellControllers,
+    _emptyController,
+  ];
+
+  /// The full-screen routes of the tree, next to the shells.
+  late final List<FoldableRoute> _plainRoutes = [
+    for (final route in routes)
+      if (route is FoldableRoute) route,
+  ];
+
+  /// The full-screen route on screen, or null while a shell is shown.
+  FoldableRoute? _plainRoute;
+
+  /// The bottom page of every branch: the tabs of the shell on screen.
   ///
   /// A root also builds the URL of its branch, for example `/home`, and is
   /// where back goes when the branch has no page to pop and
   /// [FoldableRouterConfig.backTarget] says so.
-  final List<FoldableRoute> roots;
+  List<FoldableRoute> get roots => shell?.branches ?? const [];
 
   FoldableRouterConfig? _config;
 
@@ -213,15 +318,13 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   /// A router without roots starts with an empty stack: the first navigation
   /// fills it. Use it with a [FoldableStackNavigator]; a
   /// [FoldableSplitNavigator] needs a page in every branch.
-  ///
-  /// [FoldableSessionRouter] sets it for a `FoldableSessionStack` without an
-  /// `initRoute`.
   final bool allowEmptyRoots;
 
-  late final FoldableNavigatorController _controller = _createController(
-    roots,
-    allowEmptyRoots,
-  );
+  /// The controller of the shell on screen (or the empty controller when the
+  /// tree has no shell). All the single-shell methods of the router drive it.
+  FoldableNavigatorController get _controller => _shellControllers.isEmpty
+      ? _emptyController
+      : _shellControllers[_activeShell.clamp(0, _shellControllers.length - 1)];
   final List<FoldableRouterObserver> _observers;
 
   /// The branch and the pages of that branch at the last navigation that was
@@ -256,8 +359,8 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
     if (roots.isEmpty) {
       assert(
         allowEmptyRoots,
-        'Needs at least one root route. Only a stack session may start with '
-        'no roots.',
+        'Needs at least one root route. Only a router that starts empty may '
+        'have no roots.',
       );
       return FoldableNavigatorController.empty();
     }
@@ -289,6 +392,75 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   /// The page stacks this router drives.
   FoldableNavigatorController get controller => _controller;
 
+  /// Draws the active top-level route of the tree: a full-screen plain route,
+  /// or the shell around the branches. Pass it as the `builder` of
+  /// [FoldableRouterDelegate].
+  ///
+  /// The shell route's builder arranges the two panes, so a
+  /// [FoldableSplitNavigator] with the split behavior is used.
+  Widget buildShell(BuildContext context) {
+    final plain = _plainRoute;
+    if (plain != null) {
+      return KeyedSubtree(
+        key: ObjectKey(plain),
+        child: Builder(builder: plain.build),
+      );
+    }
+    if (_shells.isEmpty) return const SizedBox.shrink();
+    final index = _activeShell.clamp(0, _shells.length - 1);
+    final shellRoute = _shells[index];
+    final controller = _shellControllers[index];
+    return FoldableNavigator(
+      // Keyed by shell, so switching shells rebuilds the right one and each
+      // shell's controller keeps its stacks.
+      key: ValueKey(shellRoute),
+      controller: controller,
+      builder: (context, body, secondaryBody) =>
+          shellRoute.builder(context, controller, body, secondaryBody),
+    );
+  }
+
+  /// Shows [shellRoute] full screen, keeping every shell's branch stacks.
+  ///
+  /// This is how a screen moves from one shell to another (e.g. from the main
+  /// tabs to the statistics tabs) while the shell it leaves keeps its state.
+  /// Pass [branch] to also select a tab of the newly shown shell.
+  ///
+  /// ```dart
+  /// router.showShell(statisticShell, branch: 0);
+  /// ```
+  @override
+  void showShell(FoldableShellRoute shellRoute, {int? branch}) {
+    final index = _shells.indexOf(shellRoute);
+    if (index < 0) {
+      throw ArgumentError.value(
+        shellRoute,
+        'shellRoute',
+        'Not a shell route of this router.',
+      );
+    }
+    _activeShell = index;
+    final controller = _shellControllers[index];
+    if (branch != null) {
+      assert(branch >= 0 && branch < controller.branchCount);
+      controller.openBranch(branch);
+    }
+    if (_plainRoute != null) {
+      _plainRoute = null;
+    }
+    _remember();
+    notifyListeners();
+    _emit(FoldableNavigationKind.branch, null);
+  }
+
+  /// Whether [route] is one of the full-screen routes of the tree.
+  bool _isPlain(FoldableRoute route) {
+    for (final plain in _plainRoutes) {
+      if (plain.urlLocation == route.urlLocation) return true;
+    }
+    return false;
+  }
+
   /// Number of branches (tabs).
   int get branchCount => _controller.branchCount;
 
@@ -314,10 +486,15 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   FoldableRoute? get backTarget => config.backTarget?.call(this);
 
   @override
-  bool get backHasTarget => !_controller.canPop && backTarget != null;
+  bool get backHasTarget =>
+      _plainRoute != null || (!_controller.canPop && backTarget != null);
 
   @override
   void openBackTarget() {
+    if (_plainRoute != null) {
+      pop();
+      return;
+    }
     final target = backTarget;
     if (target != null) open(null, target);
   }
@@ -325,16 +502,210 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   /// The route for [location] (`/record?recordId=1`), or a not-found route.
   FoldableRoute routeOf(String location) => _routeOfUri(Uri.parse(location));
 
-  /// The route the matcher gives for [uri]. The platform opens `/` first, and
-  /// a matcher that does not know it would show the not-found page at startup:
+  /// The leaf route for [uri]. The platform opens `/` first, and a tree or a
+  /// matcher that does not know it would show the not-found page at startup:
   /// show the first root instead.
   FoldableRoute _routeOfUri(Uri uri) {
-    final matched = config.match(uri);
-    if (matched != null) return matched;
+    final config = this.config;
+    if (config.matcher != null) {
+      final matched = config.match(uri);
+      if (matched != null) return matched;
+    } else {
+      final entry = _entryForUri(uri);
+      if (entry != null) return entry.chain.last;
+    }
     if (roots.isNotEmpty && (uri.path.isEmpty || uri.path == '/')) {
       return roots.first;
     }
     return config.notFound(uri);
+  }
+
+  /// Every route of the declared tree, with the ancestors a deep link rebuilds.
+  late final List<_MatchEntry> _index = _buildIndex();
+
+  List<_MatchEntry> _buildIndex() {
+    final entries = <_MatchEntry>[];
+    for (final top in routes) {
+      if (top is FoldableShellRoute) {
+        for (var branch = 0; branch < top.branches.length; branch++) {
+          _walkRoutes(top.branches[branch], '', top, branch, const [], entries);
+        }
+      } else if (top is FoldableRoute) {
+        _walkRoutes(top, '', null, -1, const [], entries);
+      }
+    }
+    return entries;
+  }
+
+  void _walkRoutes(
+    FoldableRoute route,
+    String parentPath,
+    FoldableShellRoute? shell,
+    int branch,
+    List<FoldableRoute> ancestors,
+    List<_MatchEntry> entries,
+  ) {
+    final fullPath = _joinPath(parentPath, route.path);
+    final chain = [...ancestors, route];
+    entries.add(_MatchEntry(chain, shell, branch, fullPath));
+    for (final child in route.routes) {
+      _walkRoutes(child, fullPath, shell, branch, chain, entries);
+    }
+  }
+
+  static String _joinPath(String parent, String path) {
+    if (path.isEmpty) return parent.isEmpty ? '/' : parent;
+    if (path.startsWith('/')) return path;
+    if (parent.isEmpty || parent == '/') return '/$path';
+    return '$parent/$path';
+  }
+
+  /// The resolved full path of every route of [chain], root first.
+  static List<String> _fullPathsOfChain(List<FoldableRoute> chain) {
+    final paths = <String>[];
+    var parent = '';
+    for (final route in chain) {
+      parent = _joinPath(parent, route.path);
+      paths.add(parent);
+    }
+    return paths;
+  }
+
+  /// A page for [route] named after [name] (or unnamed when it has no URL),
+  /// like [FoldableRoute.toPage] but with a resolved full path.
+  static FoldablePage<void> _pageFor(FoldableRoute route, String? name) {
+    return FoldablePage<void>(
+      name: name,
+      transition: route.transition,
+      child: Builder(builder: route.buildPage),
+    );
+  }
+
+  /// The best tree route for [uri], with its ancestor chain, or null.
+  ///
+  /// With a [FoldableRouterConfig.matcher] the matcher picks the leaf and the
+  /// declared tree adds its ancestors (if any). Without one the tree itself is
+  /// matched, longest path first.
+  _MatchEntry? _entryForUri(Uri uri) {
+    final config = _config;
+    if (config?.matcher != null) {
+      final leaf = config!.match(uri);
+      if (leaf == null) return null;
+      return _indexEntryForLeaf(leaf) ?? _MatchEntry([leaf], null, -1, leaf.path);
+    }
+    _MatchEntry? best;
+    var bestSegments = -1;
+    for (final entry in _index) {
+      if (entry.pattern.match(uri) == null) continue;
+      if (entry.segmentCount > bestSegments) {
+        best = entry;
+        bestSegments = entry.segmentCount;
+      }
+    }
+    return best;
+  }
+
+  /// The tree entry whose leaf is [leaf], when it has ancestors to rebuild.
+  _MatchEntry? _indexEntryForLeaf(FoldableRoute leaf) {
+    for (final entry in _index) {
+      if (entry.chain.length > 1 &&
+          entry.chain.last.path == leaf.path &&
+          entry.chain.last.runtimeType == leaf.runtimeType) {
+        return entry;
+      }
+    }
+    return null;
+  }
+
+  /// Opens the chain of [entry] (deep link), running the redirects on its leaf
+  /// first. When a redirect sends the user to another route, that route is
+  /// shown instead, as a single page.
+  void _openChain(_MatchEntry entry, Uri uri) {
+    if (_disposed) return;
+    final context = rootContextOf?.call();
+    if (context == null) {
+      WidgetsBinding.instance
+        ..addPostFrameCallback((_) {
+          if (!_disposed) _openChain(entry, uri);
+        })
+        ..scheduleFrame();
+      return;
+    }
+    final FutureOr<FoldableRoute?> resolved;
+    try {
+      resolved = resolve(entry.chain.last, context: context, uri: uri);
+    } catch (error, stack) {
+      _reportRedirectError(error, stack);
+      return;
+    }
+    if (resolved is Future<FoldableRoute?>) {
+      resolved.then((target) {
+        if (target != null) _applyChainOrSingle(target, entry);
+      }, onError: _reportRedirectError);
+      return;
+    }
+    if (resolved != null) _applyChainOrSingle(resolved, entry);
+  }
+
+  void _applyChainOrSingle(FoldableRoute resolved, _MatchEntry entry) {
+    final leaf = entry.chain.last;
+    if (resolved.path == leaf.path &&
+        resolved.runtimeType == leaf.runtimeType) {
+      _applyChain(entry);
+    } else {
+      apply(resolved);
+    }
+  }
+
+  /// Shows the whole ancestor chain of [entry] in the branch it belongs to,
+  /// switching shell and branch as needed, go_router style.
+  void _applyChain(_MatchEntry entry) {
+    var shellRoute = entry.shell;
+    var branch = entry.branch;
+    if (shellRoute == null && _shells.isNotEmpty) {
+      final active = _shells[_activeShell.clamp(0, _shells.length - 1)];
+      branch = _branchIndexOf(entry.chain.first, active) ?? -1;
+      if (branch >= 0) shellRoute = active;
+    }
+    if (shellRoute == null) {
+      // A full-screen chain: show its leaf over everything.
+      _plainRoute = entry.chain.last;
+      notifyListeners();
+      _emit(FoldableNavigationKind.open, entry.chain.last);
+      return;
+    }
+    final shellIndex = _shells.indexOf(shellRoute);
+    _activeShell = shellIndex;
+    final controller = _shellControllers[shellIndex];
+    final fullPaths = _fullPathsOfChain(entry.chain);
+    final pages = [
+      for (var index = 0; index < entry.chain.length; index++)
+        _pageFor(
+          entry.chain[index],
+          entry.chain[index].deepLinkable ? fullPaths[index] : null,
+        ),
+    ];
+    if (_plainRoute != null) {
+      _plainRoute = null;
+      notifyListeners();
+    }
+    _announce(() {
+      controller.batch(() {
+        controller.setPages(pages, branch: branch);
+        controller.openBranch(branch);
+      });
+    });
+    _remember();
+    _emit(FoldableNavigationKind.open, entry.chain.last);
+  }
+
+  int? _branchIndexOf(FoldableRoute route, FoldableShellRoute shellRoute) {
+    for (var index = 0; index < shellRoute.branches.length; index++) {
+      if (shellRoute.branches[index].urlLocation == route.urlLocation) {
+        return index;
+      }
+    }
+    return null;
   }
 
   /// Follows [FoldableRoute.redirect] and then the router's redirect until a
@@ -534,6 +905,17 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   ///
   /// The result of a redirect, and what [open] ends up calling.
   void apply(FoldableRoute target, {Page<Object?>? parent}) {
+    // A plain top-level route is shown full screen, over the shell.
+    if (_isPlain(target)) {
+      _plainRoute = target;
+      notifyListeners();
+      _emit(FoldableNavigationKind.open, target);
+      return;
+    }
+    if (_plainRoute != null) {
+      _plainRoute = null;
+      notifyListeners();
+    }
     // An empty stack has no branch root to switch to yet: show the target as
     // its first page, even when it is a tab root.
     final branch = _controller.pages.isEmpty
@@ -575,9 +957,17 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
     _controller.setPages([...kept, target.toPage<void>()]);
   }
 
-  /// Shows the route for [location].
+  /// Shows the route for [location], rebuilding the ancestor stack of a deep
+  /// link, like [openUri].
+  @override
   void openLocation(String location) {
-    _open(routeOf(location), null, uri: Uri.parse(location));
+    final uri = Uri.parse(location);
+    final entry = _entryForUri(uri);
+    if (entry != null && entry.chain.length > 1) {
+      _openChain(entry, uri);
+      return;
+    }
+    _open(entry?.chain.last ?? _routeOfUri(uri), null, uri: uri);
   }
 
   /// Adds [route] on top of the current branch. Completes with the result of
@@ -604,6 +994,10 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
     FoldableRoute route, {
     BuildContext? context,
   }) {
+    if (_isPlain(route)) {
+      open(context, route);
+      return Future<T?>.value();
+    }
     final branch = _controller.currentIndex;
     return _pushResolved<T>(route, context, null, (target) {
       final Future<T?> future;
@@ -627,10 +1021,16 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
 
   /// Adds the route for [location] on top of the current branch, after the
   /// redirects. See [push].
+  @override
   Future<void> pushLocation(String location, {BuildContext? context}) {
     final uri = Uri.parse(location);
+    final route = _routeOfUri(uri);
+    if (_isPlain(route)) {
+      open(context, route);
+      return Future.value();
+    }
     final branch = _controller.currentIndex;
-    return _pushResolved<void>(_routeOfUri(uri), context, uri, (target) {
+    return _pushResolved<void>(route, context, uri, (target) {
       final future = _announce(
         () =>
             _controller.push<Object?>(target.toPage<Object?>(), branch: branch),
@@ -724,8 +1124,17 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   /// Removes the top page of the current branch.
   ///
   /// Returns whether a page was removed. See
-  /// [FoldableNavigatorController.pop].
-  bool pop([Object? result]) => _controller.pop(result);
+  /// [FoldableNavigatorController.pop]. When a full-screen plain route is on
+  /// screen, it is dismissed instead.
+  bool pop([Object? result]) {
+    if (_plainRoute != null) {
+      _plainRoute = null;
+      notifyListeners();
+      _emit(FoldableNavigationKind.pop, null);
+      return true;
+    }
+    return _controller.pop(result);
+  }
 
   /// Removes [page] and the pages above it from the branch that holds it, so
   /// a page in the body pane of a split view can pop itself.
@@ -758,6 +1167,10 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
     bool Function(Page<Object?> page) predicate, {
     BuildContext? context,
   }) {
+    if (_isPlain(route)) {
+      open(context, route);
+      return Future<T?>.value();
+    }
     final branch = _controller.currentIndex;
     return _pushResolved<T>(route, context, null, (target) {
       final Future<T?> future;
@@ -786,14 +1199,17 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   /// Replaces the top page of the current branch with [route], like
   /// [Navigator.pushReplacement]. The redirects run first, see [push].
   ///
-  /// The replaced page completes with null. A branch root created from
-  /// [FoldableRouterConfig.roots] is never replaced: when the top page is the
-  /// root, [route] is pushed on top of it instead.
+  /// The replaced page completes with null. A branch root is never replaced:
+  /// when the top page is the root, [route] is pushed on top of it instead.
   @override
   Future<T?> pushAndReplace<T extends Object?>(
     FoldableRoute route, {
     BuildContext? context,
   }) {
+    if (_isPlain(route)) {
+      open(context, route);
+      return Future<T?>.value();
+    }
     final branch = _controller.currentIndex;
     return _pushResolved<T>(route, context, null, (target) {
       final replace = roots.isEmpty || _controller.pagesOf(branch).length > 1;
@@ -820,8 +1236,13 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
     BuildContext? context,
   }) {
     final uri = Uri.parse(location);
+    final route = _routeOfUri(uri);
+    if (_isPlain(route)) {
+      open(context, route);
+      return Future.value();
+    }
     final branch = _controller.currentIndex;
-    return _pushResolved<void>(_routeOfUri(uri), context, uri, (target) {
+    return _pushResolved<void>(route, context, uri, (target) {
       final replace = roots.isEmpty || _controller.pagesOf(branch).length > 1;
       final page = target.toPage<Object?>();
       final future = _announce(
@@ -835,8 +1256,12 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   }
 
   /// Removes the top page. When there is none to remove, shows [fallback] or
-  /// the [backTarget].
+  /// the [backTarget]. A full-screen plain route is dismissed first.
   void back([FoldableRoute? fallback]) {
+    if (_plainRoute != null) {
+      pop();
+      return;
+    }
     if (_announce(() => _controller.pop())) {
       _emit(FoldableNavigationKind.pop, null);
       return;
@@ -856,13 +1281,42 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   /// restoration data.
   @override
   Map<String, Object?> saveState() {
-    final skip = roots.isEmpty ? 0 : 1;
+    final plain = _plainRoute?.urlLocation;
+    if (_shells.length <= 1) {
+      final controller = _controller;
+      final skip = roots.isEmpty ? 0 : 1;
+      return {
+        _indexKey: controller.currentIndex,
+        _branchesKey: [
+          for (var branch = 0; branch < controller.branchCount; branch++)
+            <String>[
+              for (final page in controller.pagesOf(branch).skip(skip))
+                if (page.name case final name?) name,
+            ],
+        ],
+        if (plain != null) _plainKey: plain,
+      };
+    }
     return {
-      _indexKey: currentIndex,
+      _shellIndexKey: _activeShell,
+      _shellsKey: [
+        for (var index = 0; index < _shells.length; index++)
+          _saveShell(index),
+      ],
+      if (plain != null) _plainKey: plain,
+    };
+  }
+
+  Map<String, Object?> _saveShell(int index) {
+    final controller = _shellControllers[index];
+    final shellRoots = _shells[index].branches;
+    final skip = shellRoots.isEmpty ? 0 : 1;
+    return {
+      _indexKey: controller.currentIndex,
       _branchesKey: [
-        for (var branch = 0; branch < branchCount; branch++)
+        for (var branch = 0; branch < controller.branchCount; branch++)
           <String>[
-            for (final page in _controller.pagesOf(branch).skip(skip))
+            for (final page in controller.pagesOf(branch).skip(skip))
               if (page.name case final name?) name,
           ],
       ],
@@ -882,10 +1336,61 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   @override
   void restoreState(Map<String, Object?> state) {
     if (_disposed) return;
+    final plainUrl = state[_plainKey];
+    if (plainUrl is String) {
+      final route = _routeOfUrl(plainUrl);
+      if (route != null && _isPlain(route)) {
+        _plainRoute = route;
+        notifyListeners();
+      }
+    }
+    if (state[_shellsKey] is List<Object?>) {
+      _restoreShells(state);
+      return;
+    }
+    if (_shells.length > 1) return;
+    _restoreBranches(_controller, roots, state, announce: true);
+  }
+
+  void _restoreShells(Map<String, Object?> state) {
+    final shells = state[_shellsKey];
+    if (shells is! List<Object?> || shells.length != _shells.length) return;
+    final saved = <int, Map<String, Object?>>{};
+    for (var index = 0; index < shells.length; index++) {
+      final value = shells[index];
+      if (value is! Map<String, Object?>) return;
+      saved[index] = value;
+    }
+    final active = state[_shellIndexKey];
+    final activeIndex = active is int && active >= 0 && active < _shells.length
+        ? active
+        : 0;
+    _announce(() {
+      for (final entry in saved.entries) {
+        _restoreBranches(
+          _shellControllers[entry.key],
+          _shells[entry.key].branches,
+          entry.value,
+        );
+      }
+      _activeShell = activeIndex;
+    });
+  }
+
+  /// Puts back the branch stacks of one shell from [state], ignoring a
+  /// snapshot that does not fit (wrong count, out of range, malformed).
+  void _restoreBranches(
+    FoldableNavigatorController controller,
+    List<FoldableRoute> shellRoots,
+    Map<String, Object?> state, {
+    bool announce = false,
+  }) {
     final index = state[_indexKey];
     final saved = state[_branchesKey];
     if (index is! int || saved is! List<Object?>) return;
-    if (saved.length != branchCount || index < 0 || index >= branchCount) {
+    if (saved.length != controller.branchCount ||
+        index < 0 ||
+        index >= controller.branchCount) {
       return;
     }
     final stacks = <List<String>>[];
@@ -893,21 +1398,36 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
       if (urls is! List<Object?> || urls.any((url) => url is! String)) return;
       stacks.add(urls.cast<String>());
     }
-
-    _announce(() {
-      _controller.batch(() {
+    void apply() {
+      controller.batch(() {
         for (var branch = 0; branch < stacks.length; branch++) {
-          final pages = _restoredPages(branch, stacks[branch]);
-          if (pages.isNotEmpty) _controller.setPages(pages, branch: branch);
+          final pages = _restoredPages(
+            controller,
+            shellRoots,
+            branch,
+            stacks[branch],
+          );
+          if (pages.isNotEmpty) controller.setPages(pages, branch: branch);
         }
-        _controller.openBranch(index);
+        controller.openBranch(index);
       });
-    });
+    }
+
+    if (announce) {
+      _announce(apply);
+    } else {
+      apply();
+    }
   }
 
-  List<Page<Object?>> _restoredPages(int branch, List<String> urls) {
-    final current = _controller.pagesOf(branch);
-    final root = roots.isEmpty || current.isEmpty
+  List<Page<Object?>> _restoredPages(
+    FoldableNavigatorController controller,
+    List<FoldableRoute> shellRoots,
+    int branch,
+    List<String> urls,
+  ) {
+    final current = controller.pagesOf(branch);
+    final root = shellRoots.isEmpty || current.isEmpty
         ? const <Page<Object?>>[]
         : [current.first];
     return [
@@ -917,21 +1437,34 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
     ];
   }
 
-  /// The page for a saved URL, or null when no route matches it.
-  Page<Object?>? _pageOfUrl(String url) {
+  /// The route for a saved URL, or null when nothing matches it.
+  FoldableRoute? _routeOfUrl(String url) {
     try {
-      return config.match(Uri.parse(url))?.toPage<void>();
+      final uri = Uri.parse(url);
+      if (_config?.matcher != null) return config.match(uri);
+      return _entryForUri(uri)?.chain.last;
     } on FormatException {
       return null;
     }
   }
 
+  /// The page for a saved URL, or null when no route matches it.
+  Page<Object?>? _pageOfUrl(String url) => _routeOfUrl(url)?.toPage<void>();
+
   static const _indexKey = 'index';
   static const _branchesKey = 'branches';
+  static const _plainKey = 'plain';
+  static const _shellIndexKey = 'shell';
+  static const _shellsKey = 'shells';
 
   /// The URL for the address bar: the top page that has one.
   @override
   Uri get currentUri {
+    final plain = _plainRoute;
+    if (plain != null) {
+      final url = plain.urlLocation;
+      if (url != null) return Uri.parse(url);
+    }
     for (final page in _controller.pages.reversed) {
       final name = page.name;
       if (name != null) return Uri.parse(name);
@@ -950,13 +1483,18 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
 
     final pages = _controller.pages;
     final below = pages.length > 1 ? pages[pages.length - 2].name : null;
-    if (below != null && below == uri.toString()) {
+    if (_plainRoute == null && below != null && below == uri.toString()) {
       if (_announce(() => _controller.pop())) {
         _emit(FoldableNavigationKind.pop, null);
       }
       return;
     }
-    _open(_routeOfUri(uri), null, uri: uri);
+    final entry = _entryForUri(uri);
+    if (entry != null && entry.chain.length > 1) {
+      _openChain(entry, uri);
+      return;
+    }
+    _open(entry?.chain.last ?? _routeOfUri(uri), null, uri: uri);
   }
 
   /// Runs a change of the controller that the caller announces itself with
@@ -1032,8 +1570,40 @@ class FoldableRouter extends ChangeNotifier with FoldableRouterBase {
   @override
   void dispose() {
     _disposed = true;
-    _controller.removeListener(_onControllerChanged);
-    _controller.dispose();
+    for (final controller in _allControllers) {
+      controller.removeListener(_onControllerChanged);
+      controller.dispose();
+    }
     super.dispose();
+  }
+}
+
+/// One route of the declared tree, with the ancestors a deep link rebuilds.
+class _MatchEntry {
+  _MatchEntry(this.chain, this.shell, this.branch, String fullPath)
+    : pattern = FoldablePath(fullPath),
+      segmentCount = _countSegments(fullPath);
+
+  /// The route and its ancestors, root first, leaf last.
+  final List<FoldableRoute> chain;
+
+  /// The shell the chain belongs to, or null for a full-screen chain.
+  final FoldableShellRoute? shell;
+
+  /// The branch (tab) index inside [shell], or -1 when there is no shell.
+  final int branch;
+
+  /// The full path pattern of the leaf.
+  final FoldablePath pattern;
+
+  /// Number of path segments in [pattern], to prefer the most specific match.
+  final int segmentCount;
+
+  static int _countSegments(String path) {
+    var count = 0;
+    for (final segment in path.split('/')) {
+      if (segment.isNotEmpty) count++;
+    }
+    return count;
   }
 }

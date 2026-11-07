@@ -2,7 +2,7 @@ import 'package:material_ui/material_ui.dart';
 
 import 'foldable_route.dart';
 
-/// The root route of a branch (tab) of a `FoldableSessionSplit`.
+/// The root route of a branch (tab) of a `FoldableShellRoute`.
 ///
 /// ```dart
 /// class HomeRoute extends BranchRoute {
@@ -15,7 +15,7 @@ import 'foldable_route.dart';
 ///   Widget build(BuildContext context) => const HomeScreen();
 /// }
 ///
-/// FoldableSessionSplit(id: 'main', branches: const [HomeRoute(), InboxRoute()]);
+/// FoldableShellRoute(branches: const [HomeRoute(), InboxRoute()], builder: ...);
 /// ```
 ///
 /// The position in `branches` is the index of the branch. A branch root is the

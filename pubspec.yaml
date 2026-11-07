@@ -44,3 +44,6 @@ melos:
     upgrade:
       description: Upgrade dependencies in the workspace.
       run: fvm flutter pub upgrade
+    get:
+      description: Get dependencies in the workspace.
+      run: fvm dart run melos exec -c 4 -- flutter pub get

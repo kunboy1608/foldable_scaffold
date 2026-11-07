@@ -5,6 +5,7 @@ import 'package:material_ui/material_ui.dart';
 import '../foldable_page.dart';
 import '../foldable_page_transition.dart';
 import '../router/foldable_router.dart';
+import 'foldable_route_base.dart';
 import 'route_query.dart';
 
 /// What a redirect can look at, like go_router's `GoRouterState`.
@@ -37,7 +38,7 @@ class FoldableRouteState {
 /// URL as primitives only. Every route can still be pushed from code, with any
 /// object passed to its constructor.
 @immutable
-abstract class FoldableRoute {
+abstract class FoldableRoute extends FoldableRouteBase {
   const FoldableRoute();
 
   /// Path without query parameters, e.g. `/record`.
@@ -59,18 +60,18 @@ abstract class FoldableRoute {
   /// from outside, such as a confirmation step.
   bool get deepLinkable => true;
 
-  /// The id of the `FoldableSession` that shows this route, or null for the
-  /// session on screen.
-  ///
-  /// With a `FoldableSessionRouter`, `open`/`push` of a route that names another
-  /// session first puts that session on top: it is created when it is not
-  /// open, or moved to the top when it is. Redirects and the route then run in
-  /// that session. URLs ignore it: a location is matched in the session on
-  /// screen (see `FoldableSession.deepLinkable`).
-  String? get session => null;
-
   /// Builds the screen.
   Widget build(BuildContext context);
+
+  /// The routes nested under this one, go_router style.
+  ///
+  /// They belong to the same branch stack: a deep link to a nested route
+  /// activates every ancestor and rebuilds the whole stack from the root to
+  /// the leaf. Each path is resolved against this route's path, or is
+  /// absolute when it starts with `/`.
+  ///
+  /// Defaults to no children.
+  List<FoldableRoute> get routes => const [];
 
   /// What a page shows for this route. Calls [build]; a [BranchRoute] wraps
   /// it. Override [build], not this.

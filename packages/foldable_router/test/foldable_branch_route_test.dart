@@ -69,7 +69,7 @@ class _AppBarPage extends FoldableRoute {
 }
 
 Future<FoldableRouter> _pump(WidgetTester tester, BranchRoute tab) async {
-  final router = FoldableRouter(roots: [tab]);
+  final router = FoldableRouter.branches(branches: [tab]);
   addTearDown(router.dispose);
   await tester.pumpWidget(
     MaterialApp(home: FoldableNavigator.stack(controller: router.controller)),
@@ -99,7 +99,7 @@ void main() {
     tester,
   ) async {
     Future<void> pump(BranchRoute tab) async {
-      final router = FoldableRouter(roots: [tab]);
+      final router = FoldableRouter.branches(branches: [tab]);
       addTearDown(router.dispose);
       router.controller.push(const _AppBarPage().toPage<void>());
       await tester.pumpWidget(
@@ -140,7 +140,9 @@ void main() {
   });
 
   testWidgets('a BranchRoute can keep its back button', (tester) async {
-    final stack = FoldableRouter(roots: const [_Tab('/tab', hide: false)]);
+    final stack = FoldableRouter.branches(
+      branches: const [_Tab('/tab', hide: false)],
+    );
     addTearDown(stack.dispose);
     stack.controller.push(const _Page().toPage<void>());
     // Back on the root page: shown, because the stack can pop.
@@ -166,7 +168,7 @@ void main() {
     tester,
   ) async {
     Future<void> pump(BranchRoute tab) async {
-      final router = FoldableRouter(roots: [tab]);
+      final router = FoldableRouter.branches(branches: [tab]);
       addTearDown(router.dispose);
       router.controller.push(const _Page().toPage<void>());
       await tester.pumpWidget(

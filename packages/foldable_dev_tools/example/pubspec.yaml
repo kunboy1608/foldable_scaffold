@@ -10,9 +10,13 @@ dependencies:
   flutter:
     sdk: flutter
   foldable_dev_tools: ^0.1.0-dev.1
-  foldable_router: ^0.1.0-dev.1
+  foldable_router: ^0.2.0-dev.1
   foldable_scaffold: ^0.1.0-dev.1
   material_ui: ^1.1.0
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
 
 flutter:
   uses-material-design: true

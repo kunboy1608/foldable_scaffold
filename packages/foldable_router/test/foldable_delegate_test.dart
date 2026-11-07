@@ -114,8 +114,8 @@ FoldableRouter _router({
   bool throwOnRedirectLoop = true,
   FoldableBackTarget? backTarget,
 }) {
-  final router = FoldableRouter(
-    roots: const [_HomeRoute(), _SecondRoute()],
+  final router = FoldableRouter.branches(
+    branches: const [_HomeRoute(), _SecondRoute()],
     config: FoldableRouterConfig(
       matcher: _match,
       notFound: _NotFoundRoute.new,
@@ -548,7 +548,7 @@ void main() {
   });
 
   test('the delegate hands its config to the router', () {
-    final router = FoldableRouter(roots: const [_HomeRoute()]);
+    final router = FoldableRouter.branches(branches: const [_HomeRoute()]);
     addTearDown(router.dispose);
     expect(() => router.routeOf('/second'), throwsStateError);
 

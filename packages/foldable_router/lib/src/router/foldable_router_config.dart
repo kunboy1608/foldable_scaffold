@@ -29,7 +29,7 @@ typedef FoldableBackTarget = FoldableRoute? Function(FoldableRouter router);
 
 /// What the routers of an app share: how URLs map to routes, redirects, back,
 /// observers. Pass it to the [FoldableRouterDelegate]; the roots (tabs) belong
-/// to each session, see [FoldableSession.roots].
+/// to each router, see `FoldableShellRoute.branches`.
 ///
 /// ```dart
 /// final config = FoldableRouterConfig(
@@ -44,7 +44,7 @@ typedef FoldableBackTarget = FoldableRoute? Function(FoldableRouter router);
 /// ```
 class FoldableRouterConfig {
   const FoldableRouterConfig({
-    required this.matcher,
+    this.matcher,
     required this.notFound,
     this.redirect,
     this.stateExtra,
@@ -58,19 +58,26 @@ class FoldableRouterConfig {
 
   /// The route for a URL, or null when no route matches.
   ///
+  /// Optional: when it is null the router matches URLs against the declared
+  /// route tree itself (the `path` of every route, nested `routes`
+  /// included), go_router style, rebuilding the whole stack of a deep link.
+  ///
   /// The platform opens `/` first. When the matcher returns null for `/`, the
-  /// router shows the first root of the session instead of [notFound].
-  final FoldableRouteMatcher matcher;
+  /// router shows the first root instead of [notFound].
+  final FoldableRouteMatcher? matcher;
 
   /// The route [matcher] gives for [uri], unless it is not
   /// [FoldableRoute.deepLinkable]: such a route can never be opened from a URL,
   /// so it is treated as not matched.
+  ///
+  /// Returns null when there is no [matcher]; the router then matches the URL
+  /// against its route tree.
   FoldableRoute? match(Uri uri) {
-    final route = matcher(uri);
+    final route = matcher?.call(uri);
     return route != null && route.deepLinkable ? route : null;
   }
 
-  /// The route shown for a URL that matches nothing, in every session.
+  /// The route shown for a URL that matches nothing.
   final FoldableRouteFactory notFound;
 
   /// Runs on every navigation, after [FoldableRoute.redirect], like

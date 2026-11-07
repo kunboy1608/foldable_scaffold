@@ -1,7 +1,7 @@
 # foldable_router
 
 > [!WARNING]
-> **Experimental.** This is a prerelease (`0.1.0-dev.1`). The API will change
+> **Experimental.** This is a prerelease (`0.2.0-dev.1`). The API will change
 > without notice and the package is not ready for production use.
 
 Navigation for foldable apps: one page stack per branch (tab), Cupertino page
@@ -16,6 +16,15 @@ plumbing comes from
 
 ## Features
 
+- **Route tree with shells.** `FoldableRouter` takes top-level routes;
+  `FoldableShellRoute` groups the roots of the tabs (branches) behind a shell
+  and keeps the split two-pane behavior, like go_router's `ShellRoute`. Declare
+  several shells (e.g. a main and a statistics one); their stacks are kept and
+  `router.showShell(...)` switches between them without losing state.
+- **go_router style routes.** `NormalRoute(path:, builder:, routes: [...])`
+  declares a screen with nested sub-routes. A deep link to a nested page
+  rebuilds the whole ancestor stack (`Home > Calendar > Event`) and activates
+  the right branch and shell.
 - **Two navigators.** `FoldableNavigator(...)` keeps one stack per tab in two
   panes; `FoldableNavigator.stack(...)` shows only the top page of the current
   branch, full screen, without keeping branches.
@@ -44,7 +53,7 @@ plumbing comes from
 ## Install
 
 ```sh
-flutter pub add foldable_router:^0.1.0-dev.1
+flutter pub add foldable_router:^0.2.0-dev.1
 ```
 
 ## Quick start
@@ -116,36 +125,39 @@ FoldableRoute? _match(Uri uri) => switch (uri.path) {
 const detailsPath = FoldablePath('/details/:id');
 // detailsPath.match(Uri.parse('/details/3'))?.string('id') == '3'
 
-// 2. The router: only the roots (tabs) live here.
-final router = FoldableRouter(roots: const [HomeRoute(), SettingsRoute()]);
-
-// 3. Platform glue, created once.
-final navigatorKey = GlobalKey<NavigatorState>();
-final delegate = FoldableRouterDelegate(
-  router: router,
-  // What the routers share, passed once: matcher, notFound, redirects, back.
+// 2. The router: a route tree with one shell route (the tabs).
+final router = FoldableRouter(
+  routes: [
+    FoldableShellRoute(
+      branches: const [HomeRoute(), SettingsRoute()],
+      builder: (context, controller, body, secondaryBody) => FoldableScaffold(
+        bodyBuilder: (_, _) => body,
+        secondaryBodyBuilder: (_, _) => secondaryBody,
+        hasSecondaryBody: secondaryBody != null,
+        primaryNavigationBuilder: (context, constraints, padding) =>
+            NavigationRail(
+              selectedIndex: controller.currentIndex,
+              onDestinationSelected: (index) =>
+                  router.open(null, router.roots[index]),
+              destinations: const [/* ... */],
+            ),
+      ),
+    ),
+  ],
   config: FoldableRouterConfig(
     matcher: _match,
     notFound: (uri) => NotFoundRoute(uri),
     branchOf: (route) => route is TabRoute ? route.tab : null,
     backTarget: (router) => router.currentIndex == 0 ? null : router.roots.first,
   ),
+);
+
+// 3. Platform glue, created once.
+final navigatorKey = GlobalKey<NavigatorState>();
+final delegate = FoldableRouterDelegate(
+  router: router,
   navigatorKey: navigatorKey,
-  builder: (context) => FoldableNavigator(
-    controller: router.controller,
-    builder: (context, body, secondaryBody) => FoldableScaffold(
-      bodyBuilder: (_, _) => body,
-      secondaryBodyBuilder: (_, _) => secondaryBody,
-      hasSecondaryBody: secondaryBody != null,
-      primaryNavigationBuilder: (context, constraints, padding) =>
-          NavigationRail(
-            selectedIndex: router.currentIndex,
-            onDestinationSelected: (index) =>
-                router.open(null, router.roots[index]),
-            destinations: const [/* ... */],
-          ),
-    ),
-  ),
+  builder: router.buildShell,
 );
 
 // 4. MaterialApp.
@@ -195,10 +207,10 @@ FoldableNavigator.stack(controller: router.controller);
 ```
 
 A stack may start with no page: `FoldableNavigatorController.empty()` shows
-nothing until the first page arrives. Likewise, a stack session may leave
-`roots` empty (`FoldableRouter(roots: const [])`); its first navigation fills the
-stack. A `FoldableSessionStack` has an `initRoute` instead, and a
-`FoldableSessionSplit` needs at least one branch.
+nothing until the first page arrives. Likewise, a router may leave its shell
+route's branches empty (`FoldableRouter.branches(branches: const [])` with
+`allowEmptyRoots: true`); its first navigation fills the stack. A
+`FoldableShellRoute` needs at least one branch.
 
 Both support push, pop, `FoldableBackButton`, the system back button and the
 left-edge swipe back, and share `FoldableNavigator.of`, `pageOf`,
@@ -434,55 +446,40 @@ those at rest and hidden, and must return the same widget types for every role
 (change properties, not the tree). Pages keep their state either way, but a
 different tree re-creates their render objects.
 
-## Sessions
+## Shell route and the route tree
 
-An app that is more than one flow, for example sign in, onboarding and the
-tabs, uses `FoldableSessionRouter`. Each `FoldableSession` (`FoldableSessionSplit` with `branches`, or `FoldableSessionStack` with an optional `initRoute`) has its own roots,
-redirects, **navigator** and optional **shell**, so one flow can fill the
-screen with only its top page while another has a navigation rail. One session
-is on screen at first, chosen by the conditions below; others open over it and close again:
+`FoldableRouter` takes a list of top-level routes, like go_router.
+`FoldableShellRoute` groups the roots of the tabs (branches) and draws them
+inside a shell, and plain `FoldableRoute`s next to it are shown full screen.
+The shell keeps the split two-pane navigator, so `FoldableShellRoute` carries
+the split behavior without any activation or stacking machinery.
 
 ```dart
-final router = FoldableSessionRouter(
-  sessions: [
-    FoldableSessionStack(
-      id: 'onboarding',
-      initRoute: const WelcomeRoute(),
-      // Top page only: no tabs, no scaffold, no pages kept below it.
-      // May be async. Checked by router.refresh().
-      canActivate: (context) async => !await context.read<Auth>().isOnboarded,
-    ),
-    FoldableSessionSplit(
-      id: 'main',
-      // BranchRoutes: the root pages of the tabs. They never show a back button; use FoldableAppBar for the bar.
+final router = FoldableRouter(
+  routes: [
+    FoldableShellRoute(
+      // BranchRoutes: the roots of the tabs. They never show a back button;
+      // use FoldableAppBar for the bar.
       branches: const [HomeRoute(), SettingsRoute()],
-      disposeOnLeave: true, // forget the stacks when leaving
-      canActivate: (context) async => await context.read<Auth>().isOnboarded,
-      // A shell arranges the panes. The session builds the navigator of the
-      // kind selected above and hands it to the shell.
-      shell: (context, controller, navigator) => navigator(
-        (context, body, secondaryBody) => FoldableScaffold(
-          bodyBuilder: (_, _) => body,
-          secondaryBodyBuilder: (_, _) => secondaryBody,
-          hasSecondaryBody: secondaryBody != null,
-          primaryNavigationBuilder: (context, constraints, padding) =>
-              NavigationRail(
-                selectedIndex: controller.currentIndex,
-                // router.open(null, tabs[index]) runs redirects.
-                onDestinationSelected: controller.openBranch,
-                destinations: const [/* ... */],
-              ),
-        ),
+      builder: (context, controller, body, secondaryBody) => FoldableScaffold(
+        bodyBuilder: (_, _) => body,
+        secondaryBodyBuilder: (_, _) => secondaryBody,
+        hasSecondaryBody: secondaryBody != null,
+        primaryNavigationBuilder: (context, constraints, padding) =>
+            NavigationRail(
+              selectedIndex: controller.currentIndex,
+              // router.open(null, tabs[index]) runs redirects.
+              onDestinationSelected: (index) =>
+                  router.open(null, router.roots[index]),
+              destinations: const [/* ... */],
+            ),
       ),
     ),
+    // A full-screen route, shown over the shell when opened.
+    SignInRoute(),
   ],
-  // Called by refresh() when no session is left.
-  onNoSession: (router) => showLockedScreen(),
+  config: appConfig,
 );
-
-// The router does not watch the app state: tell it when that changes.
-auth.addListener(router.refresh);
-await router.refresh(); // once at start up, e.g. behind your splash screen
 
 FoldableRouterDelegate(
   router: router,
@@ -491,43 +488,21 @@ FoldableRouterDelegate(
 );
 ```
 
-Say when a session exists with `canActivate`, sync or async, for example
-`canActivate: (context) async => await context.read<Auth>().isLoggedIn` on `main` and the opposite on
-`guest`. The router never calls it by itself; **`router.refresh()`** does,
-for every session in parallel, with the `BuildContext` of the root navigator
-(read from it before the first `await`; if `refresh()` runs before the first
-frame it waits for that context):
+- The shell route's `branches` are the router's `roots`; a root builds the URL
+  of its branch (for example `/home`) and is where back goes when the branch
+  has nothing to pop.
+- Its `builder` arranges the two panes, with the same `(context, controller,
+  body, secondaryBody)` a `FoldableNavigator` builder gets. `router.buildShell`
+  renders it, or a plain top-level route when one is on screen.
+- A plain route next to the shell is a full-screen sibling: opening one covers
+  the shell, and back returns to it. To add a page inside the current branch
+  instead, `push` a route that is not one of the top-level routes.
+- `FoldableRouter.branches(branches: ...)` is shorthand for a tree with a
+  single shell route whose builder shows the top page full screen.
 
-- a session that does not hold is closed with its page stacks, and so is every
-  session that names it as its `parent` (a checkout over `main`);
-- when the session on screen goes, the one below it is shown; when none is left,
-  the first session (in the order of `sessions`) that holds and is not
-  `canBeBase: false` becomes the base, and when there is none `onNoSession` is
-  called;
-- until the first `refresh()` completes nothing is on screen (`buildShell` draws
-  nothing, so show your own splash). URLs and `open`/`push` calls that arrive
-  meanwhile wait, and so they do while any later `refresh()` runs. A URL for a
-  session that does not exist yet is kept until it does.
-
-Call `refresh()` whenever the state the conditions read changes, such as sign in
-or sign out. This is not a redirect: a session that does not exist is simply not
-opened (`onActivationDenied` is told), and nothing is shown in its place.
-
-A `FoldableSessionStack` without an `initRoute` starts with no page, like a
-`Navigator` with no routes: it draws nothing until a route is shown in it
-(`openSession('flow', route: ...)`, or a route that names it). The last page is
-not popped, and back at it closes the session.
-
-A route names the session that shows it with `FoldableRoute.session`. `open`,
-`push` and the other route methods of a route of another session create that
-session over the current one, or move it to the top if it is open; null keeps
-the session on screen. `router.closeSession(result)` closes the top session
-(the one below keeps its stacks), and `FoldableSessionBackButton` in an app bar
-does the same, shown only while a session can be closed. `router.resetSession('main')` starts over from one existing session, and
-`replaceSession('main', route: const HomeRoute())` replaces just
-the one on screen. `open`, `push` and `back` act on the session on screen. A URL
-the active session does not know can switch to another session, but only one
-marked `deepLinkable`.
+There is no session layer. Model app flows with redirects and guards (see
+[Redirects and guards](#redirects-and-guards)), or with more than one router
+the app swaps itself using the `FoldableRouterBase` mixin.
 
 ## State restoration
 
@@ -563,9 +538,8 @@ first frame:
   re-creates what the user already saw.
 - A snapshot that does not fit the config (another number of branches, a
   branch index out of range) is ignored.
-- For a `FoldableSessionRouter` the active session and its stacks are saved. A
-  snapshot saved for another session than the first one puts that session on
-  screen, alone.
+- The plain top-level route on screen, if any, is saved by its URL and shown
+  again over the shell.
 - The startup route from the platform is applied after the restore, so on a
   restored app it equals the page on top and changes nothing.
 
@@ -602,9 +576,8 @@ A custom `FoldableRouterBase` saves nothing unless it overrides `saveState` and
 
 ## Example
 
-Run the [example](example/) for three sessions: signed out (sign in,
-sign up), onboarding, and a tabbed home that has a button for every way to
-navigate (`push`, `push` with a result, `open` with and without a context,
-`openLocation`, `pushLocation`, `batch`, `pushAndRemoveUntil`, `popUntil`,
-redirects), with swipe back and deep links. The first two sessions use the stack
-navigator, so they fill the screen with only the top page.
+Run the [example](example/) for a tabbed home drawn by a `FoldableShellRoute`,
+with a button for every way to navigate (`push`, `push` with a result, `open`
+with and without a context, `openLocation`, `pushLocation`, `batch`,
+`pushAndRemoveUntil`, `popUntil`, redirects), with swipe back and deep links.
+`FoldableNavigator.stack` is still available for flows without tabs.

@@ -64,8 +64,8 @@ class FoldableRouterDelegate extends RouterDelegate<Uri>
   final FoldableRouterBase router;
 
   /// What the routers of the app share: the URL matcher, `notFound`,
-  /// redirects, back target and observers. Handed to [router], which passes it
-  /// on to all its sessions. Null when the router was given one itself.
+  /// redirects, back target and observers. Handed to [router]. Null when the
+  /// router was given one itself.
   final FoldableRouterConfig? config;
 
   /// Builds the app shell (usually the widget with the [Navigator] pages of

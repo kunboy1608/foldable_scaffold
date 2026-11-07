@@ -1,43 +1,5 @@
 import 'package:material_ui/material_ui.dart';
 
-/// Full screen page for the sign in and onboarding sessions: no scaffold
-/// bar, no navigation rail, just a title, a body and actions.
-class FullScreenPage extends StatelessWidget {
-  const FullScreenPage({
-    required this.title,
-    required this.body,
-    required this.actions,
-    super.key,
-  });
-
-  final String title;
-  final String body;
-  final List<Widget> actions;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: SafeArea(
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(title, style: Theme.of(context).textTheme.headlineMedium),
-                const SizedBox(height: 8),
-                Text(body, textAlign: TextAlign.center),
-                const SizedBox(height: 24),
-                ...actions,
-              ],
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
 /// A titled group of [LabAction]s in the navigation lab.
 class LabSection extends StatelessWidget {
   const LabSection(this.title, {super.key});

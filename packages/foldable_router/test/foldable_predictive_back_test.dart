@@ -520,8 +520,8 @@ void main() {
   testWidgets('under the router delegate one gesture pops one page', (
     tester,
   ) async {
-    final router = FoldableRouter(
-      roots: const [_Route('/a')],
+    final router = FoldableRouter.branches(
+      branches: const [_Route('/a')],
       config: FoldableRouterConfig(
         matcher: (uri) => _Route(uri.path == '/' ? '/a' : uri.path),
         notFound: (uri) => _Route(uri.path),

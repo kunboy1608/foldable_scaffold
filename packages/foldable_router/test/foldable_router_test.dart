@@ -64,8 +64,8 @@ FoldableRoute? _match(Uri uri) {
 }
 
 FoldableRouter _router() {
-  return FoldableRouter(
-    roots: const [_HomeRoute(), _SecondRoute()],
+  return FoldableRouter.branches(
+    branches: const [_HomeRoute(), _SecondRoute()],
     config: FoldableRouterConfig(
       matcher: _match,
       notFound: _NotFoundRoute.new,
@@ -215,8 +215,8 @@ void main() {
           ),
         ),
       );
-      final router = FoldableRouter(
-        roots: const [_HomeRoute()],
+      final router = FoldableRouter.branches(
+        branches: const [_HomeRoute()],
         config: FoldableRouterConfig(
           matcher: _match,
           notFound: _NotFoundRoute.new,
@@ -249,8 +249,8 @@ void main() {
       );
       final callerContext = key.currentContext!;
       final redirected = Completer<FoldableRoute?>();
-      final router = FoldableRouter(
-        roots: const [_HomeRoute(), _SecondRoute()],
+      final router = FoldableRouter.branches(
+        branches: const [_HomeRoute(), _SecondRoute()],
         config: FoldableRouterConfig(
           matcher: _match,
           notFound: _NotFoundRoute.new,
