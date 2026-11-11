@@ -1,301 +1,568 @@
 import 'dart:async';
 
+import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:foldable_router/foldable_router.dart';
-import 'package:material_ui/material_ui.dart';
 
-class _HomeRoute extends FoldableRoute {
-  const _HomeRoute();
+bool loggedIn = true;
+Completer<void>? gate;
+
+class HomeRoute extends FoldableRoute {
+  const HomeRoute();
 
   @override
-  String get path => '/home';
+  String get path => '/';
 
   @override
   Widget build(BuildContext context) => const Text('home');
 }
 
-class _SecondRoute extends FoldableRoute {
-  const _SecondRoute();
+class UsersRoute extends FoldableRoute {
+  const UsersRoute();
 
   @override
-  String get path => '/second';
+  String get path => '/users';
 
   @override
-  Widget build(BuildContext context) => const Text('second');
+  Widget build(BuildContext context) => const Text('users');
 }
 
-class _DetailRoute extends FoldableRoute {
-  const _DetailRoute({this.id});
+class UserRoute extends FoldableRoute {
+  const UserRoute({required this.id, this.tab});
 
-  final String? id;
-
-  @override
-  String get path => '/detail';
+  final String id;
+  final String? tab;
 
   @override
-  Map<String, Object?> get query => {'id': id};
+  String get path => '/users/detail';
 
   @override
-  Widget build(BuildContext context) => Text('detail ${id ?? ''}');
-}
-
-class _NotFoundRoute extends FoldableRoute {
-  const _NotFoundRoute(this.uri);
-
-  final Uri uri;
+  Map<String, String?> get params => {'id': id, 'tab': tab};
 
   @override
-  String get path => uri.path;
+  FoldableRoute? get parent => const UsersRoute();
 
   @override
-  String get location => uri.toString();
-
-  @override
-  Widget build(BuildContext context) => const Text('not found');
-}
-
-FoldableRoute? _match(Uri uri) {
-  return switch (uri.path) {
-    '/home' => const _HomeRoute(),
-    '/second' => const _SecondRoute(),
-    '/detail' => _DetailRoute(id: RouteQuery.fromUri(uri).string('id')),
-    _ => null,
-  };
-}
-
-FoldableRouter _router() {
-  return FoldableRouter.branches(
-    branches: const [_HomeRoute(), _SecondRoute()],
-    config: FoldableRouterConfig(
-      matcher: _match,
-      notFound: _NotFoundRoute.new,
-      backTarget: (router) =>
-          router.currentIndex == 0 ? null : const _HomeRoute(),
-    ),
+  Widget build(BuildContext context) => Column(
+    children: [
+      Text('user $id'),
+      TextButton(
+        onPressed: () => Navigator.of(context).pop('from navigator'),
+        child: const Text('navigator pop'),
+      ),
+      TextButton(
+        onPressed: () => FoldableRouter.of(context).pop('from router'),
+        child: const Text('router pop'),
+      ),
+    ],
   );
 }
 
+class LoginRoute extends FoldableRoute {
+  const LoginRoute();
+
+  @override
+  String get path => '/login';
+
+  @override
+  Widget build(BuildContext context) => const Text('login');
+}
+
+class AccountRoute extends FoldableRoute {
+  const AccountRoute();
+
+  @override
+  String get path => '/account';
+
+  @override
+  FoldableRoute? redirect(RouteState state) =>
+      loggedIn ? null : const LoginRoute();
+
+  @override
+  Widget build(BuildContext context) => const Text('account');
+}
+
+class SettingsRoute extends FoldableRoute {
+  const SettingsRoute();
+
+  @override
+  String get path => '/account/settings';
+
+  @override
+  FoldableRoute? get parent => const AccountRoute();
+
+  @override
+  Widget build(BuildContext context) => const Text('settings');
+}
+
+/// Waits for [gate] before allowing the navigation.
+class SlowRoute extends FoldableRoute {
+  const SlowRoute();
+
+  @override
+  String get path => '/slow';
+
+  @override
+  Future<FoldableRoute?> redirect(RouteState state) async {
+    await gate!.future;
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) => const Text('slow');
+}
+
+class BrokenRoute extends FoldableRoute {
+  const BrokenRoute();
+
+  @override
+  String get path => '/broken';
+
+  @override
+  FoldableRoute? redirect(RouteState state) => throw StateError('broken');
+
+  @override
+  Widget build(BuildContext context) => const Text('broken');
+}
+
+class LoopRoute extends FoldableRoute {
+  const LoopRoute(this.n);
+
+  final int n;
+
+  @override
+  String get path => '/loop';
+
+  @override
+  Map<String, String?> get params => {'n': '$n'};
+
+  @override
+  FoldableRoute? redirect(RouteState state) => LoopRoute(n + 1);
+
+  @override
+  Widget build(BuildContext context) => const Text('loop');
+}
+
+FoldableRouter createRouter({
+  FoldableRoute initial = const HomeRoute(),
+  bool withPending = true,
+}) {
+  final router = FoldableRouter(
+    initial: initial,
+    routes: {
+      '/users': (params) => const UsersRoute(),
+      '/users/detail': (params) =>
+          UserRoute(id: params['id']!, tab: params['tab']),
+      '/login': (params) => const LoginRoute(),
+      '/account': (params) => const AccountRoute(),
+      '/slow': (params) => const SlowRoute(),
+    },
+    notFoundBuilder: (context, uri) => Text('not found: $uri'),
+    pendingBuilder: withPending
+        ? (context) => const Text('pending', textDirection: TextDirection.ltr)
+        : null,
+  );
+  addTearDown(router.dispose);
+  return router;
+}
+
+Future<FoldableRouter> pumpRouter(
+  WidgetTester tester, {
+  FoldableRoute initial = const HomeRoute(),
+  String? deepLink,
+}) async {
+  if (deepLink != null) {
+    tester.binding.platformDispatcher.defaultRouteNameTestValue = deepLink;
+    addTearDown(
+      tester.binding.platformDispatcher.clearDefaultRouteNameTestValue,
+    );
+  }
+  final router = createRouter(initial: initial);
+  await tester.pumpWidget(
+    MaterialApp.router(routerConfig: router.routerConfig),
+  );
+  await tester.pumpAndSettle();
+  return router;
+}
+
+Uri reportedUri(FoldableRouter router) =>
+    router.routerConfig.routeInformationProvider!.value.uri;
+
+Future<void> platformPushesUrl(WidgetTester tester, String location) async {
+  await tester.binding.defaultBinaryMessenger.handlePlatformMessage(
+    'flutter/navigation',
+    const JSONMethodCodec().encodeMethodCall(
+      MethodCall('pushRouteInformation', <String, Object?>{
+        'location': location,
+        'state': null,
+      }),
+    ),
+    (_) {},
+  );
+  await tester.pumpAndSettle();
+}
+
 void main() {
-  group('FoldablePath', () {
-    test('reads path segments and query parameters', () {
-      const path = FoldablePath('/record/:id');
-
-      expect(path.match(Uri.parse('/record/42'))?.string('id'), '42');
-      expect(
-        path.match(Uri.parse('/record/42?tab=notes'))?.string('tab'),
-        'notes',
-      );
-      expect(path.match(Uri.parse('/record/42/')), isNotNull);
-      expect(path.match(Uri.parse('/record')), isNull);
-      expect(path.match(Uri.parse('/other/42')), isNull);
-      expect(path.match(Uri.parse('/record/42/extra')), isNull);
-    });
-
-    test('decodes percent-encoded segments', () {
-      const path = FoldablePath('/record/:id');
-
-      expect(path.match(Uri.parse('/record/a%20b'))?.string('id'), 'a b');
-    });
-
-    test('matches a root path', () {
-      expect(const FoldablePath('/').match(Uri.parse('/')), isNotNull);
-      expect(const FoldablePath('/').match(Uri.parse('/home')), isNull);
-    });
+  setUp(() {
+    loggedIn = true;
+    gate = null;
   });
 
-  group('FoldableRouter', () {
-    testWidgets('going to a branch root switches branch', (tester) async {
-      late BuildContext context;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (c) {
-              context = c;
-              return const SizedBox.shrink();
-            },
-          ),
-        ),
-      );
-      final router = _router();
-      addTearDown(router.dispose);
+  testWidgets('starts on the initial route', (tester) async {
+    final router = await pumpRouter(tester);
 
-      router.open(context, const _SecondRoute());
+    expect(find.text('home'), findsOneWidget);
+    expect(router.stack, [const HomeRoute()]);
+    expect(router.isNavigating.value, isFalse);
+  });
 
-      expect(router.currentIndex, 1);
-      expect(router.canPop, isFalse);
-      expect(router.currentUri.toString(), '/second');
-      expect(router.backHasTarget, isTrue);
-    });
+  testWidgets('open builds the parent chain and reports the URL', (
+    tester,
+  ) async {
+    final router = await pumpRouter(tester);
 
-    testWidgets('pushing keeps the branch and names the page URL', (
+    await router.open(const UserRoute(id: '7'));
+    await tester.pumpAndSettle();
+
+    expect(router.stack, [const UsersRoute(), const UserRoute(id: '7')]);
+    expect(find.text('user 7'), findsOneWidget);
+    expect(find.text('users', skipOffstage: false), findsOneWidget);
+    expect(find.text('home', skipOffstage: false), findsNothing);
+    expect(reportedUri(router), Uri.parse('/users/detail?id=7'));
+  });
+
+  testWidgets('open replaces the stack, including pushed pages', (
+    tester,
+  ) async {
+    final router = await pumpRouter(tester);
+    final pushed = router.push<String>(const UserRoute(id: '1'));
+    await tester.pumpAndSettle();
+
+    await router.open(const LoginRoute());
+    await tester.pumpAndSettle();
+
+    expect(router.stack, [const LoginRoute()]);
+    expect(await pushed, isNull);
+  });
+
+  testWidgets('push adds one page and pop returns the result', (tester) async {
+    final router = await pumpRouter(tester);
+
+    final result = router.push<String>(const UserRoute(id: '7'));
+    await tester.pumpAndSettle();
+
+    expect(router.stack, [const HomeRoute(), const UserRoute(id: '7')]);
+    expect(find.text('user 7'), findsOneWidget);
+    expect(reportedUri(router), Uri.parse('/users/detail?id=7'));
+
+    router.pop('done');
+    await tester.pumpAndSettle();
+
+    expect(await result, 'done');
+    expect(router.stack, [const HomeRoute()]);
+    expect(find.text('home'), findsOneWidget);
+    expect(reportedUri(router), Uri.parse('/'));
+  });
+
+  testWidgets('the same route can be pushed twice', (tester) async {
+    final router = await pumpRouter(tester);
+
+    final first = router.push<int>(const UserRoute(id: '7'));
+    await tester.pumpAndSettle();
+    final second = router.push<int>(const UserRoute(id: '7'));
+    await tester.pumpAndSettle();
+
+    expect(router.stack, hasLength(3));
+    expect(tester.takeException(), isNull);
+
+    router.pop(2);
+    await tester.pumpAndSettle();
+    router.pop(1);
+    await tester.pumpAndSettle();
+
+    expect(await second, 2);
+    expect(await first, 1);
+    expect(find.text('home'), findsOneWidget);
+  });
+
+  testWidgets('FoldableRouter.of gives access from a page', (tester) async {
+    final router = await pumpRouter(tester);
+    final result = router.push<String>(const UserRoute(id: '7'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('router pop'));
+    await tester.pumpAndSettle();
+
+    expect(await result, 'from router');
+    expect(router.stack, [const HomeRoute()]);
+  });
+
+  testWidgets('Navigator.pop inside a page completes push with its result', (
+    tester,
+  ) async {
+    final router = await pumpRouter(tester);
+    final result = router.push<String>(const UserRoute(id: '7'));
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.text('navigator pop'));
+    await tester.pumpAndSettle();
+
+    expect(await result, 'from navigator');
+    expect(router.stack, [const HomeRoute()]);
+    expect(find.text('home'), findsOneWidget);
+  });
+
+  testWidgets('system back pops the top page and completes push with null', (
+    tester,
+  ) async {
+    final router = await pumpRouter(tester);
+    final result = router.push<String>(const UserRoute(id: '7'));
+    await tester.pumpAndSettle();
+
+    expect(await tester.binding.handlePopRoute(), isTrue);
+    await tester.pumpAndSettle();
+
+    expect(await result, isNull);
+    expect(router.stack, [const HomeRoute()]);
+    expect(reportedUri(router), Uri.parse('/'));
+  });
+
+  testWidgets('popping the last page is a no-op left to the system', (
+    tester,
+  ) async {
+    final router = await pumpRouter(tester);
+
+    router.pop();
+    await tester.pumpAndSettle();
+    expect(router.stack, [const HomeRoute()]);
+
+    expect(await router.routerConfig.routerDelegate.popRoute(), isFalse);
+    expect(find.text('home'), findsOneWidget);
+  });
+
+  testWidgets('redirect on open', (tester) async {
+    final router = await pumpRouter(tester);
+    loggedIn = false;
+
+    // The guard sits on the parent of the target.
+    await router.open(const SettingsRoute());
+    await tester.pumpAndSettle();
+
+    expect(router.stack, [const LoginRoute()]);
+    expect(find.text('login'), findsOneWidget);
+    expect(reportedUri(router), Uri.parse('/login'));
+  });
+
+  testWidgets('redirect on push pushes the redirect target', (tester) async {
+    final router = await pumpRouter(tester);
+    loggedIn = false;
+
+    final result = router.push<String>(const SettingsRoute());
+    await tester.pumpAndSettle();
+
+    expect(router.stack, [const HomeRoute(), const LoginRoute()]);
+    expect(find.text('login'), findsOneWidget);
+
+    router.pop('signed in');
+    expect(await result, 'signed in');
+  });
+
+  testWidgets('refresh kicks the user out when a redirect now objects', (
+    tester,
+  ) async {
+    final router = await pumpRouter(tester);
+    await router.open(const SettingsRoute());
+    await tester.pumpAndSettle();
+    expect(router.stack, [const AccountRoute(), const SettingsRoute()]);
+
+    await router.refresh();
+    await tester.pumpAndSettle();
+    expect(router.stack, [const AccountRoute(), const SettingsRoute()]);
+
+    loggedIn = false;
+    await router.refresh();
+    await tester.pumpAndSettle();
+
+    expect(router.stack, [const LoginRoute()]);
+    expect(find.text('login'), findsOneWidget);
+    expect(find.text('settings', skipOffstage: false), findsNothing);
+  });
+
+  testWidgets('old page stays while an async redirect is pending', (
+    tester,
+  ) async {
+    final router = await pumpRouter(tester);
+    gate = Completer<void>();
+    final notifications = <bool>[];
+    router.isNavigating.addListener(
+      () => notifications.add(router.isNavigating.value),
+    );
+
+    var done = false;
+    unawaited(router.open(const SlowRoute()).then((_) => done = true));
+    await tester.pump();
+    await tester.pump(const Duration(seconds: 1));
+
+    expect(router.isNavigating.value, isTrue);
+    expect(done, isFalse);
+    expect(find.text('home'), findsOneWidget);
+    expect(find.text('slow'), findsNothing);
+    expect(router.stack, [const HomeRoute()]);
+    expect(reportedUri(router), Uri.parse('/'));
+
+    gate!.complete();
+    await tester.pumpAndSettle();
+
+    expect(done, isTrue);
+    expect(router.isNavigating.value, isFalse);
+    expect(notifications, [true, false]);
+    expect(find.text('slow'), findsOneWidget);
+    expect(router.stack, [const SlowRoute()]);
+  });
+
+  testWidgets('latest navigation wins', (tester) async {
+    final router = await pumpRouter(tester);
+    gate = Completer<void>();
+
+    var olderDone = false;
+    unawaited(router.open(const SlowRoute()).then((_) => olderDone = true));
+    await tester.pump();
+    await router.open(const UsersRoute());
+    await tester.pumpAndSettle();
+
+    expect(router.stack, [const UsersRoute()]);
+    expect(router.isNavigating.value, isFalse);
+
+    gate!.complete();
+    await tester.pumpAndSettle();
+
+    expect(olderDone, isTrue);
+    expect(router.stack, [const UsersRoute()]);
+    expect(find.text('users'), findsOneWidget);
+  });
+
+  testWidgets('a throwing redirect cancels the navigation', (tester) async {
+    final router = await pumpRouter(tester);
+
+    await expectLater(router.open(const BrokenRoute()), throwsStateError);
+    await expectLater(router.push<void>(const BrokenRoute()), throwsStateError);
+    await tester.pumpAndSettle();
+
+    expect(router.stack, [const HomeRoute()]);
+    expect(router.isNavigating.value, isFalse);
+    expect(find.text('home'), findsOneWidget);
+  });
+
+  testWidgets('too many redirects fail with a dedicated exception', (
+    tester,
+  ) async {
+    final router = await pumpRouter(tester);
+
+    await expectLater(
+      router.open(const LoopRoute(0)),
+      throwsA(isA<FoldableRedirectException>()),
+    );
+    expect(router.stack, [const HomeRoute()]);
+  });
+
+  testWidgets('deep link with query params builds the right route', (
+    tester,
+  ) async {
+    final router = await pumpRouter(
       tester,
-    ) async {
-      late BuildContext context;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (c) {
-              context = c;
-              return const SizedBox.shrink();
-            },
-          ),
-        ),
-      );
-      final router = _router()..rootContextOf = () => context;
-      addTearDown(router.dispose);
+      deepLink: '/users/detail?id=7&tab=posts',
+    );
 
-      router.open(context, const _SecondRoute());
-      router.push<void>(const _DetailRoute(id: '7'));
+    expect(router.stack, [
+      const UsersRoute(),
+      const UserRoute(id: '7', tab: 'posts'),
+    ]);
+    expect((router.stack.last as UserRoute).tab, 'posts');
+    expect(find.text('user 7'), findsOneWidget);
+    expect(find.text('home', skipOffstage: false), findsNothing);
+  });
 
-      expect(router.currentIndex, 1);
-      expect(router.pages, hasLength(2));
-      expect(router.currentUri.toString(), '/detail?id=7');
-      expect(router.canPop, isTrue);
-      expect(router.backHasTarget, isFalse);
-    });
+  testWidgets('URL pushed by the platform at runtime is opened', (
+    tester,
+  ) async {
+    final router = await pumpRouter(tester);
+    unawaited(router.push<void>(const LoginRoute()));
+    await tester.pumpAndSettle();
 
-    testWidgets('back pops, then shows the back target', (tester) async {
-      late BuildContext context;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (c) {
-              context = c;
-              return const SizedBox.shrink();
-            },
-          ),
-        ),
-      );
-      final router = _router()..rootContextOf = () => context;
-      addTearDown(router.dispose);
+    await platformPushesUrl(tester, '/users/detail?id=42');
 
-      router.open(context, const _SecondRoute());
-      router.push<void>(const _DetailRoute(id: '7'));
-      router.back();
-      expect(router.currentIndex, 1);
-      expect(router.pages, hasLength(1));
+    expect(router.stack, [const UsersRoute(), const UserRoute(id: '42')]);
+    expect(find.text('user 42'), findsOneWidget);
+  });
 
-      router.back();
-      expect(router.currentIndex, 0);
-      expect(router.currentUri.toString(), '/home');
-    });
+  testWidgets('deep link goes through redirects', (tester) async {
+    loggedIn = false;
+    final router = await pumpRouter(tester, deepLink: '/account');
 
-    testWidgets('an unknown URL keeps its address and shows not found', (
-      tester,
-    ) async {
-      late BuildContext context;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (c) {
-              context = c;
-              return const SizedBox.shrink();
-            },
-          ),
-        ),
-      );
-      final router = _router()..rootContextOf = () => context;
-      addTearDown(router.dispose);
+    expect(router.stack, [const LoginRoute()]);
+    expect(reportedUri(router), Uri.parse('/login'));
+  });
 
-      router.openUri(Uri.parse('/nothing?a=1'));
+  testWidgets('unknown URL shows notFound', (tester) async {
+    final router = await pumpRouter(tester, deepLink: '/nope?x=1');
 
-      expect(router.pages, hasLength(2));
-      expect(router.currentUri.toString(), '/nothing?a=1');
-    });
+    expect(find.text('not found: /nope?x=1'), findsOneWidget);
+    expect(router.stack, isEmpty);
 
-    testWidgets('resolve follows redirects', (tester) async {
-      late BuildContext context;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (c) {
-              context = c;
-              return const SizedBox.shrink();
-            },
-          ),
-        ),
-      );
-      final router = FoldableRouter.branches(
-        branches: const [_HomeRoute()],
-        config: FoldableRouterConfig(
-          matcher: _match,
-          notFound: _NotFoundRoute.new,
-          redirect: (context, state) =>
-              state.route is _DetailRoute ? const _HomeRoute() : null,
-        ),
-      );
-      addTearDown(router.dispose);
+    await router.open(const UsersRoute());
+    await tester.pumpAndSettle();
+    expect(find.text('users'), findsOneWidget);
 
-      expect(
-        router.resolve(const _DetailRoute(), context: context),
-        isA<_HomeRoute>(),
-      );
-    });
+    await platformPushesUrl(tester, '/still-nope');
+    expect(find.text('not found: /still-nope'), findsOneWidget);
+    expect(find.text('users', skipOffstage: false), findsNothing);
+  });
 
-    testWidgets('an async redirect is not skipped when the caller is gone', (
-      tester,
-    ) async {
-      final key = GlobalKey();
-      late BuildContext rootContext;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (c) {
-              rootContext = c;
-              return SizedBox(key: key);
-            },
-          ),
-        ),
-      );
-      final callerContext = key.currentContext!;
-      final redirected = Completer<FoldableRoute?>();
-      final router = FoldableRouter.branches(
-        branches: const [_HomeRoute(), _SecondRoute()],
-        config: FoldableRouterConfig(
-          matcher: _match,
-          notFound: _NotFoundRoute.new,
-          redirect: (context, state) =>
-              state.route is _DetailRoute ? redirected.future : null,
-        ),
-      )..rootContextOf = () => rootContext;
-      addTearDown(router.dispose);
+  testWidgets('a factory that throws shows notFound', (tester) async {
+    await pumpRouter(tester, deepLink: '/users/detail');
 
-      final result = router.resolve(
-        const _DetailRoute(),
-        context: callerContext,
-      );
-      // The page that navigated leaves while the redirect is running.
-      await tester.pumpWidget(const MaterialApp(home: SizedBox()));
-      router.rootContextOf = null;
-      redirected.complete(const _HomeRoute());
+    expect(find.text('not found: /users/detail'), findsOneWidget);
+  });
 
-      expect(await result, isNull);
-    });
+  testWidgets('pendingBuilder is shown while the first redirect is pending', (
+    tester,
+  ) async {
+    gate = Completer<void>();
+    final router = createRouter(initial: const SlowRoute());
+    await tester.pumpWidget(
+      MaterialApp.router(routerConfig: router.routerConfig),
+    );
+    await tester.pump();
 
-    testWidgets('open before the first build waits for a context', (
-      tester,
-    ) async {
-      final router = _router();
-      addTearDown(router.dispose);
+    expect(find.text('pending'), findsOneWidget);
+    expect(find.text('slow'), findsNothing);
+    expect(router.isNavigating.value, isTrue);
+    expect(router.stack, isEmpty);
 
-      router.openLocation('/second');
-      expect(router.currentIndex, 0);
+    gate!.complete();
+    await tester.pumpAndSettle();
 
-      late BuildContext context;
-      await tester.pumpWidget(
-        MaterialApp(
-          home: Builder(
-            builder: (c) {
-              context = c;
-              return const SizedBox.shrink();
-            },
-          ),
-        ),
-      );
-      router.rootContextOf = () => context;
-      await tester.pump();
+    expect(find.text('pending'), findsNothing);
+    expect(find.text('slow'), findsOneWidget);
+    expect(router.isNavigating.value, isFalse);
+  });
 
-      expect(router.currentIndex, 1);
-    });
+  testWidgets('without pendingBuilder nothing is shown while pending', (
+    tester,
+  ) async {
+    gate = Completer<void>();
+    final router = createRouter(initial: const SlowRoute(), withPending: false);
+    await tester.pumpWidget(
+      MaterialApp.router(routerConfig: router.routerConfig),
+    );
+    await tester.pump();
+
+    expect(find.byType(Navigator), findsNothing);
+    expect(tester.takeException(), isNull);
+
+    gate!.complete();
+    await tester.pumpAndSettle();
+    expect(find.text('slow'), findsOneWidget);
   });
 }

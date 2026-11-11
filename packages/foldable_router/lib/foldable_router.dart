@@ -1,24 +1,15 @@
-/// Router for foldable apps: one page stack per branch, page slides, swipe
-/// back, deep links and redirects. Works with `foldable_scaffold`, but does not
-/// depend on it.
+/// A small Navigation 2.0 router where every route is a plain Dart class.
+///
+/// See [FoldableRouter] for the entry point and [FoldableRoute] for how to
+/// declare routes.
 library;
 
-export 'package:foldable_core/foldable_core.dart';
-
-export 'src/foldable_app_bar.dart';
-export 'src/foldable_navigator.dart';
-export 'src/foldable_navigator_controller.dart';
-export 'src/foldable_page.dart';
-export 'src/foldable_page_transition.dart';
-export 'src/lazy_branch.dart';
-export 'src/route/branch_route.dart';
-export 'src/route/foldable_path.dart';
-export 'src/route/foldable_route.dart';
-export 'src/route/foldable_route_base.dart';
-export 'src/route/foldable_shell_route.dart';
-export 'src/route/normal_route.dart';
-export 'src/route/route_query.dart';
-export 'src/router/foldable_router.dart';
-export 'src/router/foldable_router_config.dart';
-export 'src/router/foldable_router_delegate.dart';
-export 'src/router/foldable_router_observer.dart';
+export 'src/foldable_route.dart' show FoldableRoute;
+export 'src/foldable_router.dart'
+    show FoldableRouter, FoldableRouteFactory, FoldableNotFoundBuilder;
+export 'src/redirect_resolver.dart'
+    show
+        FoldableRedirectException,
+        RedirectLoopException,
+        RedirectLimitException;
+export 'src/route_state.dart' show RouteState;
