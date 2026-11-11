@@ -10,13 +10,13 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
   foldable_router:
     path: ../
 
 dev_dependencies:
   flutter_test:
-    sdk: flutter
-  flutter_web_plugins:
     sdk: flutter
   flutter_lints: ^6.0.0
 

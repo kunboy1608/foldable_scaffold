@@ -114,7 +114,7 @@ class _HomePageState extends State<HomePage> {
             const _Section(
               'Not found',
               'Every route instance is valid, so the not-found page is only '
-                  'reached from a URL: on web, type #/nope (or #/users/detail '
+                  'reached from a URL: on web, type /nope (or /users/detail '
                   'without ?id=) in the address bar.',
             ),
           ],

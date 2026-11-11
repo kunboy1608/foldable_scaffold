@@ -36,7 +36,18 @@ typedef FoldableNotFoundBuilder =
 /// ancestor down to the target. While that is pending the current page stays
 /// on screen and [isNavigating] is `true`. If a newer navigation starts in
 /// the meantime, the older one is discarded.
-class FoldableRouter {
+///
+/// The router is a [Listenable]: it notifies its listeners whenever [stack]
+/// or [location] changes. [FoldableRouter.of] does not rebuild its dependants
+/// on such a change, so a widget that shows the stack listens explicitly:
+///
+/// ```dart
+/// ListenableBuilder(
+///   listenable: router,
+///   builder: (context, _) => Text('${router.location}'),
+/// );
+/// ```
+class FoldableRouter implements Listenable {
   /// Creates a router.
   FoldableRouter({
     required this.initial,
@@ -92,7 +103,76 @@ class FoldableRouter {
   ///
   /// Empty before the first navigation completes and while the not-found
   /// page is shown.
+  ///
+  /// Listen to the router ([addListener]) to be told when this changes.
   List<FoldableRoute> get stack => _delegate.stack;
+
+  /// The location currently reported to the platform (the web address bar).
+  ///
+  /// This is the [FoldableRoute.uri] of the top of the [stack], or the
+  /// unknown URI while the not-found page is shown, or `null` before the
+  /// first navigation completes.
+  ///
+  /// Listen to the router ([addListener]) to be told when this changes.
+  Uri? get location => _delegate.currentConfiguration;
+
+  /// Registers [listener] to be called whenever [stack] or [location]
+  /// changes: after [open], [push], [pop], a system back, a [refresh] that
+  /// redirects, a URL from the platform or [openUri], and when the not-found
+  /// page is entered or left.
+  ///
+  /// It is not called when nothing changes (a [refresh] whose redirects all
+  /// return `null`, [pop] on the last page, a discarded or failed
+  /// navigation, [open] of the route that is already shown), nor for
+  /// [isNavigating], which is a listenable of its own.
+  ///
+  /// Must not be called after [dispose].
+  @override
+  void addListener(VoidCallback listener) =>
+      _delegate.stackChanges.addListener(listener);
+
+  /// Removes a listener registered with [addListener].
+  @override
+  void removeListener(VoidCallback listener) =>
+      _delegate.stackChanges.removeListener(listener);
+
+  /// The route [uri] stands for, or `null` when there is none.
+  ///
+  /// This is the lookup used for deep links and the web address bar: the
+  /// path of [uri] (a trailing slash is ignored, an empty path means `/`)
+  /// selects a factory of [routes], which receives the query parameters. A
+  /// URI equal to the one of [initial] resolves to [initial] itself, so
+  /// [initial] needs no entry in [routes]. The result is `null` when the
+  /// path is not in [routes] or the factory throws.
+  ///
+  /// It only creates the route: no redirect runs and nothing is navigated.
+  /// Pass the result to [open] or [push], or use [openUri].
+  FoldableRoute? routeFor(Uri uri) {
+    var path = uri.path.isEmpty ? '/' : uri.path;
+    if (path.length > 1 && path.endsWith('/')) {
+      path = path.substring(0, path.length - 1);
+    }
+    final normalized = uri.replace(path: path);
+    if (path == initial.path &&
+        mapEquals(normalized.queryParameters, initial.uri.queryParameters)) {
+      return initial;
+    }
+    final factory = routes[path];
+    if (factory == null) return null;
+    final FoldableRoute route;
+    try {
+      route = factory(Map.unmodifiable(normalized.queryParameters));
+    } catch (_) {
+      // Typically a missing or malformed parameter.
+      return null;
+    }
+    assert(
+      route.path == path,
+      'The factory registered for "$path" returned $route, whose path is '
+      '"${route.path}".',
+    );
+    return route;
+  }
 
   /// Whether a navigation is currently waiting for its redirects.
   ValueListenable<bool> get isNavigating => _delegate.isNavigating;
@@ -105,6 +185,20 @@ class FoldableRouter {
   /// throws or when redirects loop or exceed [maxRedirects]
   /// ([FoldableRedirectException]); the stack is then unchanged.
   Future<void> open(FoldableRoute route) => _delegate.open(route);
+
+  /// Opens the location [uri] the way a URL arriving from the platform is
+  /// opened: [routeFor] turns it into a route, which is then opened as with
+  /// [open] (redirects included).
+  ///
+  /// When [uri] matches no route the not-found page is shown ([stack]
+  /// becomes empty, [location] is [uri]) and the future completes normally.
+  ///
+  /// Errors are as for [open] and are delivered through the returned future
+  /// (for a platform URL they go to [FlutterError.reportError] instead). As
+  /// for a platform URL, if such an error happens while nothing is on
+  /// screen yet (before the first navigation completed), the not-found page
+  /// is shown for [uri].
+  Future<void> openUri(Uri uri) => _delegate.openUri(uri);
 
   /// Puts [route] alone (without its parents) on top of the stack, after
   /// running the redirects of its parent chain. If a redirect answers with
@@ -134,6 +228,10 @@ class FoldableRouter {
   void dispose() => _delegate.dispose();
 
   /// The router that built the subtree containing [context].
+  ///
+  /// The calling widget is not rebuilt when [stack] or [location] changes.
+  /// To rebuild on such a change, listen to the router, for example with a
+  /// `ListenableBuilder(listenable: FoldableRouter.of(context), ...)`.
   static FoldableRouter of(BuildContext context) {
     final router = maybeOf(context);
     assert(router != null, 'No FoldableRouter found in context.');

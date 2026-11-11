@@ -8,3 +8,8 @@
   `notFoundBuilder` and `pendingBuilder`.
 * Redirect loop and limit detection (`RedirectLoopException`,
   `RedirectLimitException`).
+* `FoldableRouter` is a `Listenable` that notifies when `stack` changes, and
+  exposes `location`, the URI currently reported to the platform.
+* `FoldableRouter.routeFor(uri)` turns a URI into a route with the `routes`
+  table; `FoldableRouter.openUri(uri)` opens a URI like a deep link, with
+  errors delivered through the returned future.

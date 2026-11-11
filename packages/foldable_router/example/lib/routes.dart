@@ -118,9 +118,9 @@ class ColorPickerRoute extends FoldableRoute {
 }
 
 /// URL path -> route. Used by the router for deep links and the web address
-/// bar. A factory that throws (missing `id`) leads to the not-found page.
+/// bar, and by `router.routeFor(uri)`. A factory that throws (missing `id`)
+/// leads to the not-found page. The `initial` route (`/`) needs no entry.
 final Map<String, FoldableRouteFactory> routeTable = {
-  '/': (params) => const HomeRoute(),
   '/users': (params) => const UsersRoute(),
   '/users/detail': (params) => UserRoute(id: params['id']!),
   '/login': (params) => LoginRoute(from: params['from']),
@@ -128,18 +128,6 @@ final Map<String, FoldableRouteFactory> routeTable = {
   '/profile/settings': (params) => const SettingsRoute(),
   '/pick-color': (params) => const ColorPickerRoute(),
 };
-
-/// Turns a location such as `/users/detail?id=7` back into a route, or
-/// `null` when it matches nothing. Used by the login page for `from`.
-FoldableRoute? routeForLocation(String? location) {
-  if (location == null) return null;
-  try {
-    final uri = Uri.parse(location);
-    return routeTable[uri.path]?.call(uri.queryParameters);
-  } catch (_) {
-    return null;
-  }
-}
 
 FoldableRouter createRouter() => FoldableRouter(
   initial: const HomeRoute(),

@@ -157,6 +157,7 @@ FoldableRouter createRouter({
       '/login': (params) => const LoginRoute(),
       '/account': (params) => const AccountRoute(),
       '/slow': (params) => const SlowRoute(),
+      '/broken': (params) => const BrokenRoute(),
     },
     notFoundBuilder: (context, uri) => Text('not found: $uri'),
     pendingBuilder: withPending
@@ -564,5 +565,271 @@ void main() {
     gate!.complete();
     await tester.pumpAndSettle();
     expect(find.text('slow'), findsOneWidget);
+  });
+
+  group('listening to the router', () {
+    testWidgets('notifies on open, push, pop and system back', (tester) async {
+      final router = await pumpRouter(tester);
+      var count = 0;
+      void listener() => count++;
+      router.addListener(listener);
+
+      await router.open(const UserRoute(id: '7'));
+      expect(count, 1);
+
+      unawaited(router.push<void>(const LoginRoute()));
+      await tester.pumpAndSettle();
+      expect(count, 2);
+
+      router.pop();
+      expect(count, 3);
+      await tester.pumpAndSettle();
+      expect(count, 3);
+
+      await tester.binding.handlePopRoute();
+      await tester.pumpAndSettle();
+      expect(router.stack, [const UsersRoute()]);
+      expect(count, 4);
+
+      router.removeListener(listener);
+      await router.open(const HomeRoute());
+      expect(count, 4);
+    });
+
+    testWidgets('notifies when refresh changes the stack, not otherwise', (
+      tester,
+    ) async {
+      final router = await pumpRouter(tester);
+      await router.open(const SettingsRoute());
+      await tester.pumpAndSettle();
+      var count = 0;
+      router.addListener(() => count++);
+
+      await router.refresh();
+      await tester.pumpAndSettle();
+      expect(count, 0);
+
+      loggedIn = false;
+      await router.refresh();
+      await tester.pumpAndSettle();
+      expect(router.stack, [const LoginRoute()]);
+      expect(count, 1);
+    });
+
+    testWidgets('does not notify when nothing changes', (tester) async {
+      final router = await pumpRouter(tester);
+      var count = 0;
+      router.addListener(() => count++);
+
+      router.pop(); // Single page.
+      await tester.binding.handlePopRoute();
+      await router.open(const HomeRoute()); // Already shown.
+      await expectLater(router.open(const BrokenRoute()), throwsStateError);
+      await tester.pumpAndSettle();
+
+      expect(router.stack, [const HomeRoute()]);
+      expect(count, 0);
+    });
+
+    testWidgets('notifies when entering and leaving not-found', (tester) async {
+      final router = await pumpRouter(tester);
+      var count = 0;
+      router.addListener(() => count++);
+
+      await platformPushesUrl(tester, '/nope');
+      expect(count, 1);
+
+      await platformPushesUrl(tester, '/nope');
+      expect(count, 1);
+
+      await platformPushesUrl(tester, '/other-nope');
+      expect(count, 2);
+
+      await platformPushesUrl(tester, '/users');
+      expect(router.stack, [const UsersRoute()]);
+      expect(count, 3);
+    });
+
+    testWidgets('ListenableBuilder on the router follows the stack', (
+      tester,
+    ) async {
+      final router = createRouter();
+      await tester.pumpWidget(
+        MaterialApp.router(
+          routerConfig: router.routerConfig,
+          builder: (context, child) => Column(
+            children: [
+              Expanded(child: child!),
+              ListenableBuilder(
+                listenable: router,
+                builder: (context, _) =>
+                    Text('at ${router.location} (${router.stack.length})'),
+              ),
+            ],
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('at / (1)'), findsOneWidget);
+
+      await router.open(const UserRoute(id: '7'));
+      await tester.pumpAndSettle();
+      expect(find.text('at /users/detail?id=7 (2)'), findsOneWidget);
+    });
+  });
+
+  group('location', () {
+    testWidgets('is null until the first navigation lands', (tester) async {
+      gate = Completer<void>();
+      final router = createRouter(initial: const SlowRoute());
+      final seen = <Uri?>[];
+      router.addListener(() => seen.add(router.location));
+      await tester.pumpWidget(
+        MaterialApp.router(routerConfig: router.routerConfig),
+      );
+      await tester.pump();
+      expect(router.location, isNull);
+      expect(seen, isEmpty);
+
+      gate!.complete();
+      await tester.pumpAndSettle();
+      expect(router.location, Uri.parse('/slow'));
+      expect(seen, [Uri.parse('/slow')]);
+    });
+
+    testWidgets('is the URI of the top page', (tester) async {
+      final router = await pumpRouter(tester);
+      expect(router.location, Uri.parse('/'));
+
+      await router.open(const UserRoute(id: '7'));
+      expect(router.location, Uri.parse('/users/detail?id=7'));
+
+      unawaited(router.push<void>(const LoginRoute()));
+      await tester.pumpAndSettle();
+      expect(router.location, Uri.parse('/login'));
+      expect(reportedUri(router), router.location);
+
+      router.pop();
+      expect(router.location, Uri.parse('/users/detail?id=7'));
+    });
+
+    testWidgets('is the unknown URI on the not-found page', (tester) async {
+      final router = await pumpRouter(tester, deepLink: '/nope?x=1');
+      expect(router.location, Uri.parse('/nope?x=1'));
+
+      await router.open(const UsersRoute());
+      expect(router.location, Uri.parse('/users'));
+    });
+  });
+
+  group('routeFor', () {
+    test('resolves known paths, with params and a trailing slash', () {
+      final router = createRouter();
+
+      expect(router.routeFor(Uri.parse('/users')), const UsersRoute());
+      expect(router.routeFor(Uri.parse('/users/')), const UsersRoute());
+      expect(
+        router.routeFor(Uri.parse('/users/detail?id=7&tab=posts')),
+        const UserRoute(id: '7', tab: 'posts'),
+      );
+      expect(
+        router.routeFor(Uri.parse('/users/detail/?id=7')),
+        const UserRoute(id: '7'),
+      );
+    });
+
+    test('resolves the URI of initial to initial', () {
+      const initial = HomeRoute();
+      final router = createRouter(initial: initial);
+
+      expect(router.routeFor(Uri.parse('/')), same(initial));
+      expect(router.routeFor(Uri.parse('')), same(initial));
+      expect(router.routeFor(initial.uri), same(initial));
+      // '/' is not in the table, so other queries match nothing.
+      expect(router.routeFor(Uri.parse('/?x=1')), isNull);
+    });
+
+    test('returns null for an unknown path or a throwing factory', () {
+      final router = createRouter();
+
+      expect(router.routeFor(Uri.parse('/nope')), isNull);
+      expect(router.routeFor(Uri.parse('/users/nope')), isNull);
+      expect(router.routeFor(Uri.parse('/users/detail')), isNull);
+    });
+
+    testWidgets('does not navigate', (tester) async {
+      final router = await pumpRouter(tester);
+      var count = 0;
+      router.addListener(() => count++);
+
+      router.routeFor(Uri.parse('/users'));
+      router.routeFor(Uri.parse('/nope'));
+      await tester.pumpAndSettle();
+
+      expect(router.stack, [const HomeRoute()]);
+      expect(count, 0);
+    });
+  });
+
+  group('openUri', () {
+    testWidgets('opens a known URI with its parent chain', (tester) async {
+      final router = await pumpRouter(tester);
+
+      await router.openUri(Uri.parse('/users/detail?id=7'));
+      await tester.pumpAndSettle();
+
+      expect(router.stack, [const UsersRoute(), const UserRoute(id: '7')]);
+      expect(reportedUri(router), Uri.parse('/users/detail?id=7'));
+      expect(find.text('user 7'), findsOneWidget);
+    });
+
+    testWidgets('unknown URI shows not-found and completes normally', (
+      tester,
+    ) async {
+      final router = await pumpRouter(tester);
+
+      await router.openUri(Uri.parse('/nope?x=1'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('not found: /nope?x=1'), findsOneWidget);
+      expect(router.stack, isEmpty);
+      expect(router.location, Uri.parse('/nope?x=1'));
+      expect(reportedUri(router), Uri.parse('/nope?x=1'));
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('applies redirects', (tester) async {
+      loggedIn = false;
+      final router = await pumpRouter(tester);
+
+      await router.openUri(Uri.parse('/account'));
+      await tester.pumpAndSettle();
+
+      expect(router.stack, [const LoginRoute()]);
+      expect(router.location, Uri.parse('/login'));
+    });
+
+    testWidgets('a redirect error surfaces through the future', (tester) async {
+      final router = await pumpRouter(tester);
+
+      await expectLater(router.openUri(Uri.parse('/broken')), throwsStateError);
+      await tester.pumpAndSettle();
+
+      // Not reported to FlutterError, and the stack is unchanged.
+      expect(tester.takeException(), isNull);
+      expect(router.stack, [const HomeRoute()]);
+      expect(router.isNavigating.value, isFalse);
+    });
+
+    testWidgets('the same error from the platform is reported instead', (
+      tester,
+    ) async {
+      final router = await pumpRouter(tester);
+
+      await platformPushesUrl(tester, '/broken');
+
+      expect(tester.takeException(), isStateError);
+      expect(router.stack, [const HomeRoute()]);
+    });
   });
 }

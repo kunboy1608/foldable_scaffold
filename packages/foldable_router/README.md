@@ -75,6 +75,32 @@ router.pop('result'); // or FoldableRouter.of(context).pop('result')
 await router.refresh();
 ```
 
+Observe the stack. The router is a `Listenable` that notifies whenever
+`router.stack` / `router.location` change. `FoldableRouter.of(context)` does
+not rebuild the calling widget on such a change, so listen explicitly:
+
+```dart
+ListenableBuilder(
+  listenable: router,
+  builder: (context, _) => Text(
+    // location: URI of the top page (what the address bar shows), the
+    // unknown URI on the not-found page, null before the first navigation.
+    '${router.location}  (${router.stack.length} pages)',
+  ),
+);
+```
+
+Go from a URI to a route, with the same lookup as deep links:
+
+```dart
+// null when the path is not in `routes` or the factory throws.
+final route = router.routeFor(Uri.parse('/users/detail?id=7'));
+
+// Like a URL from the platform: opens the route (redirects apply) or shows
+// notFoundBuilder. Errors come through the future, as for `open`.
+await router.openUri(Uri.parse('/users/detail?id=7'));
+```
+
 A runnable demo of all of the above lives in [`example/`](example/) (`cd example && fvm flutter run -d chrome`).
 
 ## Behaviour
@@ -93,6 +119,10 @@ A runnable demo of all of the above lives in [`example/`](example/) (`cd example
   the app.
 - The URL reflects the top page only. A URL not found in `routes`, or whose
   factory throws (for example a missing required parameter), shows
-  `notFoundBuilder`.
+  `notFoundBuilder`. A trailing slash is ignored, and the URI of `initial`
+  always resolves to `initial`, which therefore needs no entry in `routes`.
+- Listeners of the router are called only when `stack` / `location` actually
+  change: not for a `refresh` without redirect, a `pop` on the last page, or a
+  discarded or failed navigation.
 - There is no automatic refresh; call `refresh()` when the state your
   redirects depend on changes.

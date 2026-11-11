@@ -63,6 +63,12 @@ class FoldableRouterScope extends InheritedWidget {
       router != oldWidget.router;
 }
 
+/// A [ChangeNotifier] the delegate can trigger from outside.
+class StackNotifier extends ChangeNotifier {
+  /// Calls the listeners.
+  void notify() => notifyListeners();
+}
+
 /// Owns the page stack and runs navigations for a [FoldableRouter].
 class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
   /// Creates the delegate for [router].
@@ -77,6 +83,11 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
 
   /// Whether a navigation is resolving its redirects.
   final ValueNotifier<bool> isNavigating = ValueNotifier<bool>(false);
+
+  /// Notifies when [stack] or [currentConfiguration] changed. Unlike the
+  /// delegate's own listeners (the Router widget), these are not called for
+  /// rebuild requests that leave both unchanged.
+  final StackNotifier stackChanges = StackNotifier();
 
   final RedirectResolver _resolver;
   List<_Entry> _stack = const [];
@@ -110,7 +121,14 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
     final entry = _stack.last;
     _stack = _stack.sublist(0, _stack.length - 1);
     entry.complete(result);
+    _notify();
+  }
+
+  /// Tells the Router widget to rebuild and, when [stackChanged], the
+  /// listeners of the [FoldableRouter].
+  void _notify({bool stackChanged = true}) {
     notifyListeners();
+    if (stackChanged) stackChanges.notify();
   }
 
   /// Re-runs the redirects of the routes on the stack, bottom to top.
@@ -164,6 +182,8 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
       keep++;
     }
     final removed = _stack.sublist(keep);
+    final changed =
+        removed.isNotEmpty || keep < chain.length || _notFound != null;
     _stack = [
       ..._stack.take(keep),
       for (final route in chain.skip(keep)) _Entry(_nextId++, route),
@@ -172,7 +192,7 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
     for (final entry in removed) {
       entry.complete();
     }
-    notifyListeners();
+    _notify(stackChanged: changed);
     return _stack.last;
   }
 
@@ -180,58 +200,46 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
     final entry = _Entry(_nextId++, route);
     _stack = [..._stack, entry];
     _notFound = null;
-    notifyListeners();
+    _notify();
     return entry;
   }
 
   void _showNotFound(Uri uri) {
     final removed = _stack;
+    final changed = removed.isNotEmpty || _notFound != uri;
     _stack = const [];
     _notFound = uri;
     for (final entry in removed) {
       entry.complete();
     }
-    notifyListeners();
+    _notify(stackChanged: changed);
   }
 
-  FoldableRoute? _routeFor(Uri uri) {
-    var path = uri.path.isEmpty ? '/' : uri.path;
-    if (path.length > 1 && path.endsWith('/')) {
-      path = path.substring(0, path.length - 1);
-    }
-    final normalized = uri.replace(path: path);
-    final initial = router.initial;
-    if (path == initial.path &&
-        mapEquals(normalized.queryParameters, initial.uri.queryParameters)) {
-      return initial;
-    }
-    final factory = router.routes[path];
-    if (factory == null) return null;
-    final FoldableRoute route;
-    try {
-      route = factory(Map.unmodifiable(normalized.queryParameters));
-    } catch (_) {
-      // Typically a missing or malformed parameter.
-      return null;
-    }
-    assert(
-      route.path == path,
-      'The factory registered for "$path" returned $route, whose path is '
-      '"${route.path}".',
-    );
-    return route;
-  }
-
-  @override
-  Future<void> setNewRoutePath(Uri configuration) async {
-    final route = _routeFor(configuration);
+  /// Opens the route [uri] stands for, or shows the not-found page when
+  /// there is none. Errors of the navigation are thrown.
+  Future<void> openUri(Uri uri) async {
+    if (_disposed) return;
+    final route = router.routeFor(uri);
     if (route == null) {
       _end(_begin()); // Supersede whatever is pending.
-      _showNotFound(configuration);
+      _showNotFound(uri);
       return;
     }
     try {
       await _navigate(route, push: false);
+    } catch (_) {
+      // Nothing is on screen yet (first navigation): show something.
+      if (_stack.isEmpty && _notFound == null && !_disposed) {
+        _showNotFound(uri);
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<void> setNewRoutePath(Uri configuration) async {
+    try {
+      await openUri(configuration);
     } catch (error, stackTrace) {
       // Nobody awaits a platform-initiated navigation, so report it here.
       FlutterError.reportError(
@@ -242,9 +250,6 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
           context: ErrorDescription('while opening $configuration'),
         ),
       );
-      if (_stack.isEmpty && _notFound == null && !_disposed) {
-        _showNotFound(configuration);
-      }
     }
   }
 
@@ -258,12 +263,14 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
   void _onDidRemovePage(Page<Object?> page) {
     final index = _stack.indexWhere((e) => e.key == page.key);
     if (index < 0) return; // Already removed by us (pop / open).
-    if (_stack.length > 1) {
+    final removable = _stack.length > 1;
+    if (removable) {
       final entry = _stack[index];
       _stack = [..._stack]..removeAt(index);
       entry.complete(entry.popped);
     }
-    notifyListeners();
+    // The last page stays; the Navigator still has to be rebuilt with it.
+    _notify(stackChanged: removable);
   }
 
   @override
@@ -301,6 +308,7 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
       entry.complete();
     }
     isNavigating.dispose();
+    stackChanges.dispose();
     super.dispose();
   }
 }

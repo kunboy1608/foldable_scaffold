@@ -12,8 +12,12 @@ class LoginPage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final router = FoldableRouter.of(context);
-    // Where to go after login: the requested location, or Home.
-    final target = routeForLocation(from) ?? const HomeRoute();
+    // Where to go after login: the requested location, or Home. `routeFor`
+    // is the lookup the router itself uses for deep links.
+    final fromUri = Uri.tryParse(from ?? '');
+    final target =
+        (from == null || fromUri == null ? null : router.routeFor(fromUri)) ??
+        const HomeRoute();
     return Scaffold(
       appBar: AppBar(title: const Text('Login')),
       body: Center(

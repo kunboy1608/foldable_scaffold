@@ -22,7 +22,8 @@ class UsersPage extends StatelessWidget {
         children: [
           for (final id in const ['1', '7', '42'])
             ListTile(
-              leading: const Icon(Icons.person_outline),
+              // One Hero per user: the avatar flies to the detail and back.
+              leading: UserAvatar(id: id),
               title: Text('User $id'),
               subtitle: Text("open(UserRoute(id: '$id'))"),
               // The list is the parent of the detail, so it stays below.
@@ -50,6 +51,8 @@ class UserPage extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
+            UserAvatar(id: id, radius: 64),
+            const SizedBox(height: 16),
             Text('User $id', style: Theme.of(context).textTheme.headlineMedium),
             const SizedBox(height: 16),
             OutlinedButton(
@@ -61,6 +64,47 @@ class UserPage extends StatelessWidget {
               child: const Text('open(HomeRoute())'),
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// The avatar of a user, shared by the list and the detail so that both ends
+/// of the Hero flight are the same widget (only [radius] differs).
+class UserAvatar extends StatelessWidget {
+  const UserAvatar({super.key, required this.id, this.radius = 20});
+
+  final String id;
+  final double radius;
+
+  static String heroTag(String id) => 'user-avatar-$id';
+
+  static Color colorFor(String id) {
+    final seed = id.codeUnits.fold<int>(0, (sum, unit) => sum + unit);
+    return Colors.primaries[seed % Colors.primaries.length];
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Hero(
+      tag: heroTag(id),
+      // Also fly during a user-driven pop (Android predictive back, iOS swipe).
+      transitionOnUserGestures: true,
+      // In flight the child lives in the overlay, outside any Scaffold: the
+      // Material keeps the text style, the FittedBox scales the label with
+      // the circle.
+      child: Material(
+        type: MaterialType.transparency,
+        child: CircleAvatar(
+          radius: radius,
+          backgroundColor: colorFor(id),
+          foregroundColor: Colors.white,
+          child: FractionallySizedBox(
+            widthFactor: 0.6,
+            heightFactor: 0.6,
+            child: FittedBox(child: Text(id)),
+          ),
         ),
       ),
     );

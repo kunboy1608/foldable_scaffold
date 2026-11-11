@@ -30,7 +30,8 @@ class ExampleApp extends StatelessWidget {
   }
 }
 
-/// App-wide bar showing `router.isNavigating` and `router.stack`.
+/// App-wide bar showing `router.isNavigating`, `router.stack` and
+/// `router.location`.
 class StatusBar extends StatelessWidget {
   const StatusBar({super.key, required this.router});
 
@@ -59,19 +60,32 @@ class StatusBar extends StatelessWidget {
             ),
             Padding(
               padding: const EdgeInsets.fromLTRB(16, 6, 16, 10),
-              // The delegate notifies whenever the stack changes.
+              // The router is a Listenable: it notifies whenever the stack
+              // (and so the location) changes.
               child: ListenableBuilder(
-                listenable: router.routerConfig.routerDelegate,
+                listenable: router,
                 builder: (context, _) {
                   final stack = router.stack;
-                  return Text(
-                    stack.isEmpty
-                        ? 'stack: (empty)'
-                        : 'stack: ${stack.map((r) => r.uri).join('  >  ')}',
-                    key: const Key('stack'),
-                    style: theme.textTheme.bodySmall?.copyWith(
-                      fontFamily: 'monospace',
-                    ),
+                  final style = theme.textTheme.bodySmall?.copyWith(
+                    fontFamily: 'monospace',
+                  );
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        stack.isEmpty
+                            ? 'stack: (empty)'
+                            : 'stack: ${stack.map((r) => r.uri).join('  >  ')}',
+                        key: const Key('stack'),
+                        style: style,
+                      ),
+                      Text(
+                        'location: ${router.location ?? '(none)'}',
+                        key: const Key('location'),
+                        style: style,
+                      ),
+                    ],
                   );
                 },
               ),
