@@ -559,7 +559,10 @@ void main() {
     );
     await tester.pump();
 
-    expect(find.byType(Navigator), findsNothing);
+    expect(
+      find.byWidgetPredicate((widget) => widget is Navigator),
+      findsNothing,
+    );
     expect(tester.takeException(), isNull);
 
     gate!.complete();

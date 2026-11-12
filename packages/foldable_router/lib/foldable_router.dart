@@ -10,6 +10,7 @@ export 'src/foldable_router.dart'
     show FoldableRouter, FoldableRouteFactory, FoldableNotFoundBuilder;
 export 'src/foldable_shell_route.dart'
     show FoldableShellRoute, FoldableShellState;
+export 'src/foldable_panes.dart' show FoldablePane, FoldablePanes;
 export 'src/redirect_resolver.dart'
     show
         FoldableRedirectException,

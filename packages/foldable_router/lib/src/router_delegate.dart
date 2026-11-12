@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
+import 'foldable_panes.dart';
 import 'foldable_route.dart';
 import 'foldable_router.dart';
 import 'foldable_shell_route.dart';
@@ -10,7 +11,7 @@ import 'redirect_resolver.dart';
 
 /// One page in the stack. Entries have their own identity so the same route
 /// can be on the stack more than once.
-class _Entry {
+class _Entry implements PaneEntryRef {
   _Entry(this.id, this.route);
 
   final int id;
@@ -27,6 +28,31 @@ class _Entry {
   void complete([FutureOr<Object?> value]) {
     if (!_result.isCompleted) _result.complete(value);
   }
+
+  /// The navigator route created for this entry, set by
+  /// [_BranchPage.createRoute] and [_EntryPage.createRoute].
+  Route<Object?>? navigatorRoute;
+
+  /// The branch of the shell whose stack this page is in, or `-1` when the
+  /// page is not in a branch.
+  int branchIndex = -1;
+
+  @override
+  final ValueNotifier<int> position = ValueNotifier<int>(0);
+
+  @override
+  final ValueNotifier<FoldablePane> pane = ValueNotifier<FoldablePane>(
+    FoldablePane.single,
+  );
+
+  @override
+  bool paneFrozen = false;
+
+  @override
+  FoldablePane? frozenPane;
+
+  @override
+  bool frozenHidden = false;
 }
 
 class _EntryPage extends MaterialPage<Object?> {
@@ -37,12 +63,16 @@ class _EntryPage extends MaterialPage<Object?> {
   }) : super(
          key: entry.key,
          name: entry.route.uri.toString(),
-         child: gestureGate == null
-             ? PopScope(
-                 canPop: canPopGesture,
-                 child: Builder(builder: entry.route.build),
-               )
-             : _GestureGate(gate: gestureGate, builder: entry.route.build),
+         child: PaneScope(
+           entry: entry,
+           notifier: entry.pane,
+           child: gestureGate == null
+               ? PopScope(
+                   canPop: canPopGesture,
+                   child: Builder(builder: entry.route.build),
+                 )
+               : PanePopGate(gate: gestureGate, builder: entry.route.build),
+         ),
        );
 
   final _Entry entry;
@@ -60,52 +90,11 @@ class _EntryPage extends MaterialPage<Object?> {
   @override
   Route<Object?> createRoute(BuildContext context) {
     final route = super.createRoute(context);
-    entry.popped = route.popped;
+    entry
+      ..navigatorRoute = route
+      ..popped = route.popped;
     return route;
   }
-}
-
-/// A [PopScope] whose `canPop` follows [gate], so the delegate can enable or
-/// disable the back gesture of a branch page without rebuilding the router.
-class _GestureGate extends StatefulWidget {
-  const _GestureGate({required this.gate, required this.builder});
-
-  final ValueListenable<bool> gate;
-  final WidgetBuilder builder;
-
-  @override
-  State<_GestureGate> createState() => _GestureGateState();
-}
-
-class _GestureGateState extends State<_GestureGate> {
-  @override
-  void initState() {
-    super.initState();
-    widget.gate.addListener(_onGateChanged);
-  }
-
-  @override
-  void didUpdateWidget(_GestureGate oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (oldWidget.gate != widget.gate) {
-      oldWidget.gate.removeListener(_onGateChanged);
-      widget.gate.addListener(_onGateChanged);
-    }
-  }
-
-  @override
-  void dispose() {
-    widget.gate.removeListener(_onGateChanged);
-    super.dispose();
-  }
-
-  void _onGateChanged() => setState(() {});
-
-  @override
-  Widget build(BuildContext context) => PopScope(
-    canPop: widget.gate.value,
-    child: Builder(builder: widget.builder),
-  );
 }
 
 /// Tracks the top-most route of one navigator.
@@ -121,6 +110,9 @@ class _TopRouteTracker extends NavigatorObserver {
 
   /// Called whenever the top-most route changes.
   VoidCallback? onChanged;
+
+  /// The route currently on top of the navigator, if any.
+  Route<Object?>? get topRoute => _top;
 
   /// Whether the top-most route is not one of the pages the router owns.
   bool get topIsPageless => _top != null && _top!.settings is! Page<Object?>;
@@ -138,10 +130,11 @@ class _Shell {
   _Shell(this.entry, this.branches, {required this.onTopRouteChanged})
     : branchNavigators = List.generate(
         branches.length,
-        (_) => GlobalKey<NavigatorState>(),
+        (_) => GlobalKey<_BranchNavigatorState>(),
       ),
       heroControllers = List.generate(branches.length, (_) => HeroController()),
       topRoutes = List.generate(branches.length, (_) => _TopRouteTracker()),
+      panes = List.generate(branches.length, (i) => PaneMetrics(i)),
       gestureGates = List.generate(
         branches.length,
         (_) => ValueNotifier<bool>(false),
@@ -159,7 +152,10 @@ class _Shell {
 
   /// Keys of the nested navigator of each branch, index-aligned with
   /// [branches]. They survive as long as this shell is on screen.
-  final List<GlobalKey<NavigatorState>> branchNavigators;
+  final List<GlobalKey<_BranchNavigatorState>> branchNavigators;
+
+  /// The page layout metrics of each branch, index-aligned with [branches].
+  final List<PaneMetrics> panes;
 
   /// Ancestors of the shell (its parent chain), bottom first: the pages of
   /// the root navigator that sit below the shell page.
@@ -193,6 +189,11 @@ class _Shell {
   /// Index of the branch currently shown.
   int current = 0;
 
+  /// The entries that were on a branch stack at the last refresh. Entries
+  /// that leave a stack keep the pane (and the visibility) they had, so that
+  /// they animate out of the pane they were shown in.
+  Set<_Entry> knownEntries = <_Entry>{};
+
   FoldableShellRoute get route => entry.route as FoldableShellRoute;
 
   Iterable<_Entry> get allEntries sync* {
@@ -218,9 +219,207 @@ class _Shell {
     for (final gate in gestureGates) {
       gate.dispose();
     }
+    for (final metrics in panes) {
+      metrics.dispose();
+    }
   }
 
   bool _disposed = false;
+}
+
+/// A page of a branch of the shell, drawn by the pane layout.
+///
+/// Unlike [_EntryPage] (used on the root navigator, always a
+/// [MaterialPage]), the route created for this page knows about the panes of
+/// its tab: in a one-pane tab it behaves exactly like a [MaterialPage] (the
+/// page below stays laid out and paints while the top page animates, the
+/// secondary animation runs), in a two-pane tab it is transparent, has no
+/// barrier, does not run its outgoing transition and draws its content in
+/// the rectangle of its frame.
+class _BranchPage extends Page<Object?> {
+  _BranchPage({
+    required this.entry,
+    required this.metrics,
+    required this.popGate,
+    required this.contentBuilder,
+  }) : super(key: entry.key, name: entry.route.uri.toString());
+
+  final _Entry entry;
+  final PaneMetrics metrics;
+  final ValueListenable<bool>? popGate;
+  final WidgetBuilder contentBuilder;
+
+  @override
+  Route<Object?> createRoute(BuildContext context) {
+    final _BranchPageRoute<Object?> route = _BranchPageRoute<Object?>(this);
+    entry
+      ..navigatorRoute = route
+      ..popped = route.popped;
+    return route;
+  }
+}
+
+/// The route of a [_BranchPage].
+class _BranchPageRoute<T> extends PageRoute<T>
+    with MaterialRouteTransitionMixin<T> {
+  _BranchPageRoute(this.page) : super(settings: page);
+
+  final _BranchPage page;
+
+  @override
+  final bool maintainState = true;
+
+  PaneMetrics get _metrics => page.metrics;
+
+  /// In a one-pane tab this is `true`, like [MaterialPageRoute]: the page
+  /// below is not painted once the top page settled, and it is painted (with
+  /// its secondary animation running) during a transition or a predictive
+  /// back gesture. In a two-pane tab it is `false`: the page below is the
+  /// left pane and must stay visible.
+  @override
+  bool get opaque => !_metrics.twoPane.value;
+
+  /// One pane: the material barrier, as in [MaterialPageRoute]. Two panes: no
+  /// barrier at all, so the left pane is reachable (taps, semantics). The
+  /// barrier entry stays: only its content changes.
+  @override
+  Widget buildModalBarrier() => _metrics.twoPane.value
+      ? const SizedBox.shrink()
+      : super.buildModalBarrier();
+
+  /// The delegated transition (used by the predictive back gesture for the
+  /// route below) is only needed in one-pane tabs: in a two-pane tab the left
+  /// pane must not move.
+  @override
+  DelegatedTransitionBuilder? get delegatedTransition =>
+      _metrics.twoPane.value ? null : super.delegatedTransition;
+
+  @override
+  Widget buildContent(BuildContext context) => PanePageView(
+    metrics: page.metrics,
+    entry: page.entry,
+    popGate: page.popGate,
+    contentBuilder: page.contentBuilder,
+  );
+
+  @override
+  Widget buildTransitions(
+    BuildContext context,
+    Animation<double> animation,
+    Animation<double> secondaryAnimation,
+    Widget child,
+  ) {
+    // In a two-pane tab the page is re-slotted when a page is pushed or
+    // popped above it; it must not play its outgoing transition, it only
+    // changes rectangle.
+    return Theme.of(context).pageTransitionsTheme.buildTransitions<T>(
+      this,
+      context,
+      animation,
+      _metrics.twoPane.value ? kAlwaysDismissedAnimation : secondaryAnimation,
+      child,
+    );
+  }
+
+  /// Keeps the framework's idea of the opacity of the page in sync with the
+  /// current mode (the mode changes without any transition running).
+  ///
+  /// Mirrors what `TransitionRoute` does when an animation settles: the
+  /// barrier entry is the one whose `opaque` flag tells the [Overlay] to stop
+  /// painting the pages below.
+  void syncPaneMode() {
+    changedInternalState();
+    final List<OverlayEntry> entries = overlayEntries.toList();
+    if (entries.isEmpty) return;
+    final bool settled = animation?.status == AnimationStatus.completed;
+    entries.first.opaque = opaque && settled;
+  }
+}
+
+/// The navigator of one branch.
+///
+/// It is a [Navigator] whose state intercepts [NavigatorState.maybePop] to
+/// tell where the back comes from: with two panes, the back arrow of the page
+/// drawn on the right pops that page, the arrow of the page drawn on the left
+/// pops both visible pages in one router update. The pane is inferred from the
+/// last pointer-down (the tap on the arrow) or, without a pointer, from where
+/// the primary focus is.
+class _BranchNavigator extends Navigator {
+  _BranchNavigator({
+    required super.key,
+    required super.pages,
+    required super.onDidRemovePage,
+    required this.owner,
+    required this.metrics,
+    required this.branchIndex,
+    required this.tracker,
+    required this.onPaneBack,
+  }) : super(observers: <NavigatorObserver>[tracker]);
+
+  /// The delegate that owns this navigator.
+  final FoldableRouterDelegate owner;
+
+  final PaneMetrics metrics;
+  final int branchIndex;
+  final _TopRouteTracker tracker;
+  final void Function(Object? result) onPaneBack;
+
+  @override
+  _BranchNavigatorState createState() => _BranchNavigatorState();
+}
+
+class _BranchNavigatorState extends NavigatorState {
+  _BranchNavigator get _branch => widget as _BranchNavigator;
+
+  /// Pops one page, for the back the delegate initiates (system back).
+  ///
+  /// It bypasses the pane inference: the system back always pops the top
+  /// page only.
+  Future<bool> popFromDelegate<T extends Object?>([T? result]) =>
+      super.maybePop<T>(result);
+
+  @override
+  Future<bool> maybePop<T extends Object?>([T? result]) {
+    final PaneMetrics metrics = _branch.metrics;
+    if (metrics.twoPane.value) {
+      final Route<Object?>? top = _branch.tracker.topRoute;
+      // A pageless route on top (sheet, menu) is not ours: let it pop.
+      if (top != null && top.settings is Page<Object?>) {
+        final FoldablePane? pane = metrics.pointerPane ?? _paneFromFocus();
+        if (pane == FoldablePane.primary) {
+          metrics.pointerPane = null;
+          _branch.onPaneBack(result);
+          return SynchronousFuture<bool>(true);
+        }
+      }
+    }
+    return super.maybePop<T>(result);
+  }
+
+  /// The pane of the page that holds the primary focus, if any.
+  FoldablePane? _paneFromFocus() {
+    final BuildContext? context = FocusManager.instance.primaryFocus?.context;
+    if (context == null) return null;
+    PaneEntryRef? found;
+    context.visitAncestorElements((Element element) {
+      final Widget widget = element.widget;
+      if (widget is PaneScope) {
+        found = widget.entry;
+        return false;
+      }
+      return true;
+    });
+    final PaneEntryRef? entry = found;
+    if (entry is! _Entry || entry.paneFrozen) return null;
+    final _Shell? shell = _owner?._shell;
+    final List<_Entry>? stack = shell?.branchStacks[_branch.branchIndex];
+    if (stack == null || !stack.any((_Entry e) => identical(e, entry))) {
+      return null;
+    }
+    return entry.pane.value;
+  }
+
+  FoldableRouterDelegate? get _owner => _branch.owner;
 }
 
 /// Exposes the [FoldableRouter] to the widgets below the router.
@@ -414,6 +613,8 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
     final changed =
         before.location != currentConfiguration ||
         !listEquals(before.routes, stack);
+    final shell = _shell;
+    if (shell != null) _refreshPaneAssignments(shell);
     _refreshBackState();
     notifyListeners();
     if (changed) stackChanges.notify();
@@ -807,7 +1008,9 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
       final branchNavigator =
           shell.branchNavigators[shell.current].currentState;
       if (branchNavigator == null) return SynchronousFuture<bool>(false);
-      return branchNavigator.maybePop();
+      // The system back always pops exactly one page: it does not go through
+      // the pane inference of the back buttons.
+      return branchNavigator.popFromDelegate();
     }
     return SynchronousFuture<bool>(false);
   }
@@ -861,14 +1064,16 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
     _notifyAfter(before);
   }
 
-  /// Builds the frame of [shell] around the nested navigator of the current
-  /// branch (the other built branches stay alive, offstage).
+  /// Builds the frame of [shell] around the nested navigators of the
+  /// branches: each branch stays at a fixed place in the tree (offstage when
+  /// it is not the current one), and the current branch is wrapped in the
+  /// pane area, which asks the shell for its `buildPanes` layout.
   Widget _buildShellBody(BuildContext context, _Shell shell) {
     // Only the top page of the *visible* branch may take a back gesture: a
     // page on top of a hidden tab, of a branch covered by a full-screen
     // page, or of the whole shell covered by a dialog must not. The
     // framework only looks at the page's own navigator, hence the
-    // [_GestureGate] in _EntryPage; its value follows the delegate's state.
+    // [PanePopGate] in _EntryPage; its value follows the delegate's state.
     final children = <Widget>[];
     for (var i = 0; i < shell.branches.length; i++) {
       final entries = shell.branchStacks[i];
@@ -880,14 +1085,24 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
             enabled: i == shell.current,
             child: HeroControllerScope(
               controller: shell.heroControllers[i],
-              child: Navigator(
+              child: _BranchNavigator(
                 key: shell.branchNavigators[i],
-                observers: [shell.topRoutes[i]],
-                pages: [
+                owner: this,
+                metrics: shell.panes[i],
+                branchIndex: i,
+                tracker: shell.topRoutes[i],
+                onPaneBack: (Object? result) => _onPaneBack(i, result),
+                pages: <Page<Object?>>[
                   for (final entry in entries)
-                    _EntryPage(entry, gestureGate: shell.gestureGates[i]),
+                    _BranchPage(
+                      entry: entry,
+                      metrics: shell.panes[i],
+                      popGate: shell.gestureGates[i],
+                      contentBuilder: entry.route.build,
+                    ),
                 ],
-                onDidRemovePage: (page) => _onDidRemoveBranchPage(i, page),
+                onDidRemovePage: (Page<Object?> page) =>
+                    _onDidRemoveBranchPage(i, page),
               ),
             ),
           ),
@@ -897,11 +1112,245 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
     return shell.route.buildShell(
       context,
       FoldableShellState(
-        child: Stack(fit: StackFit.expand, children: children),
+        child: BranchArea(
+          route: shell.route,
+          metrics: shell.panes[shell.current],
+          stackLength: shell.branchStacks[shell.current]?.length ?? 0,
+          onBuilt: (FoldablePanes panes, bool twoPane) =>
+              _onAreaBuilt(shell, panes, twoPane),
+          child: Stack(fit: StackFit.expand, children: children),
+        ),
         currentIndex: shell.current,
         goBranch: goBranch,
       ),
     );
+  }
+
+  /// Called while the tab area builds, before the pages of the branch do.
+  ///
+  /// The mode of the tab (one or two panes) is only known here; it is
+  /// published before the pages build, so they can pick it up in the same
+  /// frame: the notifiers are listened to by widgets that are descendants of
+  /// the tab area (marking them dirty is allowed while it builds). The routes
+  /// of the branch also sync their opacity/barrier, which live in the
+  /// navigator of the branch, a descendant as well.
+  void _onAreaBuilt(_Shell shell, FoldablePanes panes, bool twoPane) {
+    final PaneMetrics metrics = shell.panes[panes.branchIndex];
+    metrics
+      ..builtThisFrame = true
+      ..hasSecondary = panes.hasSecondary
+      ..stackLength = shell.branchStacks[panes.branchIndex]?.length ?? 0;
+    if (metrics.twoPane.value != twoPane) {
+      metrics.twoPane.value = twoPane;
+      _syncBranchRoutes(shell, panes.branchIndex);
+    }
+    _refreshPaneAssignments(shell);
+    _scheduleFrameChecks(metrics);
+  }
+
+  /// Schedules, after the frame that built the tab area, the rebuild of the
+  /// area when a frame moved without the area being rebuilt (so the pages
+  /// catch up on the next frame) and the report of frames the app forgot to
+  /// place.
+  void _scheduleFrameChecks(PaneMetrics metrics) {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_disposed) return;
+      metrics.builtThisFrame = false;
+      if (!metrics.twoPane.value) return;
+      if (metrics.primaryFrames == 0 && !metrics.reportedMissing) {
+        metrics.reportedMissing = true;
+        _reportMissingFrame(
+          metrics,
+          'primary',
+          'FoldablePanes.primary must be placed in the widget tree returned '
+              'by FoldableShellRoute.buildPanes, once for each two-pane tab.',
+        );
+      } else if (metrics.hasSecondary &&
+          metrics.secondaryFrames == 0 &&
+          !metrics.reportedMissing) {
+        metrics.reportedMissing = true;
+        _reportMissingFrame(
+          metrics,
+          'secondary',
+          'The stack of the tab has at least two pages, so the layout of '
+              'FoldableShellRoute.buildPanes must place FoldablePanes.secondary: '
+              'without it there is nowhere to draw the top page.',
+        );
+      }
+    });
+  }
+
+  void _reportMissingFrame(PaneMetrics metrics, String pane, String detail) {
+    FlutterError.reportError(
+      FlutterErrorDetails(
+        exception: FlutterError.fromParts(<DiagnosticsNode>[
+          ErrorSummary('A two-pane tab does not place its $pane pane.'),
+          ErrorDescription(detail),
+          ErrorHint(
+            'Return null from FoldableShellRoute.buildPanes to use one pane, '
+            'or place FoldablePanes.$pane in the returned layout.',
+          ),
+          DiagnosticsProperty<String>('Branch', '${metrics.branchIndex}'),
+        ]),
+        library: 'foldable_router',
+        context: ErrorDescription('while laying out the panes of a tab'),
+      ),
+    );
+  }
+
+  /// Recomputes the pane and the position of every page of every branch.
+  ///
+  /// Entries that leave their stack keep the pane (and the visibility) they
+  /// had, so a page that animates out keeps coming from the pane it was
+  /// drawn in even if the stack around it changed.
+  void _refreshPaneAssignments(_Shell shell) {
+    final Set<_Entry> live = <_Entry>{};
+    for (var i = 0; i < shell.branchStacks.length; i++) {
+      final List<_Entry>? stack = shell.branchStacks[i];
+      if (stack == null) continue;
+      final bool twoPane = shell.panes[i].twoPane.value;
+      final int length = stack.length;
+      for (var j = 0; j < length; j++) {
+        final _Entry entry = stack[j];
+        live.add(entry);
+        entry.branchIndex = i;
+        final int position = length - 1 - j;
+        if (entry.position.value != position) entry.position.value = position;
+        final FoldablePane pane = _paneFor(position, length, twoPane);
+        if (entry.pane.value != pane) entry.pane.value = pane;
+        entry.paneFrozen = false;
+        entry.frozenPane = null;
+        entry.frozenHidden = false;
+      }
+    }
+    for (final _Entry entry in shell.knownEntries) {
+      if (live.contains(entry) || entry.paneFrozen) continue;
+      final int branchIndex = entry.branchIndex;
+      final bool twoPane = branchIndex >= 0 && branchIndex < shell.panes.length
+          ? shell.panes[branchIndex].twoPane.value
+          : false;
+      entry.paneFrozen = true;
+      entry.frozenPane = entry.pane.value;
+      entry.frozenHidden = twoPane && entry.position.value > 1;
+    }
+    shell.knownEntries = live;
+  }
+
+  /// The pane a page at [position] from the top of a stack of [length] pages
+  /// is shown in, or [FoldablePane.single] in a one-pane tab.
+  static FoldablePane _paneFor(int position, int length, bool twoPane) {
+    if (!twoPane) return FoldablePane.single;
+    if (position == 0) {
+      return length >= 2 ? FoldablePane.secondary : FoldablePane.primary;
+    }
+    return FoldablePane.primary;
+  }
+
+  /// Brings the routes of one branch in line with its current mode (their
+  /// opacity and their barrier are read by the overlay of the branch).
+  void _syncBranchRoutes(_Shell shell, int branchIndex) {
+    final List<_Entry>? stack = shell.branchStacks[branchIndex];
+    if (stack == null) return;
+    for (final _Entry entry in stack) {
+      final Route<Object?>? route = entry.navigatorRoute;
+      if (route is _BranchPageRoute<Object?>) route.syncPaneMode();
+    }
+  }
+
+  /// The back arrow of the *left* pane in a two-pane tab: pops the page drawn
+  /// on the left and every page above it (the page on the right included) in
+  /// one update of the stack.
+  void _onPaneBack(int branchIndex, Object? result) {
+    final _Shell? shell = _shell;
+    if (shell == null) return;
+    final List<_Entry>? branch = shell.branchStacks[branchIndex];
+    if (branch == null || branch.length < 2) return;
+    // The page drawn on the left is the root of the tab: it has no back arrow
+    // and cannot be removed.
+    if (branch.length == 2) return;
+    if (_vetoesBack(shell.topRoutes[branchIndex].topRoute)) return;
+    final before = _snapshot();
+    final List<_Entry> removed = branch.sublist(branch.length - 2);
+    shell.branchStacks[branchIndex] = branch.sublist(0, branch.length - 2);
+    for (final _Entry entry in removed) {
+      entry.complete();
+    }
+    _notifyAfter(before);
+  }
+
+  /// Whether the route on top of the navigator refuses to be popped (a user
+  /// `PopScope(canPop: false)`); its callback is invoked, as `maybePop` does.
+  bool _vetoesBack(Route<Object?>? top) {
+    if (top == null || top.popDisposition != RoutePopDisposition.doNotPop) {
+      return false;
+    }
+    top.onPopInvokedWithResult(false, null);
+    return true;
+  }
+
+  /// Removes [entryRef] and every page above it, in one update of the stack.
+  ///
+  /// The root of a tab (and the root of the whole router) cannot be removed:
+  /// closing it does nothing. A page that refuses to be popped (`PopScope`)
+  /// and is at the top of its stack cancels the whole close.
+  void closeEntry(PaneEntryRef entryRef) {
+    final _Entry entry = entryRef as _Entry;
+    final before = _snapshot();
+    final _Shell? shell = _shell;
+    List<_Entry>? stack;
+    int start = 0;
+    int branchIndex = -1;
+    bool inOverlays = false;
+    Route<Object?>? veto;
+
+    if (shell == null) {
+      final int index = _stack.indexWhere((_Entry e) => identical(e, entry));
+      if (index <= 0) return;
+      stack = List<_Entry>.of(_stack);
+      start = index;
+      veto = _rootTop.topRoute;
+    } else {
+      final int overlayIndex = shell.overlays.indexWhere(
+        (_Entry e) => identical(e, entry),
+      );
+      if (overlayIndex >= 0) {
+        stack = List<_Entry>.of(shell.overlays);
+        start = overlayIndex;
+        inOverlays = true;
+        veto = _rootTop.topRoute;
+      } else {
+        for (var i = 0; i < shell.branchStacks.length; i++) {
+          final List<_Entry>? branch = shell.branchStacks[i];
+          if (branch == null) continue;
+          final int index = branch.indexWhere(
+            (_Entry e) => identical(e, entry),
+          );
+          if (index < 0) continue;
+          if (index == 0) return; // The root of the tab cannot be closed.
+          stack = List<_Entry>.of(branch);
+          start = index;
+          branchIndex = i;
+          veto = shell.topRoutes[i].topRoute;
+          break;
+        }
+      }
+    }
+    if (stack == null) return;
+    if (_vetoesBack(veto)) return;
+
+    final List<_Entry> removed = stack.sublist(start);
+    if (shell == null) {
+      _stack = _stack.sublist(0, start);
+    } else if (inOverlays) {
+      shell.overlays = shell.overlays.sublist(0, start);
+    } else {
+      shell.branchStacks[branchIndex] = shell.branchStacks[branchIndex]!
+          .sublist(0, start);
+    }
+    for (final _Entry entry in removed) {
+      entry.complete();
+    }
+    _notifyAfter(before);
   }
 
   @override

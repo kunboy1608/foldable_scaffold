@@ -6,9 +6,20 @@ import '../routes.dart';
 class UsersPage extends StatelessWidget {
   const UsersPage({super.key});
 
+  /// The user currently shown in the right pane, if the tab has two panes.
+  static String? _selectedUserId(FoldableRouter router, bool twoPane) {
+    if (!twoPane) return null;
+    for (final route in router.stack.reversed) {
+      if (route is UserRoute) return route.id;
+      if (route is UsersRoute) break;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
     final router = FoldableRouter.of(context);
+    final bool twoPane = FoldableRouter.paneOf(context) == FoldablePane.primary;
     return Scaffold(
       appBar: AppBar(
         title: const Text('Users'),
@@ -18,18 +29,29 @@ class UsersPage extends StatelessWidget {
           onPressed: () => router.open(const HomeRoute()),
         ),
       ),
-      body: ListView(
-        children: [
-          for (final id in const ['1', '7', '42'])
-            ListTile(
-              // One Hero per user: the avatar flies to the detail and back.
-              leading: UserAvatar(id: id),
-              title: Text('User $id'),
-              subtitle: Text("open(UserRoute(id: '$id'))"),
-              // The list is the parent of the detail, so it stays below.
-              onTap: () => router.open(UserRoute(id: id)),
-            ),
-        ],
+      body: ListenableBuilder(
+        listenable: router,
+        builder: (context, _) {
+          final String? selected = _selectedUserId(router, twoPane);
+          return ListView(
+            children: [
+              for (final id in const ['1', '7', '42'])
+                ListTile(
+                  // The whole row is tinted when the user is open in the
+                  // right pane of a two-pane tab.
+                  selected: selected == id,
+                  // One Hero per user: the avatar flies to the detail and
+                  // back (one-pane tabs only: in a two-pane tab the list
+                  // stays on screen, so a flight would duplicate it).
+                  leading: UserAvatar(id: id),
+                  title: Text('User $id'),
+                  subtitle: Text("open(UserRoute(id: '$id'))"),
+                  // The list is the parent of the detail, so it stays below.
+                  onTap: () => router.open(UserRoute(id: id)),
+                ),
+            ],
+          );
+        },
       ),
     );
   }

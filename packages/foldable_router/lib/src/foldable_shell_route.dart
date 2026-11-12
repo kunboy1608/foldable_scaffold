@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import 'foldable_panes.dart';
 import 'foldable_route.dart';
 
 /// Everything a shell needs to draw its frame around the current branch.
@@ -134,6 +135,27 @@ abstract class FoldableShellRoute extends FoldableRoute {
     '$runtimeType is a FoldableShellRoute: it is shown through buildShell, '
     'not build.',
   );
+
+  /// Builds how the pages of one tab are shown when the app wants two panes.
+  ///
+  /// Return `null` (the default) to keep the classic one-pane behavior: only
+  /// the top page of the tab is visible, filling the whole area of the tab.
+  ///
+  /// Return a widget to show two panes. The widget is placed *below* the
+  /// navigators of the branches and receives a [FoldablePanes] whose
+  /// [primary] frame (and [secondary] frame, when the stack of the tab has
+  /// at least two pages) the app must place inside its layout. The frames
+  /// take room and mark the rectangles the pages are drawn in; the pages
+  /// themselves keep their own navigator and only change place. If the app
+  /// never places [primary], or never places [secondary] while
+  /// [hasSecondary] is `true`, the router reports a [FlutterError] in debug
+  /// builds.
+  ///
+  /// Called once per tab, inside the area of that tab, and re-run when the
+  /// tab area rebuilds (a [MediaQuery] or size change, or a different layout
+  /// returned by this method). The returned layout may not rely on page
+  /// state: pages stay mounted while they only change pane.
+  Widget? buildPanes(BuildContext context, FoldablePanes panes) => null;
 
   @override
   bool operator ==(Object other) =>

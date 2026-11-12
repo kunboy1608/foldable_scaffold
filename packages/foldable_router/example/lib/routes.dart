@@ -26,6 +26,30 @@ class MainShellRoute extends FoldableShellRoute {
   @override
   Widget buildShell(BuildContext context, FoldableShellState shell) =>
       MainShell(shell: shell);
+
+  // The Users tab (branch 1) shows two panes when the tab is at least 840
+  // wide: the list on the left, the opened user on the right. Other tabs,
+  // and narrow windows, keep the classic one-pane stack.
+  @override
+  Widget? buildPanes(BuildContext context, FoldablePanes panes) {
+    if (panes.branchIndex != 1) return null;
+    if (panes.constraints.maxWidth < 840) return null;
+    return Row(
+      children: [
+        Expanded(flex: 2, child: panes.primary),
+        const VerticalDivider(width: 1),
+        Expanded(
+          flex: 3,
+          child: panes.hasSecondary
+              ? panes.secondary
+              : const Center(
+                  key: Key('no-user-selected'),
+                  child: Text('Chọn một người dùng'),
+                ),
+        ),
+      ],
+    );
+  }
 }
 
 class HomeRoute extends FoldableRoute {

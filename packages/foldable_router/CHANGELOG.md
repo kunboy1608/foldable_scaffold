@@ -34,4 +34,12 @@
   dialog otherwise, and the predictive back state reported to the engine
   did not see them. The state is now updated as dialogs open and close,
   and the gesture is hidden from branch pages while a dialog covers them.
+* Two panes: a shell can override `buildPanes` to show two panes of the same
+  tab on wide layouts (`FoldablePanes.primary` left,
+  `FoldablePanes.secondary` right); one pane stays the default and every
+  other public API is unchanged. Pages never leave their navigator — they
+  only change place — so state, focus, scroll and hero controllers survive.
+  `FoldableRouter.paneOf(context)` reports the pane of a page and
+  `FoldableRouter.close(context)` closes a page together with every page
+  above it in one stack update.
 * The hero controllers of the branches are disposed when the shell goes away.

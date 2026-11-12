@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import 'foldable_panes.dart';
 import 'foldable_route.dart';
 import 'foldable_shell_route.dart';
 import 'redirect_resolver.dart';
@@ -26,6 +27,7 @@ typedef FoldableNotFoundBuilder =
 ///   routes: {
 ///     '/users': (params) => const UsersRoute(),
 ///     '/users/detail': (params) => UserRoute(id: params['id']!),
+///     '/login': (params) => const LoginRoute(),
 ///   },
 ///   notFoundBuilder: (context, uri) => NotFoundPage(uri: uri),
 /// );
@@ -266,4 +268,43 @@ class FoldableRouter implements Listenable {
   /// Like [of], but returns `null` when there is no router above [context].
   static FoldableRouter? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<FoldableRouterScope>()?.router;
+
+  /// The pane the page that built [context] is shown in, in a shell that
+  /// returns two panes for its tab (see [FoldableShellRoute.buildPanes]).
+  ///
+  /// The calling widget is rebuilt when the answer changes (a push or a pop
+  /// that moves the page to another pane, or a one-pane <-> two-pane
+  /// switch).
+  ///
+  /// Returns [FoldablePane.single] for pages of the root navigator (full
+  /// screen pages, dialogs) and for every page of a one-pane tab. Pages
+  /// deeper than the second appear as [FoldablePane.primary]: they are kept
+  /// alive behind the left pane, out of the screen.
+  static FoldablePane paneOf(BuildContext context) {
+    final PaneScope? scope = PaneScope.maybeOf(context);
+    return scope?.notifier?.value ?? FoldablePane.single;
+  }
+
+  /// Removes the page that built [context], and every page above it in the
+  /// stack of its tab, in one update of the stack.
+  ///
+  /// This is the reliable "close" for a button the app writes itself (and for
+  /// accessibility actions): it works the same in one-pane and two-pane tabs.
+  /// The root page of a tab (and of the whole router) cannot be closed:
+  /// calling [close] from it does nothing.
+  ///
+  /// A page on top of the stack that refuses to pop
+  /// (`PopScope(canPop: false)`) blocks the whole close, exactly like the
+  /// system back and the back button do.
+  ///
+  /// With pageless routes (sheets, menus) above the pages: they stay; only
+  /// pages are closed.
+  static void close(BuildContext context) {
+    final PaneScope? scope = PaneScope.read(context);
+    if (scope == null) return;
+    final FoldableRouter? router = context
+        .getInheritedWidgetOfExactType<FoldableRouterScope>()
+        ?.router;
+    router?._delegate.closeEntry(scope.entry);
+  }
 }

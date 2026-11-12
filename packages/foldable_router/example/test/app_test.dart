@@ -296,4 +296,103 @@ void main() {
       'stack: [shell]  >  /users  >  /users/detail?id=7',
     );
   });
+
+  testWidgets('wide window: the Users tab shows two panes', (tester) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final router = await pumpApp(tester);
+    await tester.pumpAndSettle();
+
+    await tapTab(tester, 'Users');
+    await tester.pumpAndSettle();
+
+    // One page: the empty-state asks for a selection on the right.
+    expect(find.byKey(const Key('no-user-selected')), findsOneWidget);
+    expect(find.text('Chọn một người dùng'), findsOneWidget);
+
+    await tester.tap(find.widgetWithText(ListTile, 'User 7'));
+    await tester.pumpAndSettle();
+
+    expect(router.stack, [
+      const MainShellRoute(),
+      const UsersRoute(),
+      const UserRoute(id: '7'),
+    ]);
+    expect(find.byKey(const Key('no-user-selected')), findsNothing);
+    expect(find.text('User 7'), findsWidgets);
+
+    // The row of the open user is highlighted while the list is the left
+    // pane.
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is ListTile &&
+            widget.selected &&
+            widget.title is Text &&
+            (widget.title! as Text).data == 'User 7',
+      ),
+      findsOneWidget,
+    );
+
+    // The back button of the right pane pops just the detail page.
+    await tester.tap(
+      find.descendant(
+        of: find.byType(UserPage),
+        matching: find.byType(BackButton),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    expect(router.stack, [const MainShellRoute(), const UsersRoute()]);
+    expect(find.byKey(const Key('no-user-selected')), findsOneWidget);
+  });
+
+  testWidgets('wide window: opening a user from Home lands on two panes', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 900);
+    tester.view.devicePixelRatio = 1.0;
+    addTearDown(tester.view.reset);
+    final router = await pumpApp(tester);
+    await tester.pumpAndSettle();
+
+    await tap(tester, 'open-user');
+    await tester.pumpAndSettle();
+
+    expect(router.stack, [
+      const MainShellRoute(),
+      const UsersRoute(),
+      const UserRoute(id: '7'),
+    ]);
+    expect(find.byKey(const Key('no-user-selected')), findsNothing);
+    // Both panes are on screen: the list and the detail.
+    expect(find.widgetWithText(AppBar, 'Users'), findsOneWidget);
+    expect(find.byType(UserPage), findsOneWidget);
+  });
+
+  testWidgets('narrow window: the Users tab keeps one pane', (tester) async {
+    final router = await pumpApp(tester);
+    await tester.pumpAndSettle();
+
+    await tapTab(tester, 'Users');
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(ListTile, 'User 7'));
+    await tester.pumpAndSettle();
+
+    expect(router.stack, [
+      const MainShellRoute(),
+      const UsersRoute(),
+      const UserRoute(id: '7'),
+    ]);
+    // The detail fills the tab; the list is behind it, out of the screen.
+    expect(find.byType(UserPage), findsOneWidget);
+    // ('Users' also labels the tab in the navigation bar: look at the AppBar.)
+    expect(find.widgetWithText(AppBar, 'Users'), findsNothing);
+    expect(find.byKey(const Key('no-user-selected')), findsNothing);
+
+    await tester.tap(find.byType(BackButton).first);
+    await tester.pumpAndSettle();
+    expect(router.stack, [const MainShellRoute(), const UsersRoute()]);
+  });
 }

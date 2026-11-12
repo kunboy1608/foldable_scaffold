@@ -511,7 +511,13 @@ void main() {
     expect(find.text('tab 0'), findsOneWidget);
     expect(find.text('tab b', skipOffstage: false), findsNothing);
     // Root navigator + the navigator of the only built branch.
-    expect(find.byType(Navigator, skipOffstage: false), findsNWidgets(2));
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Navigator,
+        skipOffstage: false,
+      ),
+      findsNWidgets(2),
+    );
     expect(router.location, Uri.parse('/a'));
     expect(reportedUri(router), Uri.parse('/a'));
   });
@@ -532,7 +538,13 @@ void main() {
     expect(find.text('a detail 7'), findsOneWidget);
     expect(find.text('tab 0'), findsOneWidget);
     expect(router.location, Uri.parse('/a/detail?id=7'));
-    expect(find.byType(Navigator, skipOffstage: false), findsNWidgets(2));
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Navigator,
+        skipOffstage: false,
+      ),
+      findsNWidgets(2),
+    );
   });
 
   testWidgets('switching tabs keeps the stack and the state of the other '
@@ -849,7 +861,13 @@ void main() {
     expect(router.location, Uri.parse('/b/detail?id=2'));
     // Branch A was never built.
     expect(find.text('tab a', skipOffstage: false), findsNothing);
-    expect(find.byType(Navigator, skipOffstage: false), findsNWidgets(2));
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Navigator,
+        skipOffstage: false,
+      ),
+      findsNWidgets(2),
+    );
   });
 
   testWidgets('open outside the shell drops the shell and every branch', (
@@ -867,7 +885,13 @@ void main() {
     expect(find.text('home'), findsOneWidget);
     expect(find.text('tab 0', skipOffstage: false), findsNothing);
     expect(find.text('tab a', skipOffstage: false), findsNothing);
-    expect(find.byType(Navigator, skipOffstage: false), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) => widget is Navigator,
+        skipOffstage: false,
+      ),
+      findsOneWidget,
+    );
   });
 
   testWidgets('refresh re-runs the redirects of the shell and the branch', (

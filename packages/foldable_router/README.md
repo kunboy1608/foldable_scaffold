@@ -202,6 +202,99 @@ Rules:
   with `goBranch`.
 - Deep links / `openUri` into a branch build only that branch.
 
+## Two panes
+
+A shell can show **two panes of the same tab** on wide layouts (tablet,
+desktop, an unfolded foldable). Override `buildPanes` and return `null` for
+one pane (the default) or a widget for two:
+
+```dart
+class MainShellRoute extends FoldableShellRoute {
+  // ...
+
+  @override
+  Widget? buildPanes(BuildContext context, FoldablePanes panes) {
+    if (panes.constraints.maxWidth < 840) return null; // one pane
+    return Row(
+      children: [
+        Expanded(flex: 2, child: panes.primary),
+        const VerticalDivider(width: 1),
+        Expanded(
+          flex: 3,
+          child: panes.hasSecondary
+              ? panes.secondary
+              : const Center(child: Text('Nothing selected')),
+        ),
+      ],
+    );
+  }
+}
+```
+
+Display rules, for the stack of the tab currently shown:
+
+| Stack     | Left pane | Right pane        |
+|-----------|-----------|-------------------|
+| `[A]`     | A         | empty             |
+| `[A, B]`  | A         | B                 |
+| `[A, B, C]` | B       | C (A stays alive, hidden) |
+
+- The URL, the stacks, redirects, `open`/`openUri`/`goBranch` do not change
+  between one and two panes. Pages never leave their navigator: they only
+  change place, so their state, focus, scroll offset and hero controller
+  survive any re-slot and any one-pane <-> two-pane switch.
+- When a page pops, the re-slot happens immediately, not after the
+  transition: `[A, B, C]` popped gives `[A, B]` on the very next frame — B
+  moves to the right pane and A appears on the left at once — while C
+  animates away above the right pane.
+- `panes.primary` and `panes.secondary` are **placeholder frames**: they
+  take room in your layout and mark the rectangle where the pages are
+  painted, but they paint nothing themselves. The pages are drawn *above*
+  the widget `buildPanes` returns, so dividers, backgrounds and other chrome
+  you draw around a frame stay visible; taps outside the frames go to your
+  layout, taps inside a frame go to the page drawn in it.
+- Frames need bounded constraints (`Expanded`, `SizedBox`,
+  `Positioned.fill`, ...). A frame under a scale transform cannot be
+  measured. A two-pane tab that never places `primary`, or never places
+  `secondary` while `hasSecondary` is `true`, is reported with a
+  `FlutterError` in debug builds.
+- The rectangles are re-measured whenever the tab area rebuilds (a
+  `MediaQuery` or size change, or a new layout returned by `buildPanes`):
+  pages match their new frame on the same frame. A layout change that comes
+  from *inside* the widget returned by `buildPanes` (say, an `AnimatedContainer`
+  in your own tree) makes the pages catch up on the next frame.
+- Limits of the frames: `Hero` flights are disabled in two-pane tabs (both
+  pages stay on screen, so a flight would duplicate the widget; use
+  `transitionOnUserGestures`-free heroes or skip heroes there). The pages
+  of a tab are positioned by the router: do not wrap a frame in transforms
+  that move its paint position without moving its layout.
+- `FoldableRouter.paneOf(context)` tells which pane the calling page is in
+  (`FoldablePane.single`, `primary` or `secondary`) and rebuilds the caller
+  when it changes. The left pane is the page right below the top one; a lone
+  page of a two-pane tab sits on the left; pages deeper than the second
+  report `primary` (they are alive behind the left pane, out of the screen,
+  of hits, of semantics and of focus, with their tickers stopped).
+- Back in a two-pane tab:
+  - the back arrow of the **right** page pops that page only;
+  - the back arrow of the **left** page pops both visible pages in one
+    router update (one listener notification); the root page of a tab has
+    no arrow, since it cannot be removed;
+  - the **system back** (gesture included) always pops exactly one page;
+  - the arrow works this out from the last pointer-down, or, without a
+    pointer, from the page that holds the focus. A back triggered while
+    neither is inside a page (for example from an app-level shortcut while
+    nothing is focused) falls back to popping one page.
+  - `PopScope(canPop: false)` on the top page blocks every path — system
+    back, both arrows and `close` — and nothing is removed.
+- `FoldableRouter.close(context)` closes the calling page and every page
+  above it in one stack update, in one-pane and two-pane tabs alike. The
+  root page of a tab (and of the whole router) cannot be closed: calling it
+  there does nothing, as does a top page that refuses to pop.
+- Focus traversal (Tab key) only ever reaches pages that are visible: a
+  hidden left-pane page (deeper than the second one) is excluded from focus,
+  hits and semantics. In a settled one-pane tab, the page below the top is
+  out of the screen and of the semantics, as with `MaterialPageRoute`.
+
 ## Behaviour
 
 - **Redirects** run one after another from the root ancestor down to the
