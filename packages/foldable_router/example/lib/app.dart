@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:foldable_router/foldable_router.dart';
 
+/// How the status bar names a route on the stack: the shell has no URL of
+/// its own, so it shows as `[shell]`.
+String describeRoute(FoldableRoute route) =>
+    route is FoldableShellRoute ? '[shell]' : route.uri.toString();
+
 class ExampleApp extends StatelessWidget {
   const ExampleApp({super.key, required this.router});
 
@@ -76,7 +81,7 @@ class StatusBar extends StatelessWidget {
                       Text(
                         stack.isEmpty
                             ? 'stack: (empty)'
-                            : 'stack: ${stack.map((r) => r.uri).join('  >  ')}',
+                            : 'stack: ${stack.map(describeRoute).join('  >  ')}',
                         key: const Key('stack'),
                         style: style,
                       ),

@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import 'foldable_route.dart';
+import 'foldable_shell_route.dart';
 import 'redirect_resolver.dart';
 import 'route_information_parser.dart';
 import 'router_delegate.dart';
@@ -101,6 +102,10 @@ class FoldableRouter implements Listenable {
 
   /// The routes currently on the stack, bottom first. Read-only.
   ///
+  /// With a shell on screen this is `[shell, ...pages of the current
+  /// branch, ...full-screen pages above the shell]` (preceded by the
+  /// ancestors of the shell, if any).
+  ///
   /// Empty before the first navigation completes and while the not-found
   /// page is shown.
   ///
@@ -142,8 +147,10 @@ class FoldableRouter implements Listenable {
   /// path of [uri] (a trailing slash is ignored, an empty path means `/`)
   /// selects a factory of [routes], which receives the query parameters. A
   /// URI equal to the one of [initial] resolves to [initial] itself, so
-  /// [initial] needs no entry in [routes]. The result is `null` when the
-  /// path is not in [routes] or the factory throws.
+  /// [initial] needs no entry in [routes]; when [initial] is a
+  /// [FoldableShellRoute] (which has no path), `/` resolves to it. The
+  /// result is `null` when the path is not in [routes] or the factory
+  /// throws.
   ///
   /// It only creates the route: no redirect runs and nothing is navigated.
   /// Pass the result to [open] or [push], or use [openUri].
@@ -153,7 +160,10 @@ class FoldableRouter implements Listenable {
       path = path.substring(0, path.length - 1);
     }
     final normalized = uri.replace(path: path);
-    if (path == initial.path &&
+    // A shell has no path of its own, so when it is the initial route `/`
+    // resolves to it (opening it opens its first branch).
+    final initialPath = initial is FoldableShellRoute ? '/' : initial.path;
+    if (path == initialPath &&
         mapEquals(normalized.queryParameters, initial.uri.queryParameters)) {
       return initial;
     }
@@ -180,6 +190,11 @@ class FoldableRouter implements Listenable {
   /// Replaces the whole stack with [route] and its [FoldableRoute.parent]
   /// chain, after running redirects.
   ///
+  /// When the chain contains a [FoldableShellRoute] only the stack of
+  /// [route]'s branch is replaced (other branches keep their stacks);
+  /// opening a shell itself opens its first branch. Opening a route outside
+  /// the shell removes the shell and the stacks of all its branches.
+  ///
   /// The future completes when the navigation is committed or discarded
   /// because a newer one started. It completes with an error when a redirect
   /// throws or when redirects loop or exceed [maxRedirects]
@@ -204,6 +219,12 @@ class FoldableRouter implements Listenable {
   /// running the redirects of its parent chain. If a redirect answers with
   /// another route, that one is pushed instead.
   ///
+  /// Pushing is not supported for a route whose parent chain contains a
+  /// [FoldableShellRoute] (or whose redirect lands in one): the returned
+  /// future completes with an [UnsupportedError] and the stack is
+  /// unchanged; use [open] instead. Pushing a route outside the shell shows
+  /// a full-screen page above it.
+  ///
   /// The future completes with the value given to [pop], or `null` when the
   /// page is removed any other way (system back, [open]) or the navigation
   /// is discarded because a newer one started. Errors are as for [open].
@@ -212,12 +233,16 @@ class FoldableRouter implements Listenable {
 
   /// Removes the top page and completes its [push] future with [result].
   ///
-  /// Does nothing when only one page is left.
+  /// With a shell on screen this first removes a full-screen page pushed
+  /// above it, then goes one page back inside the current branch. Does
+  /// nothing at the root of a branch or when only one page is left.
   void pop<T extends Object?>([T? result]) => _delegate.pop<T>(result);
 
   /// Re-runs [FoldableRoute.redirect] for every route on the stack, bottom
   /// to top. The first non-null answer is opened as with [open]; if all
-  /// return `null` nothing changes.
+  /// return `null` nothing changes. With a shell on screen this covers the
+  /// shell, the current branch and any full-screen page above; the other
+  /// branches are re-checked when they are shown again.
   ///
   /// Call this after the state your redirects depend on has changed (for
   /// example on sign-out). Like any navigation it supersedes pending ones.

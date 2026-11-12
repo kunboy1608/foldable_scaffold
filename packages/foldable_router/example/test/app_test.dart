@@ -26,13 +26,23 @@ Future<void> tap(WidgetTester tester, String key) async {
   await tester.pump();
 }
 
+/// Taps a destination of the shell's bottom `NavigationBar`.
+Future<void> tapTab(WidgetTester tester, String label) async {
+  await tester.tap(
+    find.descendant(of: find.byType(NavigationBar), matching: find.text(label)),
+  );
+  await tester.pumpAndSettle();
+}
+
 String stackText(WidgetTester tester) =>
     tester.widget<Text>(find.byKey(const Key('stack'))).data!;
 
 void main() {
   setUp(session.reset);
 
-  testWidgets('pendingBuilder is shown on launch, then Home', (tester) async {
+  testWidgets('pendingBuilder is shown on launch, then the shell on Home', (
+    tester,
+  ) async {
     final router = await pumpApp(tester);
     await tester.pump();
 
@@ -40,29 +50,64 @@ void main() {
     expect(router.stack, isEmpty);
 
     await tester.pumpAndSettle();
-    expect(router.stack, [const HomeRoute()]);
+    expect(router.stack, [const MainShellRoute(), const HomeRoute()]);
     expect(find.text('foldable_router example'), findsOneWidget);
+    expect(find.byType(NavigationBar), findsOneWidget);
+    expect(stackText(tester), 'stack: [shell]  >  /');
+    expect(find.text('location: /'), findsOneWidget);
   });
 
-  testWidgets('open user detail builds [Users, User]; back shows the list', (
-    tester,
-  ) async {
+  testWidgets('open user detail builds [shell, Users, User]; back shows the '
+      'list', (tester) async {
     final router = await pumpApp(tester);
     await tester.pumpAndSettle();
 
     await tap(tester, 'open-user');
     await tester.pumpAndSettle();
 
-    expect(router.stack, [const UsersRoute(), const UserRoute(id: '7')]);
-    expect(stackText(tester), 'stack: /users  >  /users/detail?id=7');
+    expect(router.stack, [
+      const MainShellRoute(),
+      const UsersRoute(),
+      const UserRoute(id: '7'),
+    ]);
+    expect(
+      stackText(tester),
+      'stack: [shell]  >  /users  >  /users/detail?id=7',
+    );
     expect(find.text('location: /users/detail?id=7'), findsOneWidget);
     expect(find.text('User 7'), findsWidgets);
+    // open switched to the Users branch of the shell.
+    expect(find.byType(NavigationBar), findsOneWidget);
 
     await tester.pageBack();
     await tester.pumpAndSettle();
 
-    expect(router.stack, [const UsersRoute()]);
-    expect(find.text('Users'), findsOneWidget);
+    expect(router.stack, [const MainShellRoute(), const UsersRoute()]);
+    expect(find.text('Users'), findsWidgets);
+  });
+
+  testWidgets('the tab bar switches branches and keeps each tab stack', (
+    tester,
+  ) async {
+    final router = await pumpApp(tester);
+    await tester.pumpAndSettle();
+
+    // Build a stack in the Users branch.
+    await tap(tester, 'open-user');
+    await tester.pumpAndSettle();
+    expect(router.stack.last, const UserRoute(id: '7'));
+
+    await tapTab(tester, 'Home');
+    expect(router.stack, [const MainShellRoute(), const HomeRoute()]);
+    expect(find.text('stack: [shell]  >  /'), findsOneWidget);
+
+    await tapTab(tester, 'Users');
+    expect(router.stack, [
+      const MainShellRoute(),
+      const UsersRoute(),
+      const UserRoute(id: '7'),
+    ]);
+    expect(find.text('User 7'), findsWidgets);
   });
 
   testWidgets('user avatar flies as a Hero from the list to the detail and '
@@ -91,7 +136,11 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     // In flight: one shuttle, above both pages, between the two sizes.
-    expect(router.stack, [const UsersRoute(), const UserRoute(id: '7')]);
+    expect(router.stack, [
+      const MainShellRoute(),
+      const UsersRoute(),
+      const UserRoute(id: '7'),
+    ]);
     expect(avatar, findsOneWidget);
     expect(
       find.ancestor(of: avatar, matching: find.byType(UserAvatar)),
@@ -124,19 +173,9 @@ void main() {
     expect(tester.getRect(avatar).width, inExclusiveRange(40, 128));
 
     await tester.pumpAndSettle();
-    expect(router.stack, [const UsersRoute()]);
+    expect(router.stack, [const MainShellRoute(), const UsersRoute()]);
     expect(find.byType(Hero), findsNWidgets(3));
     expect(tester.getRect(avatar), small);
-  });
-
-  testWidgets('push user detail keeps Home below', (tester) async {
-    final router = await pumpApp(tester);
-    await tester.pumpAndSettle();
-
-    await tap(tester, 'push-user');
-    await tester.pumpAndSettle();
-
-    expect(router.stack, [const HomeRoute(), const UserRoute(id: '7')]);
   });
 
   testWidgets('protected child while logged out: login, then the target', (
@@ -151,18 +190,24 @@ void main() {
     await tester.pump(const Duration(milliseconds: 400));
     expect(router.isNavigating.value, isTrue);
     expect(find.byKey(const Key('navigating')), findsOneWidget);
-    expect(router.stack, [const HomeRoute()]);
+    expect(router.stack, [const MainShellRoute(), const HomeRoute()]);
 
     await tester.pumpAndSettle();
     expect(router.isNavigating.value, isFalse);
     expect(find.byKey(const Key('navigating')), findsNothing);
+    // Login is outside the shell: the shell (and its tabs) is gone.
     expect(router.stack, [const LoginRoute(from: '/profile/settings')]);
+    expect(find.byType(NavigationBar), findsNothing);
 
     await tap(tester, 'login');
     await tester.pumpAndSettle();
 
     expect(session.loggedIn, isTrue);
-    expect(router.stack, [const ProfileRoute(), const SettingsRoute()]);
+    expect(router.stack, [
+      const MainShellRoute(),
+      const ProfileRoute(),
+      const SettingsRoute(),
+    ]);
     expect(find.text('Guarded by ProfileRoute.redirect.'), findsOneWidget);
   });
 
@@ -175,7 +220,7 @@ void main() {
 
     await tap(tester, 'open-profile');
     await tester.pumpAndSettle();
-    expect(router.stack, [const ProfileRoute()]);
+    expect(router.stack, [const MainShellRoute(), const ProfileRoute()]);
 
     await tap(tester, 'logout');
     await tester.pumpAndSettle();
@@ -185,19 +230,28 @@ void main() {
     expect(find.text('Only visible when logged in.'), findsNothing);
   });
 
-  testWidgets('pushed picker returns its result to Home', (tester) async {
+  testWidgets('pushed picker covers the shell and returns its result to Home', (
+    tester,
+  ) async {
     final router = await pumpApp(tester);
     await tester.pumpAndSettle();
     expect(find.text('Picked: nothing yet'), findsOneWidget);
 
     await tap(tester, 'pick-color');
     await tester.pumpAndSettle();
-    expect(router.stack, [const HomeRoute(), const ColorPickerRoute()]);
+    // The picker is outside the shell: a full-screen page above the tabs.
+    expect(router.stack, [
+      const MainShellRoute(),
+      const HomeRoute(),
+      const ColorPickerRoute(),
+    ]);
+    expect(find.byType(NavigationBar), findsNothing);
 
     await tester.tap(find.text('green'));
     await tester.pumpAndSettle();
 
-    expect(router.stack, [const HomeRoute()]);
+    expect(router.stack, [const MainShellRoute(), const HomeRoute()]);
+    expect(find.byType(NavigationBar), findsOneWidget);
     expect(find.text('Picked: green'), findsOneWidget);
   });
 
@@ -213,7 +267,7 @@ void main() {
 
     await tap(tester, 'go-home');
     await tester.pumpAndSettle();
-    expect(router.stack, [const HomeRoute()]);
+    expect(router.stack, [const MainShellRoute(), const HomeRoute()]);
   });
 
   testWidgets('deep link to a protected page goes through the guard', (
@@ -223,5 +277,23 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(router.stack, [const LoginRoute(from: '/profile')]);
+  });
+
+  testWidgets('deep link into a shell branch builds only that branch', (
+    tester,
+  ) async {
+    final router = await pumpApp(tester, deepLink: '/users/detail?id=7');
+    await tester.pumpAndSettle();
+
+    expect(router.stack, [
+      const MainShellRoute(),
+      const UsersRoute(),
+      const UserRoute(id: '7'),
+    ]);
+    expect(find.text('User 7'), findsWidgets);
+    expect(
+      stackText(tester),
+      'stack: [shell]  >  /users  >  /users/detail?id=7',
+    );
   });
 }

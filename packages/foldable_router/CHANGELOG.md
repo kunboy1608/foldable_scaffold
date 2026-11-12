@@ -13,3 +13,25 @@
 * `FoldableRouter.routeFor(uri)` turns a URI into a route with the `routes`
   table; `FoldableRouter.openUri(uri)` opens a URI like a deep link, with
   errors delivered through the returned future.
+* `FoldableShellRoute` (with `FoldableShellState`): a persistent frame
+  (bottom navigation, rail, ...) in the middle of a parent chain, with one
+  lazily built nested navigator and stack per branch (`goBranch` keeps the
+  stacks, `open` only replaces the stack of the target branch, `push` inside
+  a shell throws `UnsupportedError`, back and `pop` work per navigator, and
+  the Android predictive-back state is reported to the engine).
+* Fixed: the Android predictive back gesture only acts on the branch that is
+  actually on screen. A hidden tab, or a branch covered by a full-screen
+  page, no longer takes the gesture (its pages are kept, heroes and all).
+  With a shell the value reported to the engine
+  (`SystemNavigator.setFrameworkHandlesBack`) is now a single synthesized
+  state instead of whichever nested navigator dispatched last.
+* Fixed: a back in a shell now handles exactly one thing, in this order: a
+  dialog on the root navigator, a full-screen page above the shell, a
+  pageless route on top of the visible branch (bottom sheet, menu, dialog
+  on the branch navigator), then one page back inside the visible branch.
+  Before, with no full-screen page, a dialog or sheet was ignored: back
+  left the app from a branch root and popped the page *below* an open
+  dialog otherwise, and the predictive back state reported to the engine
+  did not see them. The state is now updated as dialogs open and close,
+  and the gesture is hidden from branch pages while a dialog covers them.
+* The hero controllers of the branches are disposed when the shell goes away.

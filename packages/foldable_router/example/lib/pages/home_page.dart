@@ -33,19 +33,16 @@ class _HomePageState extends State<HomePage> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const _Section(
-              'open vs push',
-              'open replaces the stack with the route and its parents; '
-                  'push adds exactly one page. Watch the stack below.',
+              'open',
+              'The app runs inside a shell (MainShellRoute) with a tab bar. '
+                  'open replaces the stack with the route and its parents; '
+                  'inside the shell it only replaces the stack of the branch '
+                  'that route belongs to. Watch the stack below.',
             ),
             FilledButton(
               key: const Key('open-user'),
               onPressed: () => router.open(const UserRoute(id: '7')),
               child: const Text("open(UserRoute(id: '7'))"),
-            ),
-            OutlinedButton(
-              key: const Key('push-user'),
-              onPressed: () => router.push<void>(const UserRoute(id: '7')),
-              child: const Text("push(UserRoute(id: '7'))"),
             ),
             OutlinedButton(
               key: const Key('open-users'),
@@ -97,7 +94,8 @@ class _HomePageState extends State<HomePage> {
             ),
             const _Section(
               'push with result',
-              'The picker is pushed with push<String> and answers with pop.',
+              'ColorPickerRoute lives outside the shell: push shows it '
+                  'full-screen above the tab bar and answers with pop.',
             ),
             Wrap(
               crossAxisAlignment: WrapCrossAlignment.center,
