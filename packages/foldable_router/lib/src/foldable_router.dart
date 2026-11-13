@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
 import 'foldable_panes.dart';
+import 'foldable_params.dart';
 import 'foldable_route.dart';
 import 'foldable_shell_route.dart';
 import 'redirect_resolver.dart';
@@ -10,10 +11,10 @@ import 'router_delegate.dart';
 
 /// Creates a route from the query parameters of a URL.
 ///
-/// Throw (for example with `params['id']!`) when a required parameter is
-/// missing; the router then shows its not-found page.
-typedef FoldableRouteFactory =
-    FoldableRoute Function(Map<String, String> params);
+/// Throw (for example with `params['id']!` or `params.getInt('id')`) when a
+/// required parameter is missing or malformed; the router then shows its
+/// not-found page.
+typedef FoldableRouteFactory = FoldableRoute Function(FoldableParams params);
 
 /// Builds the page shown for a location that matches no route.
 typedef FoldableNotFoundBuilder =
@@ -66,8 +67,8 @@ class FoldableRouter implements Listenable {
   /// Maps a static path to a factory creating the route from URL query
   /// parameters. Used for deep links and the web address bar.
   ///
-  /// A path missing here, or a factory that throws, leads to
-  /// [notFoundBuilder].
+  /// A path missing here, or a factory that throws (a missing parameter, a
+  /// value that does not parse, ...), leads to [notFoundBuilder].
   final Map<String, FoldableRouteFactory> routes;
 
   /// Builds the page for a location that matches no entry of [routes].
@@ -96,7 +97,9 @@ class FoldableRouter implements Listenable {
               : Uri.parse(launch),
         ),
       ),
-      routeInformationParser: const FoldableRouteInformationParser(),
+      routeInformationParser: FoldableRouteInformationParser(
+        onRouterContext: _delegate.setRouterContext,
+      ),
       routerDelegate: _delegate,
       backButtonDispatcher: RootBackButtonDispatcher(),
     );
@@ -147,10 +150,10 @@ class FoldableRouter implements Listenable {
   ///
   /// This is the lookup used for deep links and the web address bar: the
   /// path of [uri] (a trailing slash is ignored, an empty path means `/`)
-  /// selects a factory of [routes], which receives the query parameters. A
-  /// URI equal to the one of [initial] resolves to [initial] itself, so
-  /// [initial] needs no entry in [routes]; when [initial] is a
-  /// [FoldableShellRoute] (which has no path), `/` resolves to it. The
+  /// selects a factory of [routes], which receives the query parameters as a
+  /// [FoldableParams]. A URI equal to the one of [initial] resolves to
+  /// [initial] itself, so [initial] needs no entry in [routes]; when [initial]
+  /// is a [FoldableShellRoute] (which has no path), `/` resolves to it. The
   /// result is `null` when the path is not in [routes] or the factory
   /// throws.
   ///
@@ -173,7 +176,7 @@ class FoldableRouter implements Listenable {
     if (factory == null) return null;
     final FoldableRoute route;
     try {
-      route = factory(Map.unmodifiable(normalized.queryParameters));
+      route = factory(FoldableParams(normalized.queryParameters));
     } catch (_) {
       // Typically a missing or malformed parameter.
       return null;

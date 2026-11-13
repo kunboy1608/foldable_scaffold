@@ -6,6 +6,7 @@
 library;
 
 export 'src/foldable_route.dart' show FoldableRoute;
+export 'src/foldable_params.dart' show FoldableParams;
 export 'src/foldable_router.dart'
     show FoldableRouter, FoldableRouteFactory, FoldableNotFoundBuilder;
 export 'src/foldable_shell_route.dart'

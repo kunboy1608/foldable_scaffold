@@ -1,5 +1,44 @@
 ## 0.0.1
 
+* **Breaking:** `FoldableRoute.params` is now `Map<String, Object?>` (was
+  `Map<String, String?>`): values may be `String`, `int`, `double`, `bool` or
+  `DateTime`. An unsupported type, or a non-finite `double`, throws an
+  `ArgumentError` (also in release). `int`/`double` are written with
+  `toString()`, `bool` as `true`/`false`, and `DateTime` in UTC via
+  `toIso8601String()`. Equality and `hashCode` use the encoded query, so
+  `{'id': 1}` equals `{'id': '1'}` and two `DateTime`s for the same instant
+  are equal.
+* **Breaking:** `FoldableRoute.redirect` (and `FoldableShellRoute.redirect`)
+  is now `redirect(BuildContext context, RouteState state)` (was
+  `redirect(RouteState state)`). `context` is the `Router` widget's context,
+  above the `Navigator` (the one go_router passes to its redirects). The same
+  context is used for launch, deep links / platform URLs, `open`, `openUri`,
+  `push`, `refresh` and the shell's tab-switch re-check. `open`, `openUri`,
+  `push` and `refresh` before the router is mounted now complete with a
+  `StateError`, and a redirect resumed after the router is removed is dropped.
+* New `FoldableParams` (exported by the library): the decoded query handed to
+  a `FoldableRouteFactory` (`FoldableRoute Function(FoldableParams)`), with
+  `operator []` for the raw string, `contains`, an unmodifiable `values`, and
+  `getString` / `getInt` / `getDouble` / `getBool` / `getDateTime` plus
+  `…OrNull` variants that throw a `FormatException` on a malformed value
+  rather than treating it as absent.
+* Fixed: when the `Router` re-parsed a location equal to the one on screen
+  (which happens whenever an inherited widget a redirect depends on, such as
+  `MediaQuery.sizeOf` or `Theme.of`, changes), it used to be opened again and
+  replace the stack with the parent chain of the top route. It now runs a
+  silent re-check instead: it never replaces an `open` / `openUri` / `push` /
+  explicit `refresh` / shell tab switch in flight (it waits and runs once on
+  the stack it left), does not set `isNavigating`, and leaves the stack,
+  shell branch stacks, pending `push` futures and listeners untouched when
+  every redirect allows it; a redirect that now returns a route navigates
+  there.
+* Fixed (Android): when the `Router` rebuilt while a page could be popped
+  (for example on every frame of the keyboard animation, when a redirect
+  reads `MediaQuery`), the root `Navigator` reported "cannot pop" then "can
+  pop" in the same frame. Android re-registered the back callback of the app
+  above the one of the on-screen keyboard, so the key that hides the keyboard
+  popped the top page instead. The router now forwards a single, final value
+  per frame.
 * Initial release.
 * `FoldableRoute`: class-based routes with static paths, query-string
   parameters, a `parent` chain and sync/async `redirect`.

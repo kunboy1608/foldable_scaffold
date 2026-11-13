@@ -96,7 +96,10 @@ class FoldableShellState {
 ///   shell needs no entry in the router's `routes` table.
 /// * [buildShell] draws the frame; [build] is never called by the router.
 /// * [redirect] runs before the redirects of the branch routes, as for any
-///   ancestor.
+///   ancestor. Like every redirect it receives the [BuildContext] of the
+///   `Router` widget (not of a page); the same context is used for the
+///   re-check when the user switches tabs with
+///   [FoldableShellState.goBranch].
 /// * Opening a route whose parent chain contains the shell replaces the
 ///   stack of *its* branch (keeping the unchanged bottom, as usual) and
 ///   switches to it; other branches keep their stacks. Opening the shell

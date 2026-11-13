@@ -145,7 +145,7 @@ class UserRoute extends FoldableRoute {
   String get path => '/users/detail';
 
   @override
-  Map<String, String?> get params => {'id': id};
+  Map<String, Object?> get params => {'id': id};
 
   @override
   FoldableRoute? get parent => const UsersRoute();
@@ -263,7 +263,7 @@ class GuardedUserRoute extends FoldableRoute {
   String get path => '/users/guarded';
 
   @override
-  Map<String, String?> get params => {'id': id};
+  Map<String, Object?> get params => {'id': id};
 
   @override
   FoldableRoute? get parent => const UsersRoute();

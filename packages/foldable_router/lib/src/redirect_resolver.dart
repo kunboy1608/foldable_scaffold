@@ -1,3 +1,5 @@
+import 'package:flutter/widgets.dart';
+
 import 'foldable_route.dart';
 import 'route_state.dart';
 
@@ -33,10 +35,13 @@ final class RedirectLimitException extends FoldableRedirectException {
       '${trail.join(' -> ')}';
 }
 
-/// Runs the redirect pipeline. Has no widget dependency.
+/// Runs the redirect pipeline.
 ///
 /// Every navigation gets a token from [begin]; starting a new one makes all
-/// older tokens stale, and stale navigations resolve to `null`.
+/// older tokens stale, and stale navigations resolve to `null`. The redirects
+/// receive the [BuildContext] of the `Router` widget; if that context is
+/// unmounted while a redirect is pending, the navigation is dropped just like
+/// a superseded one.
 class RedirectResolver {
   /// Creates a resolver allowing at most [maxRedirects] consecutive redirects.
   RedirectResolver({this.maxRedirects = 5}) : assert(maxRedirects >= 0);
@@ -67,13 +72,16 @@ class RedirectResolver {
   /// Resolves [target] to the chain (root ancestor first) that should be
   /// shown, following redirects.
   ///
-  /// Returns `null` when a newer navigation started in the meantime. Throws
-  /// a [FoldableRedirectException] on a loop or when [maxRedirects] is
-  /// exceeded, and rethrows whatever a `redirect` throws.
+  /// [context] is the [BuildContext] of the `Router` widget, passed to each
+  /// redirect. Returns `null` when a newer navigation started in the meantime
+  /// or when [context] was unmounted. Throws a [FoldableRedirectException] on
+  /// a loop or when [maxRedirects] is exceeded, and rethrows whatever a
+  /// `redirect` throws.
   ///
   /// Starts a new navigation unless [token] (from [begin]) is given.
   Future<List<FoldableRoute>?> resolve(
     FoldableRoute target, {
+    required BuildContext context,
     int? token,
   }) async {
     final t = token ?? begin();
@@ -81,8 +89,13 @@ class RedirectResolver {
     var current = target;
     while (true) {
       final chain = chainOf(current);
-      final next = await firstRedirect(chain, target: current, token: t);
-      if (!isCurrent(t)) return null;
+      final next = await firstRedirect(
+        chain,
+        context: context,
+        target: current,
+        token: t,
+      );
+      if (!isCurrent(t) || !context.mounted) return null;
       if (next == null) return chain;
       trail.add(next);
       if (trail.indexOf(next) != trail.length - 1) {
@@ -96,22 +109,31 @@ class RedirectResolver {
   }
 
   /// Runs `redirect` on [routes] in order and returns the first non-null
-  /// answer, or `null` when every route allows the navigation or [token]
-  /// went stale (check [isCurrent] to tell the two apart).
+  /// answer, or `null` when every route allows the navigation, [token] went
+  /// stale, or [context] was unmounted (check [isCurrent] and
+  /// [BuildContext.mounted] to tell them apart).
+  ///
+  /// A redirect is never called with an unmounted [context], nor is a
+  /// redirect resumed after its `await` with one.
   Future<FoldableRoute?> firstRedirect(
     Iterable<FoldableRoute> routes, {
+    required BuildContext context,
     required FoldableRoute target,
     required int token,
   }) async {
     for (final route in routes) {
+      if (!context.mounted) return null;
       final FoldableRoute? next;
       try {
-        next = await route.redirect(RouteState(route: route, target: target));
+        next = await route.redirect(
+          context,
+          RouteState(route: route, target: target),
+        );
       } catch (_) {
-        if (!isCurrent(token)) return null;
+        if (!isCurrent(token) || !context.mounted) return null;
         rethrow;
       }
-      if (!isCurrent(token)) return null;
+      if (!isCurrent(token) || !context.mounted) return null;
       if (next != null) return next;
     }
     return null;

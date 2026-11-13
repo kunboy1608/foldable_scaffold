@@ -38,7 +38,7 @@ class UserRoute extends FoldableRoute {
   String get path => '/users/detail';
 
   @override
-  Map<String, String?> get params => {'id': id, 'tab': tab};
+  Map<String, Object?> get params => {'id': id, 'tab': tab};
 
   @override
   FoldableRoute? get parent => const UsersRoute();
@@ -76,7 +76,7 @@ class AccountRoute extends FoldableRoute {
   String get path => '/account';
 
   @override
-  FoldableRoute? redirect(RouteState state) =>
+  FoldableRoute? redirect(BuildContext context, RouteState state) =>
       loggedIn ? null : const LoginRoute();
 
   @override
@@ -104,7 +104,7 @@ class SlowRoute extends FoldableRoute {
   String get path => '/slow';
 
   @override
-  Future<FoldableRoute?> redirect(RouteState state) async {
+  Future<FoldableRoute?> redirect(BuildContext context, RouteState state) async {
     await gate!.future;
     return null;
   }
@@ -120,7 +120,8 @@ class BrokenRoute extends FoldableRoute {
   String get path => '/broken';
 
   @override
-  FoldableRoute? redirect(RouteState state) => throw StateError('broken');
+  FoldableRoute? redirect(BuildContext context, RouteState state) =>
+      throw StateError('broken');
 
   @override
   Widget build(BuildContext context) => const Text('broken');
@@ -135,10 +136,11 @@ class LoopRoute extends FoldableRoute {
   String get path => '/loop';
 
   @override
-  Map<String, String?> get params => {'n': '$n'};
+  Map<String, Object?> get params => {'n': '$n'};
 
   @override
-  FoldableRoute? redirect(RouteState state) => LoopRoute(n + 1);
+  FoldableRoute? redirect(BuildContext context, RouteState state) =>
+      LoopRoute(n + 1);
 
   @override
   Widget build(BuildContext context) => const Text('loop');

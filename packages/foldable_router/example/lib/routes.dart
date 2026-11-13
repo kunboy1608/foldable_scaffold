@@ -65,7 +65,7 @@ class HomeRoute extends FoldableRoute {
   // It runs again when the shell re-checks the Home branch (goBranch,
   // refresh) but `session.restore` only waits the first time.
   @override
-  FutureOr<FoldableRoute?> redirect(RouteState state) async {
+  FutureOr<FoldableRoute?> redirect(BuildContext context, RouteState state) async {
     await session.restore();
     return null;
   }
@@ -97,7 +97,7 @@ class UserRoute extends FoldableRoute {
 
   // Constructor fields travel in the query string: /users/detail?id=7
   @override
-  Map<String, String?> get params => {'id': id};
+  Map<String, Object?> get params => {'id': id};
 
   // `open(UserRoute(...))` builds the stack [UsersRoute, UserRoute].
   @override
@@ -117,7 +117,7 @@ class LoginRoute extends FoldableRoute {
   String get path => '/login';
 
   @override
-  Map<String, String?> get params => {'from': from};
+  Map<String, Object?> get params => {'from': from};
 
   @override
   Widget build(BuildContext context) => LoginPage(from: from);
@@ -138,7 +138,7 @@ class ProfileRoute extends FoldableRoute {
   // descendant); we hand it to the login page so it can send the user back.
   // LoginRoute is outside this chain, so the guard cannot loop.
   @override
-  FutureOr<FoldableRoute?> redirect(RouteState state) async {
+  FutureOr<FoldableRoute?> redirect(BuildContext context, RouteState state) async {
     if (await session.check()) return null;
     return LoginRoute(from: state.target.uri.toString());
   }
@@ -178,8 +178,10 @@ class ColorPickerRoute extends FoldableRoute {
 /// routes builds the shell around the branch the route belongs to.
 final Map<String, FoldableRouteFactory> routeTable = {
   '/users': (params) => const UsersRoute(),
-  '/users/detail': (params) => UserRoute(id: params['id']!),
-  '/login': (params) => LoginRoute(from: params['from']),
+  // Typed getters: missing or malformed values throw, which shows the
+  // not-found page. `params['id']!` would still work (raw string).
+  '/users/detail': (params) => UserRoute(id: params.getString('id')),
+  '/login': (params) => LoginRoute(from: params.getStringOrNull('from')),
   '/profile': (params) => const ProfileRoute(),
   '/profile/settings': (params) => const SettingsRoute(),
   '/pick-color': (params) => const ColorPickerRoute(),

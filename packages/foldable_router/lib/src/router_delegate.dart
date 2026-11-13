@@ -488,6 +488,14 @@ class StackNotifier extends ChangeNotifier {
 /// nested navigator dispatched last. In shell mode the notifications of the
 /// navigators themselves are swallowed below (see [FoldableRouterDelegate],
 /// `build`); without a shell they agree with this value anyway.
+///
+/// Whatever reaches it from below is forwarded once per burst, with the last
+/// value only. A [Navigator] that receives a new `pages` list empties and
+/// refills its history, and reports "cannot pop" then "can pop" in the same
+/// frame even when nothing changed. Sent as is, that pair makes Android
+/// unregister and register the back callback of the app again, which puts it
+/// above the callback of the on-screen keyboard: the key that hides the
+/// keyboard then pops a page instead.
 class _BackNotification extends StatefulWidget {
   const _BackNotification({required this.canHandlePop, required this.child});
 
@@ -522,18 +530,41 @@ class _BackNotificationState extends State<_BackNotification> {
     super.dispose();
   }
 
+  /// The last value received in the current burst, not forwarded yet.
+  bool? _pending;
+
   void _scheduleReport() {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
+      _forwardLater(widget.canHandlePop.value);
+    });
+  }
+
+  /// Forwards [canHandlePop] once the notifications dispatched together with
+  /// it (the post-frame callbacks of one frame) are all in: the last one
+  /// wins, as it did when each of them went up on its own.
+  void _forwardLater(bool canHandlePop) {
+    final bool scheduled = _pending != null;
+    _pending = canHandlePop;
+    if (scheduled) return;
+    scheduleMicrotask(() {
+      final bool? value = _pending;
+      _pending = null;
+      if (!mounted || value == null) return;
       // Bubbles up to WidgetsApp, which forwards the value to the platform.
-      NavigationNotification(
-        canHandlePop: widget.canHandlePop.value,
-      ).dispatch(context);
+      NavigationNotification(canHandlePop: value).dispatch(context);
     });
   }
 
   @override
-  Widget build(BuildContext context) => widget.child;
+  Widget build(BuildContext context) =>
+      NotificationListener<NavigationNotification>(
+        onNotification: (NavigationNotification notification) {
+          _forwardLater(notification.canHandlePop);
+          return true;
+        },
+        child: widget.child,
+      );
 }
 
 /// Owns the page stack and runs navigations for a [FoldableRouter].
@@ -569,6 +600,31 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
 
   final RedirectResolver _resolver;
 
+  /// The context of the `Router` widget, set by [setRouterContext] the first
+  /// time Flutter parses a location. It is the context go_router passes to
+  /// redirects: above the navigators, below whatever wraps
+  /// `MaterialApp.router`.
+  BuildContext? _routerContext;
+
+  /// Records the context of the `Router` widget, handed over by the route
+  /// information parser.
+  void setRouterContext(BuildContext context) => _routerContext = context;
+
+  /// The context redirects receive, or a [StateError] when the router has not
+  /// been mounted yet (or has been unmounted).
+  BuildContext _requireRouterContext() {
+    final context = _routerContext;
+    if (context == null || !context.mounted) {
+      throw StateError(
+        'This FoldableRouter is not attached to the widget tree: open, '
+        'openUri, push and refresh need the BuildContext of the Router '
+        'widget, which exists only after routerConfig has been given to '
+        'MaterialApp.router (or Router) and that widget has been mounted.',
+      );
+    }
+    return context;
+  }
+
   /// Tracks the top-most route of the root navigator, to see the pageless
   /// routes opened on it (dialogs, ...).
   final _TopRouteTracker _rootTop = _TopRouteTracker();
@@ -586,6 +642,26 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
   Uri? _notFound;
   int _nextId = 0;
   bool _disposed = false;
+
+  /// Whether the latest navigation (from the app or the platform) is still
+  /// resolving. A silent re-check never starts while this is true.
+  bool _navigationRunning = false;
+
+  /// Whether a silent re-check is running.
+  bool _silentRunning = false;
+
+  /// Identifies the latest silent re-check; older replaced ones stop quietly.
+  int _silentGeneration = 0;
+
+  /// The resolver token of the running silent re-check.
+  int _silentToken = 0;
+
+  /// Whether a silent re-check is already scheduled on the microtask queue.
+  bool _silentScheduled = false;
+
+  /// Whether a dependency changed while a navigation or a silent re-check was
+  /// running, so one more silent re-check is owed once they finish.
+  bool _recheckPending = false;
 
   /// The routes currently on the stack, bottom first.
   List<FoldableRoute> get stack {
@@ -695,18 +771,24 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
   }
 
   /// Re-runs the redirects of the routes on the stack, bottom to top.
+  ///
+  /// This is an explicit navigation: it reports [isNavigating] while it runs
+  /// and supersedes (and is superseded like) any other navigation.
   Future<void> refresh() async {
+    final context = _requireRouterContext();
     final routes = stack;
     if (routes.isEmpty) return;
     final token = _begin();
     try {
       final redirected = await _resolver.firstRedirect(
         routes,
+        context: context,
         target: routes.last,
         token: token,
       );
       if (redirected == null) return;
-      final chain = await _resolve(redirected, token);
+      if (!context.mounted) return;
+      final chain = await _resolve(redirected, token, context);
       if (chain != null) _commitOpen(chain);
     } finally {
       _end(token);
@@ -715,12 +797,105 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
 
   int _begin() {
     final token = _resolver.begin();
+    _navigationRunning = true;
     isNavigating.value = true;
     return token;
   }
 
   void _end(int token) {
-    if (!_disposed && _resolver.isCurrent(token)) isNavigating.value = false;
+    if (_disposed || !_resolver.isCurrent(token)) return;
+    isNavigating.value = false;
+    _navigationRunning = false;
+    // The navigation may have been started before the context changed; the
+    // re-check it owed must run on the stack it left behind.
+    _scheduleSilentRecheck();
+  }
+
+  /// Records that the location the `Router` sent is the one already shown, so
+  /// the redirects of the stack must run again — a silent re-check.
+  ///
+  /// A silent re-check never supersedes a running navigation: changes that
+  /// land while one runs are coalesced into a single pass started once it
+  /// finishes. A silent re-check that is itself running is replaced by the
+  /// newer one, so the last change always gets a pass.
+  void _requestSilentRecheck() {
+    if (_navigationRunning) {
+      _recheckPending = true;
+      return;
+    }
+    _recheckPending = false;
+    _startSilentRecheck();
+  }
+
+  void _scheduleSilentRecheck() {
+    if (!_recheckPending || _silentScheduled) return;
+    _silentScheduled = true;
+    scheduleMicrotask(() {
+      _silentScheduled = false;
+      _maybeStartSilentRecheck();
+    });
+  }
+
+  void _maybeStartSilentRecheck() {
+    if (_disposed || !_recheckPending) return;
+    if (_navigationRunning) return;
+    // A silent check made stale by a navigation must not hold up the pass
+    // owed for that navigation.
+    if (_silentRunning && _resolver.isCurrent(_silentToken)) return;
+    _recheckPending = false;
+    _startSilentRecheck();
+  }
+
+  void _startSilentRecheck() {
+    if (_disposed || stack.isEmpty) return;
+    final generation = ++_silentGeneration;
+    final token = _resolver.begin();
+    _silentToken = token;
+    _silentRunning = true;
+    unawaited(_runSilentRecheck(token, generation));
+  }
+
+  /// Re-runs the redirects of the stack like [refresh], but without reporting
+  /// [isNavigating]: it is a consequence of a dependency change, not a
+  /// navigation the app asked for. A navigation started meanwhile wins.
+  Future<void> _runSilentRecheck(int token, int generation) async {
+    try {
+      final context = _routerContext;
+      if (context == null || !context.mounted) return;
+      final routes = stack;
+      if (routes.isEmpty) return;
+      final redirected = await _resolver.firstRedirect(
+        routes,
+        context: context,
+        target: routes.last,
+        token: token,
+      );
+      if (redirected == null ||
+          !_resolver.isCurrent(token) ||
+          !context.mounted) {
+        return;
+      }
+      final chain = await _resolve(redirected, token, context);
+      if (chain != null) _commitOpen(chain);
+    } catch (error, stackTrace) {
+      FlutterError.reportError(
+        FlutterErrorDetails(
+          exception: error,
+          stack: stackTrace,
+          library: 'foldable_router',
+          context: ErrorDescription(
+            'while re-running redirects after a dependency change',
+          ),
+        ),
+      );
+    } finally {
+      if (generation == _silentGeneration) {
+        _silentRunning = false;
+        // A navigation that ended while the check ran, or a change that
+        // landed since, owes one more pass.
+        _maybeStartSilentRecheck();
+      }
+    }
   }
 
   FoldableRoute _firstBranch(FoldableShellRoute shell) {
@@ -733,10 +908,18 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
 
   /// Resolves [target] to its final chain, following redirects and turning a
   /// redirect to a shell into the opening of its first branch.
-  Future<List<FoldableRoute>?> _resolve(FoldableRoute target, int token) async {
+  Future<List<FoldableRoute>?> _resolve(
+    FoldableRoute target,
+    int token,
+    BuildContext context,
+  ) async {
     var current = target;
     for (var restarts = 0; ; restarts++) {
-      final chain = await _resolver.resolve(current, token: token);
+      final chain = await _resolver.resolve(
+        current,
+        context: context,
+        token: token,
+      );
       if (chain == null) return null;
       final last = chain.last;
       if (last is! FoldableShellRoute) return chain;
@@ -765,6 +948,7 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
   /// Returns the committed top entry, or null when superseded.
   Future<_Entry?> _navigate(FoldableRoute target, {required bool push}) async {
     if (_disposed) return null;
+    final context = _requireRouterContext();
     if (target is FoldableShellRoute) {
       if (push) {
         throw UnsupportedError(
@@ -775,7 +959,7 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
     }
     final token = _begin();
     try {
-      final chain = await _resolve(target, token);
+      final chain = await _resolve(target, token, context);
       if (chain == null) return null;
       _checkChain(chain);
       if (push && chain.any((r) => r is FoldableShellRoute)) {
@@ -965,10 +1149,11 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
     RangeError.checkValueInInterval(index, 0, shell.branches.length - 1);
     final built = shell.branchStacks[index];
     if (index == shell.current && built != null) return;
+    final context = _requireRouterContext();
     final token = _begin();
     try {
       final target = built == null ? shell.branches[index] : built.last.route;
-      final chain = await _resolve(target, token);
+      final chain = await _resolve(target, token, context);
       if (chain == null) return;
       _checkChain(chain);
       _commitOpen(chain);
@@ -988,6 +1173,7 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
   /// there is none. Errors of the navigation are thrown.
   Future<void> openUri(Uri uri) async {
     if (_disposed) return;
+    _requireRouterContext();
     final route = router.routeFor(uri);
     if (route == null) {
       _end(_begin()); // Supersede whatever is pending.
@@ -1007,6 +1193,17 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
 
   @override
   Future<void> setNewRoutePath(Uri configuration) async {
+    if (_disposed) return;
+    // Flutter re-parses the location currently shown when something the
+    // `Router` depends on changes (a `MediaQuery.sizeOf` / `Theme.of` read
+    // from a redirect, a resize, ...). A location equal to the one on screen
+    // is not opened again: that would rebuild the parent chain of the top
+    // route and drop pushed pages. It runs a silent re-check instead, which
+    // waits for any navigation in flight rather than replacing it.
+    if (configuration == currentConfiguration) {
+      _requestSilentRecheck();
+      return;
+    }
     try {
       await openUri(configuration);
     } catch (error, stackTrace) {
@@ -1449,6 +1646,7 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
   @override
   void dispose() {
     _disposed = true;
+    _routerContext = null;
     _rootTop.onChanged = null;
     _canHandlePopSignal.dispose();
     _resolver.begin();

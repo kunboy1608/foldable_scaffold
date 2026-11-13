@@ -29,14 +29,16 @@ class UserRoute extends FoldableRoute {
   String get path => '/users/detail';
 
   @override
-  Map<String, String?> get params => {'id': id};
+  Map<String, Object?> get params => {'id': id};
 
   @override
   FoldableRoute? get parent => const UsersRoute();
 
   @override
-  FutureOr<FoldableRoute?> redirect(RouteState state) async =>
-      await auth.isSignedIn() ? null : const LoginRoute();
+  FutureOr<FoldableRoute?> redirect(
+    BuildContext context,
+    RouteState state,
+  ) async => await auth.isSignedIn() ? null : const LoginRoute();
 
   @override
   Widget build(BuildContext context) => UserPage(id: id);
@@ -51,7 +53,7 @@ final router = FoldableRouter(
   initial: const HomeRoute(),
   routes: {
     '/users': (params) => const UsersRoute(),
-    '/users/detail': (params) => UserRoute(id: params['id']!),
+    '/users/detail': (params) => UserRoute(id: params.getString('id')),
     '/login': (params) => const LoginRoute(),
   },
   notFoundBuilder: (context, uri) => NotFoundPage(uri: uri),
@@ -102,6 +104,96 @@ await router.openUri(Uri.parse('/users/detail?id=7'));
 ```
 
 A runnable demo of all of the above lives in [`example/`](example/) (`cd example && fvm flutter run -d chrome`).
+
+## Parameters
+
+`params` is a `Map<String, Object?>`. A value may be a `String`, an `int`,
+a `double`, a `bool` or a `DateTime`; `null` entries are left out. Any other
+type, or a non-finite `double` (NaN, infinity), throws an `ArgumentError`
+naming the key and the type — also in release builds, since the route could
+not be written to a URL.
+
+| Type       | Written as                                      |
+|------------|-------------------------------------------------|
+| `String`   | the string itself                               |
+| `int`      | `toString()`                                    |
+| `double`   | `toString()` (`42.0` becomes `42.0`)            |
+| `bool`     | `true` / `false`                                |
+| `DateTime` | converted to UTC, then `toIso8601String()`       |
+
+A `DateTime` is always written in UTC, so the URL does not depend on the
+machine's time zone. Equality and `hashCode` compare the *encoded* query, so
+`{'id': 1}` and `{'id': '1'}` are the same route, and two `DateTime`s for the
+same instant written with different time zones are equal.
+
+A factory receives a `FoldableParams`:
+
+```dart
+'/users/detail': (params) => UserRoute(
+  id: params.getInt('id'),
+  showPosts: params.getBoolOrNull('posts') ?? false,
+  since: params.getDateTimeOrNull('since'),
+),
+```
+
+- `params[key]` returns the raw `String?` (so `params['id']!` keeps working),
+  `params.contains(key)` tells whether it is present, and `params.values` is
+  the unmodifiable raw `Map<String, String>`.
+- `getString`, `getInt`, `getDouble`, `getBool`, `getDateTime` require the
+  parameter and throw a `FormatException` naming the key and value when it is
+  missing or malformed.
+- The `…OrNull` variants return `null` only when the parameter is missing; a
+  parameter that is present but malformed still throws, so a broken URL never
+  silently becomes "no parameter".
+- `getInt` rejects `"1.5"`, `getDouble` accepts `"42"`, `getBool` accepts only
+  `"true"` / `"false"`, and `getDateTime` returns a `DateTime` in UTC.
+
+A factory that throws (missing `id`, `"1.5"` for an int, ...) leads to
+`notFoundBuilder`, exactly like an unknown path.
+
+## Redirects and context
+
+`redirect(BuildContext context, RouteState state)` receives the
+`BuildContext` of the `Router` widget — the same one go_router hands to its
+redirects (Flutter passes it to
+`RouteInformationParser.parseRouteInformationWithDependencies`). It sits
+*above* the `Navigator`, so it is not the context of any page:
+
+- it can read an `InheritedWidget` placed above `MaterialApp.router`, and what
+  `MaterialApp` provides (`Theme`, `MediaQuery`, `Localizations`);
+- it cannot see a `Provider` or `Theme` that lives inside a page;
+- it is the same context for every way in: launch, a deep link / platform
+  URL, `open`, `openUri`, `push`, `refresh`, and the re-check done when a
+  shell switches tabs.
+
+Read what you need *before* an `await`: the tree may change while the redirect
+is pending. If you use `context` after an `await`, check `context.mounted`
+first. A redirect resumed after the router was removed is dropped, like a
+navigation superseded by a newer one (the future completes normally and the
+stack is unchanged).
+
+Reads that register a dependency on this context — `MediaQuery.of` /
+`MediaQuery.sizeOf`, `Theme.of`, `Localizations.of`,
+`context.dependOnInheritedWidgetOfExactType` — couple the redirect to that
+inherited widget. When it changes (a resize, a theme switch, a login
+`InheritedWidget` flipping), the `Router` re-parses the location it is
+showing, and the router runs a *silent re-check*: the redirects of the stack
+run again bottom to top, and if one now returns a route the router navigates
+there. A silent re-check never replaces a navigation already in flight
+(`open`, `openUri`, `push`, an explicit `refresh`, a shell tab switch, or a
+different platform URL): it waits for it to finish and then runs once on the
+stack it left, so the navigation completes as if the dependency had not
+changed; changes during that wait are coalesced into that single pass. It does
+not report `isNavigating` (an explicit `refresh` does). If every redirect
+returns `null` nothing changes — the stack, the shell branch stacks, the
+pending `push` futures and the router's listeners are left untouched; on the
+not-found page it does nothing. To read a value once without that coupling,
+use the non-registering reads such as
+`context.getInheritedWidgetOfExactType<MediaQuery>()` (or the matching
+widget type) instead of `MediaQuery.of`.
+
+Calling `open`, `openUri`, `push` or `refresh` before the router is attached
+to the widget tree completes the future with a `StateError`.
 
 ## ShellRoute
 
@@ -300,7 +392,10 @@ Display rules, for the stack of the tab currently shown:
 - **Redirects** run one after another from the root ancestor down to the
   target. The first one returning a route restarts the navigation with that
   route. More than `maxRedirects` (default 5) consecutive redirects, or a
-  target visited twice, fail with a `FoldableRedirectException`.
+  target visited twice, fail with a `FoldableRedirectException`. Each redirect
+  receives the `Router`'s `BuildContext` (above the navigator, not a page's):
+  read what you need before an `await` and check `context.mounted` afterwards.
+  See [Redirects and context](#redirects-and-context).
 - While redirects are pending the current page stays on screen and
   `router.isNavigating` is `true`. On first launch `pendingBuilder` is shown.
 - **Latest navigation wins**: a navigation that is still pending when a newer

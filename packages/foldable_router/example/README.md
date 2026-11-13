@@ -38,3 +38,8 @@ What to try:
 Code: `lib/routes.dart` (routes, the shell and the router), `lib/session.dart`
 (fake auth), `lib/app.dart` (`MaterialApp.router` and the status bar),
 `lib/pages/` (including `shell_page.dart`, the bottom bar).
+
+`routes.dart` builds routes from typed parameters (`params.getString('id')`,
+`params.getStringOrNull('from')`); the guards use
+`redirect(BuildContext context, RouteState state)` and read
+`state.target.uri` before their `await`.

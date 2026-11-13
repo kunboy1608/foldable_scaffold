@@ -99,7 +99,7 @@ class ADetailRoute extends FoldableRoute {
   String get path => '/a/detail';
 
   @override
-  Map<String, String?> get params => {'id': id};
+  Map<String, Object?> get params => {'id': id};
 
   @override
   FoldableRoute? get parent => const TabARoute();
@@ -120,7 +120,7 @@ class TabBRoute extends FoldableRoute {
   FoldableRoute? get parent => const ShellMain();
 
   @override
-  FutureOr<FoldableRoute?> redirect(RouteState state) {
+  FutureOr<FoldableRoute?> redirect(BuildContext context, RouteState state) {
     redirects++;
     return null;
   }
@@ -138,7 +138,7 @@ class BDetailRoute extends FoldableRoute {
   String get path => '/b/detail';
 
   @override
-  Map<String, String?> get params => {'id': id};
+  Map<String, Object?> get params => {'id': id};
 
   @override
   FoldableRoute? get parent => const TabBRoute();
@@ -157,7 +157,7 @@ class GuardedTabRoute extends FoldableRoute {
   FoldableRoute? get parent => const ShellMain();
 
   @override
-  FoldableRoute? redirect(RouteState state) =>
+  FoldableRoute? redirect(BuildContext context, RouteState state) =>
       loggedIn ? null : const LoginRoute();
 
   @override
@@ -187,7 +187,8 @@ class RedirectIntoShellRoute extends FoldableRoute {
   String get path => '/redirect-into';
 
   @override
-  FoldableRoute? redirect(RouteState state) => const ADetailRoute(id: '9');
+  FoldableRoute? redirect(BuildContext context, RouteState state) =>
+      const ADetailRoute(id: '9');
 
   @override
   Widget build(BuildContext context) => const Text('should not be built');
@@ -230,7 +231,7 @@ class OrderedShell extends FoldableShellRoute {
   const OrderedShell();
 
   @override
-  FutureOr<FoldableRoute?> redirect(RouteState state) {
+  FutureOr<FoldableRoute?> redirect(BuildContext context, RouteState state) {
     redirectOrder.add('shell');
     return null;
   }
@@ -257,7 +258,7 @@ class OrderedTabRoute extends FoldableRoute {
   FoldableRoute? get parent => const OrderedShell();
 
   @override
-  FutureOr<FoldableRoute?> redirect(RouteState state) {
+  FutureOr<FoldableRoute?> redirect(BuildContext context, RouteState state) {
     redirectOrder.add('tab');
     return null;
   }
@@ -318,7 +319,7 @@ class GuardedShell extends FoldableShellRoute {
   List<FoldableRoute> get branches => const [SecretRoute()];
 
   @override
-  FoldableRoute? redirect(RouteState state) =>
+  FoldableRoute? redirect(BuildContext context, RouteState state) =>
       loggedIn ? null : const LoginRoute();
 
   @override

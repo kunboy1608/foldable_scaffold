@@ -104,7 +104,7 @@ class AItemRoute extends FoldableRoute {
   @override
   String get path => '/a/item';
   @override
-  Map<String, String?> get params => {'id': id};
+  Map<String, Object?> get params => {'id': id};
   @override
   FoldableRoute? get parent => const AListRoute();
   @override
@@ -118,7 +118,7 @@ class ASubRoute extends FoldableRoute {
   @override
   String get path => '/a/item/sub';
   @override
-  Map<String, String?> get params => {'id': id};
+  Map<String, Object?> get params => {'id': id};
   @override
   FoldableRoute? get parent => const AItemRoute(id: '1');
   @override
