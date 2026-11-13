@@ -158,22 +158,34 @@ class PaneMetrics {
   /// Number of right frames currently in the tree.
   int secondaryFrames = 0;
 
-  /// Whether the shell body has already been built during the frame being
-  /// laid out: its pages are rebuilt (and laid out again) by that build, so a
-  /// rectangle change does not need to request another one.
-  bool builtThisFrame = false;
-
   /// Whether the missing frame error was already reported for the current
   /// configuration, to avoid reporting it every frame.
   bool reportedMissing = false;
 
-  /// Key of the widget that holds the tab area; frames measure themselves
-  /// against it.
-  GlobalKey? areaKey;
+  /// The area that lays out this branch's panes right now, or `null` when the
+  /// branch is not on screen.
+  ///
+  /// A frame reads it to ask for another layout when it moves without its
+  /// area laying out (see [FoldablePanes]): the area then re-measures every
+  /// frame and lays the pages out again on the new rectangles, so the screen
+  /// never lags behind the data.
+  _RawPaneArea? _area;
 
-  /// Element of the shell body, used to rebuild it when a frame moves
-  /// without the shell body being rebuilt (see [FoldablePanes]).
-  Element? areaElement;
+  /// The page slots currently in the tree for this branch.
+  ///
+  /// They are re-laid-out when a frame rectangle changes without the pages
+  /// being rebuilt, so a page can never keep a stale rectangle on screen.
+  final Set<_RenderPaneSlot> _slots = <_RenderPaneSlot>{};
+
+  void _registerSlot(_RenderPaneSlot slot) => _slots.add(slot);
+
+  void _unregisterSlot(_RenderPaneSlot slot) => _slots.remove(slot);
+
+  void _markSlotsNeedingLayout() {
+    for (final _RenderPaneSlot slot in _slots.toList()) {
+      if (slot.attached) slot.markNeedsLayout();
+    }
+  }
 
   /// The pane where the last pointer-down landed, consumed by the next
   /// user-triggered `Navigator.maybePop` (see `FoldableRouter` documentation
@@ -187,6 +199,17 @@ class PaneMetrics {
     FoldablePane.single => null,
   };
 
+  /// Records the rectangle of [pane].
+  ///
+  /// Called by the area during its own layout, right after the whole panes
+  /// subtree laid out and before the navigators lay out. The slots then read
+  /// the final rectangle in the same layout pass, so a page is never drawn on
+  /// a placeholder position and never lags a frame behind its frame.
+  ///
+  /// When a rectangle changes while the area is *not* laying out — a frame
+  /// moved on its own, say an animation inside `buildPanes` — the affected
+  /// slots are marked for layout so the pages catch up in the same frame; a
+  /// stale page is never left on screen.
   void publish(FoldablePane pane, Rect rect) {
     final Rect? old = rectFor(pane);
     if (pane == FoldablePane.primary) {
@@ -195,21 +218,19 @@ class PaneMetrics {
       secondaryRect = rect;
     }
     if (old == rect || identical(old, rect)) return;
-    if (builtThisFrame) return;
-    final Element? element = areaElement;
-    if (element != null && element.mounted) {
-      // Legal: this runs while the render tree lays out (the frames lay out
-      // after the build phase), and it schedules the rebuild for the next
-      // frame.
-      element.markNeedsBuild();
+    final _RawPaneArea? current = _area;
+    if (current != null && current.isLayingOut) {
+      // The area is laying out: the slots lay out on the new rectangle right
+      // after this call, in the same pass.
+      return;
     }
+    _markSlotsNeedingLayout();
   }
 
   /// Releases the observables of these metrics.
   void dispose() {
     twoPane.dispose();
-    areaElement = null;
-    areaKey = null;
+    _area = null;
   }
 }
 
@@ -278,9 +299,10 @@ class PaneEpoch extends InheritedWidget {
 ///
 /// The tab area is a [LayoutBuilder]: every time it lays out (or the shell
 /// body rebuilds) the builder asks [FoldableShellRoute.buildPanes] for the
-/// layout, then places it in a stack *below* the navigators of the branches.
-/// The frames of the layout measure themselves when they lay out; the pages,
-/// laid out later in the same frame, position themselves on those rectangles.
+/// layout, then places it in [_PaneArea] *below* the navigators of the
+/// branches. [_PaneArea] lays the panes out first, reads the frames'
+/// rectangles, and only then lays the pages out on them — so a page is never
+/// positioned on a placeholder rectangle, not even for one frame.
 class BranchArea extends StatefulWidget {
   /// Creates the tab area.
   const BranchArea({
@@ -313,38 +335,7 @@ class BranchArea extends StatefulWidget {
 }
 
 class _BranchAreaState extends State<BranchArea> {
-  final GlobalKey _areaKey = GlobalKey(debugLabel: 'foldable pane area');
   int _epoch = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _attach();
-  }
-
-  @override
-  void didUpdateWidget(BranchArea oldWidget) {
-    super.didUpdateWidget(oldWidget);
-    if (!identical(oldWidget.metrics, widget.metrics)) {
-      oldWidget.metrics.areaElement = null;
-      oldWidget.metrics.areaKey = null;
-      _attach();
-    }
-  }
-
-  void _attach() {
-    widget.metrics
-      ..areaElement = context as Element
-      ..areaKey = _areaKey;
-  }
-
-  @override
-  void dispose() {
-    widget.metrics
-      ..areaElement = null
-      ..areaKey = null;
-    super.dispose();
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -364,9 +355,8 @@ class _BranchAreaState extends State<BranchArea> {
         _epoch++;
         return PaneEpoch(
           epoch: _epoch,
-          child: Stack(
-            key: _areaKey,
-            fit: StackFit.expand,
+          child: _PaneArea(
+            metrics: widget.metrics,
             children: <Widget>[
               if (layout != null) layout else const SizedBox.shrink(),
               widget.child,
@@ -375,6 +365,160 @@ class _BranchAreaState extends State<BranchArea> {
         );
       },
     );
+  }
+}
+
+/// Stacks the panes layout under the navigators of the branches and measures
+/// the pane frames in the same layout pass, *before* the pages lay out.
+///
+/// This replaces a plain [Stack]. The first child is the layout returned by
+/// [FoldableShellRoute.buildPanes]; right after it lays out, the frames'
+/// rectangles are read relative to this area and published, and only then the
+/// second child (the navigators) lays out, positioning the pages on the final
+/// rectangles. The pages therefore never see a placeholder position — not even
+/// for one frame — and can never be drawn in the wrong place.
+class _PaneArea extends MultiChildRenderObjectWidget {
+  const _PaneArea({required this.metrics, super.children});
+
+  /// The metrics of the branch shown by this area.
+  final PaneMetrics metrics;
+
+  @override
+  _RawPaneArea createRenderObject(BuildContext context) =>
+      _RawPaneArea(metrics);
+
+  @override
+  void updateRenderObject(BuildContext context, _RawPaneArea renderObject) {
+    renderObject.metrics = metrics;
+    // The panes (and so their frames) were rebuilt: re-measure the
+    // rectangles and lay the pages out again on them, in this frame.
+    renderObject.markNeedsLayout();
+  }
+}
+
+class _PaneAreaParentData extends ContainerBoxParentData<RenderBox> {}
+
+class _RawPaneArea extends RenderBox
+    with
+        ContainerRenderObjectMixin<RenderBox, _PaneAreaParentData>,
+        RenderBoxContainerDefaultsMixin<RenderBox, _PaneAreaParentData> {
+  _RawPaneArea(this._metrics) {
+    _metrics._area = this;
+  }
+
+  PaneMetrics _metrics;
+
+  /// The metrics of the branch this area currently draws.
+  PaneMetrics get metrics => _metrics;
+
+  set metrics(PaneMetrics value) {
+    if (identical(value, _metrics)) return;
+    if (identical(_metrics._area, this)) _metrics._area = null;
+    _metrics = value;
+    value._area = this;
+    markNeedsLayout();
+  }
+
+  /// Whether this area is running its own [performLayout].
+  ///
+  /// A frame laying out while this is `true` is driven by the area, which
+  /// re-reads the rectangles right after the subtree; it must not ask for
+  /// another layout then (that would loop). When a frame lays out on its own
+  /// (say, an animation inside the layout returned by `buildPanes`), it is
+  /// `false` and the frame asks the area to re-run.
+  bool get isLayingOut => _layingOut;
+  bool _layingOut = false;
+
+  @override
+  bool get sizedByParent => true;
+
+  @override
+  Size computeDryLayout(covariant BoxConstraints constraints) {
+    if (!constraints.hasBoundedWidth || !constraints.hasBoundedHeight) {
+      throw FlutterError.fromParts(<DiagnosticsNode>[
+        ErrorSummary(
+          'The tab area of a two-pane shell has unbounded constraints.',
+        ),
+        ErrorDescription(
+          'The two-pane area fills the space its shell body gives it, so it '
+          'needs bounded constraints on both axes.',
+        ),
+        DiagnosticsProperty<BoxConstraints>('The constraints were', constraints),
+      ]);
+    }
+    return constraints.biggest;
+  }
+
+  @override
+  void performLayout() {
+    _layingOut = true;
+    final BoxConstraints inner = BoxConstraints.tight(size);
+    RenderBox? child = firstChild;
+    if (child != null) {
+      // 1. The panes layout: its frames take room and report their sizes.
+      child.layout(inner);
+      (child.parentData! as _PaneAreaParentData).offset = Offset.zero;
+      // 2. Read the frames' rectangles now, while the subtree offsets are
+      //    final, and publish them. The pages pick them up in step 3, in this
+      //    same layout pass.
+      _publishFrames(child, Offset.zero);
+      child = childAfter(child);
+    }
+    // 3. The navigators of the branches: their pages lay out on the final
+    //    rectangles just published.
+    while (child != null) {
+      child.layout(inner);
+      (child.parentData! as ContainerBoxParentData<RenderBox>).offset =
+          Offset.zero;
+      child = childAfter(child);
+    }
+    _layingOut = false;
+  }
+
+  void _publishFrames(RenderObject node, Offset offset) {
+    if (node is _RenderPaneFrame) {
+      _metrics.publish(node.pane, offset & node.measuredSize);
+    }
+    node.visitChildren((RenderObject child) {
+      final ParentData? data = child.parentData;
+      final Offset childOffset = data is BoxParentData
+          ? data.offset
+          : Offset.zero;
+      _publishFrames(child, offset + childOffset);
+    });
+  }
+
+  @override
+  void paint(PaintingContext context, Offset offset) =>
+      defaultPaint(context, offset);
+
+  @override
+  bool hitTestChildren(BoxHitTestResult result, {required Offset position}) =>
+      defaultHitTestChildren(result, position: position);
+
+  @override
+  void setupParentData(covariant RenderObject child) {
+    if (child.parentData is! BoxParentData) {
+      child.parentData = _PaneAreaParentData();
+    }
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    _metrics._area = this;
+  }
+
+  @override
+  void detach() {
+    if (identical(_metrics._area, this)) _metrics._area = null;
+    super.detach();
+  }
+
+  @override
+  void debugFillProperties(DiagnosticPropertiesBuilder properties) {
+    super.debugFillProperties(properties);
+    properties.add(IntProperty('branch', _metrics.branchIndex));
   }
 }
 
@@ -409,6 +553,7 @@ class _RawPaneFrame extends LeafRenderObjectWidget {
 
   @override
   void updateRenderObject(BuildContext context, _RenderPaneFrame renderObject) {
+    renderObject.updateMetrics(metrics, pane);
     // The area was rebuilt: measure again, even if the widget is unchanged.
     renderObject.markNeedsLayout();
   }
@@ -417,8 +562,39 @@ class _RawPaneFrame extends LeafRenderObjectWidget {
 class _RenderPaneFrame extends RenderBox {
   _RenderPaneFrame(this.metrics, this.pane);
 
-  final PaneMetrics metrics;
-  final FoldablePane pane;
+  PaneMetrics metrics;
+  FoldablePane pane;
+
+  /// Points this frame at [value], moving its frame-count registration.
+  ///
+  /// Switching tabs rebuilds the panes with the new tab's metrics while the
+  /// render object (same position in the tree) is reused; without this the
+  /// frame would keep counting against the previous tab.
+  void updateMetrics(PaneMetrics value, FoldablePane paneValue) {
+    if (identical(value, metrics) && paneValue == pane) return;
+    if (attached) {
+      if (pane == FoldablePane.primary) {
+        metrics.primaryFrames--;
+      } else {
+        metrics.secondaryFrames--;
+      }
+      if (paneValue == FoldablePane.primary) {
+        value.primaryFrames++;
+      } else {
+        value.secondaryFrames++;
+      }
+    }
+    metrics = value;
+    pane = paneValue;
+    value.reportedMissing = false;
+  }
+
+  /// The size this frame had at its last layout.
+  ///
+  /// Recorded here (a box may always read its own size), so that the area can
+  /// publish the rectangle without reading the size of a grand-child, which
+  /// the layout protocol forbids.
+  Size measuredSize = Size.zero;
 
   @override
   bool get sizedByParent => true;
@@ -450,35 +626,35 @@ class _RenderPaneFrame extends RenderBox {
 
   @override
   void performLayout() {
-    // sizedByParent: size was set by performResize from computeDryLayout.
-    // Publish the size now: the position (offsets above) may still be stale,
-    // it is refreshed in paint below.
-    _publishSizeOnly();
-  }
-
-  void _publishSizeOnly() {
-    metrics.publish(pane, Offset.zero & size);
+    // sizedByParent: the size was set by performResize from computeDryLayout.
+    measuredSize = size;
+    //
+    // The rectangle is normally published by [_RawPaneArea], which reads it
+    // right after the whole panes subtree laid out and before the navigators
+    // lay out; a frame must never publish a placeholder position itself.
+    //
+    // When this frame lays out on its own — an animation inside the layout
+    // returned by buildPanes moved it, say, and this frame is a relayout
+    // boundary so the area did not run — the area will not see the move. The
+    // offsets up to the area are final here (the area and every node between
+    // are clean, otherwise they would be laying us out), so publish the real
+    // rectangle now and let the affected pages catch up in this same frame.
+    final _RawPaneArea? area = metrics._area;
+    if (area == null || !area.attached || area.isLayingOut) return;
+    Offset offset = Offset.zero;
+    RenderObject? node = this;
+    while (node != null && !identical(node, area)) {
+      final ParentData? parentData = node.parentData;
+      if (parentData is BoxParentData) offset += parentData.offset;
+      node = node.parent;
+    }
+    if (!identical(node, area)) return; // Not under the area (detaching).
+    metrics.publish(pane, offset & size);
   }
 
   @override
   void paint(PaintingContext context, Offset offset) {
-    // Frames paint nothing; paint happens after layout, so every offset above
-    // is final now: publish the live rectangle.
-    _publish();
-  }
-
-  void _publish() {
-    final BuildContext? areaContext = metrics.areaKey?.currentContext;
-    final RenderObject? area = areaContext?.findRenderObject();
-    if (area is! RenderBox || !area.attached) return;
-    // The transform only covers the panes subtree (we stop at the tab area),
-    // so it is made of paint offsets: reading sizes above the area is not
-    // allowed during layout.
-    final Matrix4 transform = getTransformTo(area);
-    metrics.publish(
-      pane,
-      MatrixUtils.transformRect(transform, Offset.zero & size),
-    );
+    // Frames paint nothing: the rectangle was published during layout.
   }
 
   @override
@@ -513,14 +689,16 @@ class _RenderPaneFrame extends RenderBox {
   }
 }
 
-/// Draws the content of one page into the rectangle of its pane.
+/// Draws the content of one page and gates it while it is hidden.
 ///
-/// One of these wraps the content of every page of a tab. In one-pane tabs it
-/// draws the content full-area, exactly like the pages of the root navigator:
-/// the navigator itself decides what to paint (the page below an opaque page
-/// stays out of the screen but is still laid out, as with a
-/// `MaterialPageRoute`). In two-pane tabs it moves the content to its frame
-/// and hides the pages deeper than the second one without unmounting them.
+/// One of these wraps the content of every page of a tab, *inside* the page
+/// transition: the transition itself is wrapped by [PaneSlot] in the route,
+/// so that everything the transition paints stays in the pane.
+///
+/// In one-pane tabs the content is laid out full-area, exactly like the pages
+/// of the root navigator. In two-pane tabs the page slots move it to the
+/// frame; this widget hides the pages deeper than the second one without
+/// unmounting them.
 class PanePageView extends StatelessWidget {
   /// Creates the view of one page.
   const PanePageView({
@@ -562,25 +740,21 @@ class PanePageView extends StatelessWidget {
           final bool twoPane = metrics.twoPane.value;
           final bool hidden =
               twoPane && !entry.paneFrozen && entry.position.value > 1;
-          return PaneSlot(
-            metrics: metrics,
-            entry: entry,
-            child: Listener(
-              behavior: HitTestBehavior.opaque,
-              onPointerDown: (PointerDownEvent event) =>
-                  metrics.pointerPane = entry.pane.value,
-              onPointerUp: (PointerEvent event) => _clearPointer(metrics),
-              onPointerCancel: (PointerEvent event) => _clearPointer(metrics),
-              child: TickerMode(
-                enabled: !hidden,
-                child: ExcludeFocus(
-                  excluding: hidden,
-                  child: HeroMode(
-                    // Heroes only fly in one-pane tabs; in a two-pane tab the
-                    // page below stays visible, so a flight would double it.
-                    enabled: !twoPane,
-                    child: content!,
-                  ),
+          return Listener(
+            behavior: HitTestBehavior.opaque,
+            onPointerDown: (PointerDownEvent event) =>
+                metrics.pointerPane = entry.pane.value,
+            onPointerUp: (PointerEvent event) => _clearPointer(metrics),
+            onPointerCancel: (PointerEvent event) => _clearPointer(metrics),
+            child: TickerMode(
+              enabled: !hidden,
+              child: ExcludeFocus(
+                excluding: hidden,
+                child: HeroMode(
+                  // Heroes only fly in one-pane tabs; in a two-pane tab the
+                  // page below stays visible, so a flight would double it.
+                  enabled: !twoPane,
+                  child: content!,
                 ),
               ),
             ),
@@ -644,7 +818,13 @@ class _PanePopGateState extends State<PanePopGate> {
   );
 }
 
-/// Places the content of one page in the rectangle of its frame.
+/// Places the page — transition included — in the rectangle of its frame.
+///
+/// In a two-pane tab the page transition is the slot's child, so the
+/// transition is laid out on the pane rectangle and everything it paints
+/// (scrim, background, snapshot, scale, slide, fade) is clipped to it. In a
+/// one-pane tab the slot is transparent (full area, origin, no clip), exactly
+/// like drawing the page without a slot.
 class PaneSlot extends StatelessWidget {
   /// Creates the slot of one page.
   const PaneSlot({
@@ -652,6 +832,7 @@ class PaneSlot extends StatelessWidget {
     required this.metrics,
     required this.entry,
     required this.child,
+    this.clip = false,
   });
 
   /// The metrics of the tab.
@@ -660,14 +841,23 @@ class PaneSlot extends StatelessWidget {
   /// The page drawn in this slot.
   final PaneEntryRef entry;
 
-  /// The content of the page.
+  /// The content of the page (in a tab, the page transition).
   final Widget child;
+
+  /// Whether the page is clipped to its pane rectangle. Only two-pane tabs
+  /// need it; one-pane tabs keep the exact behavior of a page without a slot.
+  final bool clip;
 
   @override
   Widget build(BuildContext context) {
     // Lays out again whenever the shell body (and so the panes) rebuilt.
     context.dependOnInheritedWidgetOfExactType<PaneEpoch>();
-    return _RawPaneSlot(metrics: metrics, entry: entry, child: child);
+    return _RawPaneSlot(
+      metrics: metrics,
+      entry: entry,
+      clip: clip,
+      child: child,
+    );
   }
 }
 
@@ -675,21 +865,24 @@ class _RawPaneSlot extends SingleChildRenderObjectWidget {
   const _RawPaneSlot({
     required this.metrics,
     required this.entry,
+    required this.clip,
     required super.child,
   });
 
   final PaneMetrics metrics;
   final PaneEntryRef entry;
+  final bool clip;
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      _RenderPaneSlot(metrics, entry);
+      _RenderPaneSlot(metrics, entry, clip);
 
   @override
   _PaneSlotElement createElement() => _PaneSlotElement(this);
 
   @override
   void updateRenderObject(BuildContext context, _RenderPaneSlot renderObject) {
+    renderObject.clip = clip;
     renderObject.markNeedsLayout();
   }
 }
@@ -705,10 +898,21 @@ class _PaneSlotElement extends SingleChildRenderObjectElement {
 }
 
 class _RenderPaneSlot extends RenderShiftedBox {
-  _RenderPaneSlot(this.metrics, this.entry) : super(null);
+  _RenderPaneSlot(this.metrics, this.entry, this._clip) : super(null);
 
   final PaneMetrics metrics;
   final PaneEntryRef entry;
+  bool _clip;
+
+  /// Whether to clip the page (transition included) to its pane rectangle.
+  bool get clip => _clip;
+
+  set clip(bool value) {
+    if (value == _clip) return;
+    _clip = value;
+    markNeedsPaint();
+  }
+
   bool _visible = false;
 
   /// Whether the page is actually painted (and reachable) right now.
@@ -771,21 +975,25 @@ class _RenderPaneSlot extends RenderShiftedBox {
       parentData.offset = Offset.zero;
       return;
     }
-    // The position may be stale (offsets above are assigned after children
-    // lay out); paint() corrects it once they are final. The size is exact.
+    // _RawPaneArea published this rectangle during its own layout, before this
+    // slot laid out, so it is the final value (never a placeholder). Paint
+    // uses the same offset assigned here, so the page cannot drift between
+    // layout and paint.
     child.layout(BoxConstraints.tight(rect.size));
     parentData.offset = rect.topLeft;
   }
 
-  /// The rectangle of the page right now: live offsets during paint and hit
-  /// testing, last-published size during layout.
-  Offset _liveOrigin() {
-    final FoldablePane? pane = _resolvePane();
-    if (pane == null) return Offset.zero;
-    final Rect? rect = pane == FoldablePane.single
-        ? null
-        : metrics.rectFor(pane);
-    return rect?.topLeft ?? Offset.zero;
+  /// The offset of the page, as assigned during layout.
+  ///
+  /// Paint, hit testing and the paint transform all use the very offset the
+  /// layout pass chose, so a page is always drawn exactly where it was laid
+  /// out; the rectangle can never change between layout and paint without the
+  /// slot being laid out again (see [PaneMetrics.publish]).
+  Offset _childOrigin() {
+    final RenderBox? child = this.child;
+    if (child == null) return Offset.zero;
+    final BoxParentData parentData = child.parentData! as BoxParentData;
+    return parentData.offset;
   }
 
   @override
@@ -794,7 +1002,7 @@ class _RenderPaneSlot extends RenderShiftedBox {
     final RenderBox? child = this.child;
     if (child == null) return false;
     return result.addWithPaintOffset(
-      offset: _liveOrigin(),
+      offset: _childOrigin(),
       position: position,
       hitTest: (BoxHitTestResult result, Offset transformed) =>
           child.hitTest(result, position: transformed),
@@ -809,9 +1017,8 @@ class _RenderPaneSlot extends RenderShiftedBox {
 
   @override
   void applyPaintTransform(RenderBox child, Matrix4 transform) {
-    transform.multiply(
-      Matrix4.translationValues(_liveOrigin().dx, _liveOrigin().dy, 0),
-    );
+    final Offset origin = _childOrigin();
+    transform.multiply(Matrix4.translationValues(origin.dx, origin.dy, 0));
   }
 
   @override
@@ -819,7 +1026,35 @@ class _RenderPaneSlot extends RenderShiftedBox {
     if (!_visible) return;
     final RenderBox? child = this.child;
     if (child == null) return;
-    context.paintChild(child, _liveOrigin() + offset);
+    final Offset origin = _childOrigin();
+    if (_clip) {
+      // The pane rectangle, expressed in this slot's coordinates, is the
+      // child's box: the transition is laid out on it. Clipping it keeps the
+      // parts a transition moves outside (a slide, a scale, ...) from
+      // reaching the other pane.
+      final Rect clipRect = origin & child.size;
+      context.pushClipRect(
+        needsCompositing,
+        offset,
+        clipRect,
+        (PaintingContext context, Offset offset) =>
+            context.paintChild(child, origin + offset),
+      );
+      return;
+    }
+    context.paintChild(child, origin + offset);
+  }
+
+  @override
+  void attach(PipelineOwner owner) {
+    super.attach(owner);
+    metrics._registerSlot(this);
+  }
+
+  @override
+  void detach() {
+    metrics._unregisterSlot(this);
+    super.detach();
   }
 
   @override

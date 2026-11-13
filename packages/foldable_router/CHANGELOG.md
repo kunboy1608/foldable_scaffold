@@ -43,3 +43,9 @@
   `FoldableRouter.close(context)` closes a page together with every page
   above it in one stack update.
 * The hero controllers of the branches are disposed when the shell goes away.
+* Two panes: a page transition is laid out in the pane of its own page and
+  clipped to it, so the scrim, background, snapshot, scale, slide and fade a
+  transition paints never reach the other pane (on Linux the Zoom transition
+  no longer dims the left pane while the right page enters). One-pane
+  transitions, including predictive back, are unchanged; a page's state still
+  survives every pane move.

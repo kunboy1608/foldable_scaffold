@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:foldable_router/foldable_router.dart';
 
+import 'pixel_utils.dart';
+
 // ---------------------------------------------------------------------------
 // Test app: a shell with two branches; two panes driven by [paneConfig].
 // ---------------------------------------------------------------------------
@@ -357,6 +359,32 @@ Future<void> setTwoPane(
 Rect frameRect(WidgetTester tester, String key) =>
     tester.getRect(find.byKey(Key(key), skipOffstage: false));
 
+/// Proves, at the pixel level, that the `getRect`-verified pages really are
+/// painted on their frames and a redundant rebuild does not move them (a page
+/// laid out on its frame but painted on a stale rectangle would move here while
+/// `getRect` still passes).
+Future<void> expectPagesStayInFramesAcrossRebuild(
+  WidgetTester tester,
+  FoldableRouter router,
+  List<String> frameKeys,
+) async {
+  final regions = [
+    for (final key in frameKeys) frameRect(tester, key),
+  ];
+  final Screenshot before = await capture(tester);
+  await rebuild(tester, router);
+  await tester.pumpAndSettle();
+  final Screenshot after = await capture(tester);
+  for (var i = 0; i < frameKeys.length; i++) {
+    expect(
+      after.diff(before, region: regions[i]),
+      0,
+      reason:
+          'the pixels of ${frameKeys[i]} changed across a redundant rebuild',
+    );
+  }
+}
+
 int _notifications = 0;
 
 // ---------------------------------------------------------------------------
@@ -471,6 +499,12 @@ void main() {
         FoldablePane.primary,
       );
       expect(find.byKey(const Key('secondary-choose')), findsOneWidget);
+
+      // Pixel check: the left page is painted on its frame and a redundant
+      // rebuild does not move it.
+      await expectPagesStayInFramesAcrossRebuild(tester, router, [
+        'primary-frame',
+      ]);
     });
 
     testWidgets('[A,B]: A on the left, B on the right', (tester) async {
@@ -504,6 +538,13 @@ void main() {
         ),
         FoldablePane.secondary,
       );
+
+      // Pixel check: both pages are painted on their frames and a redundant
+      // rebuild does not move either.
+      await expectPagesStayInFramesAcrossRebuild(tester, router, [
+        'primary-frame',
+        'secondary-frame',
+      ]);
     });
 
     testWidgets('[A,B,C]: B on the left, C on the right, A hidden', (
@@ -545,6 +586,13 @@ void main() {
       );
       expect(usersState.lastTickerMode, isFalse);
       expect(usersState.lastPane, FoldablePane.primary);
+
+      // Pixel check: B and C are painted on their frames and a redundant
+      // rebuild does not move them.
+      await expectPagesStayInFramesAcrossRebuild(tester, router, [
+        'primary-frame',
+        'secondary-frame',
+      ]);
     });
 
     testWidgets('stack, URL and tabs do not change between modes', (

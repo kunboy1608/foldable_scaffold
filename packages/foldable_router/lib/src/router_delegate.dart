@@ -309,15 +309,50 @@ class _BranchPageRoute<T> extends PageRoute<T>
     Animation<double> secondaryAnimation,
     Widget child,
   ) {
-    // In a two-pane tab the page is re-slotted when a page is pushed or
-    // popped above it; it must not play its outgoing transition, it only
-    // changes rectangle.
-    return Theme.of(context).pageTransitionsTheme.buildTransitions<T>(
-      this,
-      context,
-      animation,
-      _metrics.twoPane.value ? kAlwaysDismissedAnimation : secondaryAnimation,
-      child,
+    // The pane frame wraps the transition — not the other way round. The
+    // transition widget (scrim, background, snapshot, scale, slide, fade) is
+    // laid out in the rectangle of this page's pane and clipped to it, so
+    // nothing it paints can reach the other pane. In a one-pane tab the frame
+    // is the whole route area at the origin and does not clip, so the
+    // transition is built exactly as before.
+    //
+    // Two-pane tabs never play the outgoing (parallax) transition of the page
+    // below: the two panes are both always visible, so a page only changes
+    // rectangle. The incoming page still keeps its enter transition. The
+    // platform transition widget is always built (with its predictive-back and
+    // delegated-transition plumbing); only the secondary animation is forced
+    // to its dismissed value.
+    //
+    // The mode can flip while the route is mounted (the window grows one pane
+    // into two). The framework caches this transition widget and does not
+    // rebuild it on such a flip, so the below page could keep the one-pane
+    // parallax offset and appear shifted the moment it becomes visible.
+    // Listening to the mode here makes the widget rebuild itself the moment
+    // the mode changes: the below page jumps to the identity transform in the
+    // very frame it becomes visible, never drawn shifted.
+    return ListenableBuilder(
+      listenable: Listenable.merge(<Listenable>[
+        page.entry.position,
+        _metrics.twoPane,
+      ]),
+      child: child,
+      builder: (BuildContext context, Widget? child) {
+        final bool twoPane = _metrics.twoPane.value;
+        final Widget transitioned = Theme.of(context).pageTransitionsTheme
+            .buildTransitions<T>(
+              this,
+              context,
+              animation,
+              twoPane ? kAlwaysDismissedAnimation : secondaryAnimation,
+              child!,
+            );
+        return PaneSlot(
+          metrics: _metrics,
+          entry: page.entry,
+          clip: twoPane,
+          child: transitioned,
+        );
+      },
     );
   }
 
@@ -1137,7 +1172,6 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
   void _onAreaBuilt(_Shell shell, FoldablePanes panes, bool twoPane) {
     final PaneMetrics metrics = shell.panes[panes.branchIndex];
     metrics
-      ..builtThisFrame = true
       ..hasSecondary = panes.hasSecondary
       ..stackLength = shell.branchStacks[panes.branchIndex]?.length ?? 0;
     if (metrics.twoPane.value != twoPane) {
@@ -1148,14 +1182,11 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
     _scheduleFrameChecks(metrics);
   }
 
-  /// Schedules, after the frame that built the tab area, the rebuild of the
-  /// area when a frame moved without the area being rebuilt (so the pages
-  /// catch up on the next frame) and the report of frames the app forgot to
-  /// place.
+  /// Schedules, after the frame that built the tab area, the report of frames
+  /// the app forgot to place.
   void _scheduleFrameChecks(PaneMetrics metrics) {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (_disposed) return;
-      metrics.builtThisFrame = false;
       if (!metrics.twoPane.value) return;
       if (metrics.primaryFrames == 0 && !metrics.reportedMissing) {
         metrics.reportedMissing = true;

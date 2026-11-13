@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:foldable_router/foldable_router.dart';
 
+import 'pixel_utils.dart';
+
 /// STEP 1 of the two-pane work: prove that a page always occupies the
 /// rectangle of its placeholder frame, in the same frame, for arbitrary app
 /// layouts — and that changing the layout never rebuilds the page state.
@@ -208,6 +210,32 @@ Future<void> rebuild(WidgetTester tester, FoldableRouter router) async {
 Rect frameRect(WidgetTester tester, String key) =>
     tester.getRect(find.byKey(Key(key), skipOffstage: false));
 
+/// Proves, at the pixel level, that the (already `getRect`-verified) pages stay
+/// drawn in their frames across a redundant rebuild: a page that is laid out on
+/// its frame but painted on a stale rectangle would move here even though
+/// `getRect` still passes.
+Future<void> expectPagesStayInFramesAcrossRebuild(
+  WidgetTester tester,
+  FoldableRouter router,
+  List<String> frameKeys,
+) async {
+  final regions = [
+    for (final key in frameKeys) frameRect(tester, key),
+  ];
+  final Screenshot before = await capture(tester);
+  await rebuild(tester, router);
+  await tester.pumpAndSettle();
+  final Screenshot after = await capture(tester);
+  for (var i = 0; i < frameKeys.length; i++) {
+    expect(
+      after.diff(before, region: regions[i]),
+      0,
+      reason:
+          'the pixels of ${frameKeys[i]} changed across a redundant rebuild',
+    );
+  }
+}
+
 void main() {
   setUp(() {
     paneLayout
@@ -251,6 +279,13 @@ void main() {
     final Rect right = frameRect(tester, 'secondary-frame');
     expect(left.width / right.width, closeTo(2 / 3, 0.01));
     expect(right.left - left.right, 24);
+
+    // Pixel check: the pages really are painted on those frames, and a
+    // redundant rebuild does not move them.
+    await expectPagesStayInFramesAcrossRebuild(tester, router, [
+      'primary-frame',
+      'secondary-frame',
+    ]);
   });
 
   testWidgets('a) pages occupy the rectangle of their frame, vertical '
@@ -276,6 +311,13 @@ void main() {
     final Rect bottom = frameRect(tester, 'secondary-frame');
     expect(top.height / bottom.height, closeTo(1 / 2, 0.01));
     expect(bottom.top - top.bottom, 24);
+
+    // Pixel check: the pages are painted on those frames, and a redundant
+    // rebuild does not move them.
+    await expectPagesStayInFramesAcrossRebuild(tester, router, [
+      'primary-frame',
+      'secondary-frame',
+    ]);
   });
 
   testWidgets('b) after a resize, ONE pump puts every page in its new frame', (

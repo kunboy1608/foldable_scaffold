@@ -6,6 +6,27 @@ import 'package:foldable_router_example/pages/users_pages.dart';
 import 'package:foldable_router_example/routes.dart';
 import 'package:foldable_router_example/session.dart';
 
+import 'pixel_utils.dart';
+
+void setSize(WidgetTester tester, double width, double height) {
+  tester.view.physicalSize = Size(width, height);
+  tester.view.devicePixelRatio = 1.0;
+  addTearDown(tester.view.reset);
+}
+
+/// Runs a pixel test on both platforms the router supports, whose page
+/// transitions differ.
+void pixelTest(String description, WidgetTesterCallback callback) {
+  testWidgets(
+    description,
+    callback,
+    variant: const TargetPlatformVariant(<TargetPlatform>{
+      TargetPlatform.android,
+      TargetPlatform.linux,
+    }),
+  );
+}
+
 Future<FoldableRouter> pumpApp(WidgetTester tester, {String? deepLink}) async {
   if (deepLink != null) {
     tester.binding.platformDispatcher.defaultRouteNameTestValue = deepLink;
@@ -395,4 +416,109 @@ void main() {
     await tester.pumpAndSettle();
     expect(router.stack, [const MainShellRoute(), const UsersRoute()]);
   });
+
+  // -------------------------------------------------------------------------
+  // Pixel tests: the reported bugs (a page drawn at (0,0) on a rebuild, a page
+  // shifting when the window grows) are invisible to `getRect`; these read the
+  // real pixels. Run on both platforms, whose transitions differ.
+  // -------------------------------------------------------------------------
+
+  pixelTest('T1 re-opening the visible user changes no pixel', (
+    tester,
+  ) async {
+    setSize(tester, 1400, 900);
+    final router = await pumpApp(tester);
+    await tester.pumpAndSettle();
+
+    await router.open(const UserRoute(id: '1'));
+    await tester.pumpAndSettle();
+    final Screenshot before = await capture(tester);
+
+    await router.open(const UserRoute(id: '1'));
+    await tester.pumpAndSettle();
+    final Screenshot after = await capture(tester);
+
+    expect(
+      after.diff(before),
+      0,
+      reason: 're-opening the visible route must not change a single pixel',
+    );
+  });
+
+  pixelTest('T2 growing one pane to two matches a direct two-pane build', (
+    tester,
+  ) async {
+    // Direct two-pane image at the wide size.
+    setSize(tester, 1400, 900);
+    var router = await pumpApp(tester);
+    await tester.pumpAndSettle();
+    await router.open(const UserRoute(id: '1'));
+    await tester.pumpAndSettle();
+    final Screenshot direct = await capture(tester);
+
+    // Same stack built narrow (one pane), then grown to the wide size.
+    setSize(tester, 700, 900);
+    router = await pumpApp(tester);
+    await tester.pumpAndSettle();
+    await router.open(const UserRoute(id: '1'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('no-user-selected')), findsNothing);
+
+    setSize(tester, 1400, 900);
+    await tester.pumpAndSettle();
+    final Screenshot grown = await capture(tester);
+
+    expect(
+      grown.diff(direct),
+      0,
+      reason: 'growing to two panes must equal a direct two-pane build',
+    );
+  });
+
+  pixelTest(
+    'T3 replacing the right user never draws outside the right pane',
+    (tester) async {
+      setSize(tester, 1400, 900);
+      var router = await pumpApp(tester);
+      await tester.pumpAndSettle();
+      await router.open(const UserRoute(id: '42'));
+      await tester.pumpAndSettle();
+      final Screenshot direct = await capture(tester);
+
+      // [Users, User1] -> open(User42): watch every frame of the transition.
+      router = await pumpApp(tester);
+      await tester.pumpAndSettle();
+      await router.open(const UserRoute(id: '1'));
+      await tester.pumpAndSettle();
+
+      // The rectangle of the right pane (where the replaced page is drawn) and
+      // of the three list rows. The example tints the selected row, which is
+      // legitimate app chrome; every other pixel outside the right pane —
+      // app bar, list text and icons, the divider between the panes, the
+      // empty space below the rows — must stay identical to the settled image.
+      final Rect right = tester.getRect(find.byType(UserPage));
+      final Finder rows = find.byType(ListTile);
+      final List<Rect> rowRects = <Rect>[
+        for (var i = 0; i < rows.evaluate().length; i++)
+          tester.getRect(rows.at(i)),
+      ];
+
+      await router.open(const UserRoute(id: '42'));
+      await tester.pump();
+      final List<Screenshot> frames = <Screenshot>[await capture(tester)];
+      while (tester.binding.hasScheduledFrame && frames.length < 40) {
+        await tester.pump(const Duration(milliseconds: 16));
+        frames.add(await capture(tester));
+      }
+      await tester.pumpAndSettle();
+
+      for (var i = 0; i < frames.length; i++) {
+        expect(
+          diffOutsideExcept(frames[i], direct, pane: right, except: rowRects),
+          0,
+          reason: 'a page was drawn outside the right pane in frame $i',
+        );
+      }
+    },
+  );
 }
