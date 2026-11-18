@@ -60,8 +60,10 @@ class RecordShell extends FoldableShellRoute {
   const RecordShell();
 
   @override
-  List<FoldableRoute> get branches =>
-      const [RecordBranch('a'), RecordBranch('b')];
+  List<FoldableRoute> get branches => const [
+    RecordBranch('a'),
+    RecordBranch('b'),
+  ];
 
   @override
   FutureOr<FoldableRoute?> redirect(BuildContext context, RouteState state) {
@@ -129,7 +131,10 @@ class GatedParent extends FoldableRoute {
   String get path => '/gated';
 
   @override
-  FutureOr<FoldableRoute?> redirect(BuildContext context, RouteState state) async {
+  FutureOr<FoldableRoute?> redirect(
+    BuildContext context,
+    RouteState state,
+  ) async {
     await gate!.future;
     return null;
   }
@@ -345,9 +350,9 @@ void main() {
 
       final before = router.stack;
       var completed = false;
-      final future = router.open(const CountingChild()).then(
-        (_) => completed = true,
-      );
+      final future = router
+          .open(const CountingChild())
+          .then((_) => completed = true);
       await tester.pump();
       expect(router.isNavigating.value, isTrue);
       expect(completed, isFalse);

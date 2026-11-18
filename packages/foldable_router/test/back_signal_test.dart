@@ -85,7 +85,9 @@ void main() {
       },
       notFoundBuilder: (context, uri) => const Text('not found'),
     );
-    await tester.pumpWidget(MaterialApp.router(routerConfig: router.routerConfig));
+    await tester.pumpWidget(
+      MaterialApp.router(routerConfig: router.routerConfig),
+    );
     await tester.pumpAndSettle();
     return router;
   }

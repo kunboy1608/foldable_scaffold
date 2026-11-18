@@ -104,7 +104,10 @@ class SlowRoute extends FoldableRoute {
   String get path => '/slow';
 
   @override
-  Future<FoldableRoute?> redirect(BuildContext context, RouteState state) async {
+  Future<FoldableRoute?> redirect(
+    BuildContext context,
+    RouteState state,
+  ) async {
     await gate!.future;
     return null;
   }

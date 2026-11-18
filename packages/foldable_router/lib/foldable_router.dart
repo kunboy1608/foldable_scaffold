@@ -12,6 +12,7 @@ export 'src/foldable_router.dart'
 export 'src/foldable_shell_route.dart'
     show FoldableShellRoute, FoldableShellState;
 export 'src/foldable_panes.dart' show FoldablePane, FoldablePanes;
+export 'src/page_transitions.dart' show FoldablePageTransitionsResolver;
 export 'src/redirect_resolver.dart'
     show
         FoldableRedirectException,

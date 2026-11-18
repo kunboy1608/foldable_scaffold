@@ -5,6 +5,7 @@ import 'foldable_panes.dart';
 import 'foldable_params.dart';
 import 'foldable_route.dart';
 import 'foldable_shell_route.dart';
+import 'page_transitions.dart';
 import 'redirect_resolver.dart';
 import 'route_information_parser.dart';
 import 'router_delegate.dart';
@@ -58,6 +59,7 @@ class FoldableRouter implements Listenable {
     required this.routes,
     required this.notFoundBuilder,
     this.pendingBuilder,
+    this.pageTransitions,
     this.maxRedirects = 5,
   }) : assert(maxRedirects >= 0);
 
@@ -77,6 +79,33 @@ class FoldableRouter implements Listenable {
   /// Builds what is shown on first launch while the first redirect is
   /// pending. Defaults to an empty box.
   final WidgetBuilder? pendingBuilder;
+
+  /// Chooses the [PageTransitionsBuilder] that animates pages, given the
+  /// context of the route.
+  ///
+  /// By default the transitions come from the `pageTransitionsTheme` of
+  /// `package:flutter/material.dart`'s `Theme`. An app built on
+  /// `package:material_ui` has no such theme in its tree (the two libraries
+  /// have separate `Theme` classes), so the default would ignore the app's
+  /// `pageTransitionsTheme` and paint a light background behind the
+  /// transition (a white flash in dark mode). Read the app's own theme
+  /// instead:
+  ///
+  /// ```dart
+  /// import 'package:material_ui/material_ui.dart' as ui;
+  ///
+  /// FoldableRouter(
+  ///   // ...
+  ///   pageTransitions: (context) {
+  ///     final theme = ui.Theme.of(context);
+  ///     return theme.pageTransitionsTheme.builders[theme.platform] ??
+  ///         const ui.ZoomPageTransitionsBuilder();
+  ///   },
+  /// );
+  /// ```
+  ///
+  /// A constant builder works too: `(_) => const MyTransitionsBuilder()`.
+  final FoldablePageTransitionsResolver? pageTransitions;
 
   /// How many consecutive redirects one navigation may take before it fails
   /// with a [RedirectLimitException].
@@ -191,6 +220,35 @@ class FoldableRouter implements Listenable {
 
   /// Whether a navigation is currently waiting for its redirects.
   ValueListenable<bool> get isNavigating => _delegate.isNavigating;
+
+  /// The key of the root [Navigator] of this router.
+  ///
+  /// Use it where no [BuildContext] of a page is at hand (a service, an
+  /// error handler, ...): `navigatorKey.currentContext` is a context below
+  /// the root navigator, so it can be given to `showDialog`,
+  /// `showModalBottomSheet`, `Theme.of`, `FoldableRouter.of`, ...
+  ///
+  /// ```dart
+  /// final context = router.navigatorKey.currentContext;
+  /// if (context != null) {
+  ///   showDialog<void>(context: context, builder: (_) => const MyDialog());
+  /// }
+  /// ```
+  ///
+  /// A route shown this way is on the root navigator: it covers the whole
+  /// app (the frame of a [FoldableShellRoute] and both panes included) and
+  /// the system back closes it first.
+  ///
+  /// The key is the same for the whole life of the router. Its
+  /// `currentState` and `currentContext` are `null` while no navigator is
+  /// built: before the router is attached to the widget tree and until the
+  /// first navigation completes (while `pendingBuilder` is shown).
+  ///
+  /// Do not push or pop *pages* through it: the page stack belongs to the
+  /// router ([open], [push], [pop]). Close a dialog with
+  /// `Navigator.of(dialogContext).pop()`, not with [pop], which removes a
+  /// page.
+  GlobalKey<NavigatorState> get navigatorKey => _delegate.navigatorKey;
 
   /// Replaces the whole stack with [route] and its [FoldableRoute.parent]
   /// chain, after running redirects.

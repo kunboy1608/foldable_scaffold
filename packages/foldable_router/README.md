@@ -387,6 +387,69 @@ Display rules, for the stack of the tab currently shown:
   hits and semantics. In a settled one-pane tab, the page below the top is
   out of the screen and of the semantics, as with `MaterialPageRoute`.
 
+## `material_ui` vs `flutter/material.dart`
+
+In Flutter 3.47+ `package:material_ui/material_ui.dart` and the SDK's
+`package:flutter/material.dart` are separate copies of Material with separate
+`Theme` classes. The router only depends on `widgets`; by default it reads
+page transitions from the SDK `Theme`. If your app uses `material_ui`, point
+the router at your own theme, otherwise your `pageTransitionsTheme` is ignored
+and a light layer flashes during transitions in dark mode:
+
+```dart
+import 'package:material_ui/material_ui.dart' as ui;
+
+final router = FoldableRouter(
+  // ...
+  pageTransitions: (context) {
+    final theme = ui.Theme.of(context);
+    return theme.pageTransitionsTheme.builders[theme.platform] ??
+        const ui.ZoomPageTransitionsBuilder();
+  },
+);
+```
+
+## Dialogs and the navigator key
+
+Dialogs, bottom sheets and menus are opened the Flutter way, with the context
+of a page:
+
+```dart
+final ok = await showDialog<bool>(
+  context: context,
+  builder: (dialogContext) => AlertDialog(
+    title: const Text('Delete?'),
+    actions: [
+      TextButton(
+        onPressed: () => Navigator.of(dialogContext).pop(true),
+        child: const Text('Delete'),
+      ),
+    ],
+  ),
+);
+if (!context.mounted) return;
+```
+
+- Close a dialog with `Navigator.of(dialogContext).pop(result)`.
+  `router.pop()` removes a *page*: it would remove the page under the dialog.
+- By default (`useRootNavigator: true`) the dialog covers the whole app, the
+  shell frame and both panes included. With `useRootNavigator: false`, from
+  a page of a tab, it stays inside the tab area and is hidden with its tab.
+- The system back closes the dialog before it removes a page.
+
+Where no page context is at hand (a service, an error handler),
+`router.navigatorKey` gives a context below the root navigator:
+
+```dart
+final context = router.navigatorKey.currentContext;
+if (context != null) {
+  showDialog<void>(context: context, builder: (_) => const SessionExpired());
+}
+```
+
+`currentContext` is `null` until the first navigation completes. Do not push
+or pop pages through the key: the page stack belongs to the router.
+
 ## Behaviour
 
 - **Redirects** run one after another from the root ancestor down to the

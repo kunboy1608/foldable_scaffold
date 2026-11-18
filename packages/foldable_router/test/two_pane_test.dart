@@ -368,9 +368,7 @@ Future<void> expectPagesStayInFramesAcrossRebuild(
   FoldableRouter router,
   List<String> frameKeys,
 ) async {
-  final regions = [
-    for (final key in frameKeys) frameRect(tester, key),
-  ];
+  final regions = [for (final key in frameKeys) frameRect(tester, key)];
   final Screenshot before = await capture(tester);
   await rebuild(tester, router);
   await tester.pumpAndSettle();

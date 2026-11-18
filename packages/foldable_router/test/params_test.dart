@@ -38,13 +38,7 @@ class AllTypesRoute extends FoldableRoute {
   String get path => '/all';
 
   @override
-  Map<String, Object?> get params => {
-    's': s,
-    'i': i,
-    'd': d,
-    'b': b,
-    't': t,
-  };
+  Map<String, Object?> get params => {'s': s, 'i': i, 'd': d, 'b': b, 't': t};
 
   @override
   Widget build(BuildContext context) => const SizedBox.shrink();
@@ -136,7 +130,11 @@ void main() {
           throwsA(
             isA<ArgumentError>()
                 .having((e) => e.name, 'name', 'x')
-                .having((e) => e.message.toString(), 'message', contains('double')),
+                .having(
+                  (e) => e.message.toString(),
+                  'message',
+                  contains('double'),
+                ),
           ),
         );
       }
@@ -233,34 +231,37 @@ void main() {
       expect(() => empty.getDateTime('k'), throwsFormatException);
     });
 
-    test('an OrNull getter returns null only when the parameter is missing', () {
-      final empty = FoldableParams(const {});
-      expect(empty.getStringOrNull('k'), isNull);
-      expect(empty.getIntOrNull('k'), isNull);
-      expect(empty.getDoubleOrNull('k'), isNull);
-      expect(empty.getBoolOrNull('k'), isNull);
-      expect(empty.getDateTimeOrNull('k'), isNull);
+    test(
+      'an OrNull getter returns null only when the parameter is missing',
+      () {
+        final empty = FoldableParams(const {});
+        expect(empty.getStringOrNull('k'), isNull);
+        expect(empty.getIntOrNull('k'), isNull);
+        expect(empty.getDoubleOrNull('k'), isNull);
+        expect(empty.getBoolOrNull('k'), isNull);
+        expect(empty.getDateTimeOrNull('k'), isNull);
 
-      // Present but malformed still throws.
-      expect(
-        () => FoldableParams({'i': 'x'}).getIntOrNull('i'),
-        throwsFormatException,
-      );
-      expect(
-        () => FoldableParams({'d': 'x'}).getDoubleOrNull('d'),
-        throwsFormatException,
-      );
-      expect(
-        () => FoldableParams({'b': 'x'}).getBoolOrNull('b'),
-        throwsFormatException,
-      );
-      expect(
-        () => FoldableParams({'t': 'x'}).getDateTimeOrNull('t'),
-        throwsFormatException,
-      );
-      // A String has no format to fail.
-      expect(FoldableParams({'s': 'x'}).getStringOrNull('s'), 'x');
-    });
+        // Present but malformed still throws.
+        expect(
+          () => FoldableParams({'i': 'x'}).getIntOrNull('i'),
+          throwsFormatException,
+        );
+        expect(
+          () => FoldableParams({'d': 'x'}).getDoubleOrNull('d'),
+          throwsFormatException,
+        );
+        expect(
+          () => FoldableParams({'b': 'x'}).getBoolOrNull('b'),
+          throwsFormatException,
+        );
+        expect(
+          () => FoldableParams({'t': 'x'}).getDateTimeOrNull('t'),
+          throwsFormatException,
+        );
+        // A String has no format to fail.
+        expect(FoldableParams({'s': 'x'}).getStringOrNull('s'), 'x');
+      },
+    );
 
     test('parsing rules', () {
       expect(FoldableParams({'d': '42'}).getDouble('d'), 42.0);
@@ -327,9 +328,11 @@ void main() {
 
     test('a deep link reads the same values', () {
       final router = buildRouter();
-      final route = router.routeFor(
-        Uri.parse('/all?s=hi&i=1&d=42&b=true&t=2020-01-01T00:00:00Z'),
-      ) as AllTypesRoute;
+      final route =
+          router.routeFor(
+                Uri.parse('/all?s=hi&i=1&d=42&b=true&t=2020-01-01T00:00:00Z'),
+              )
+              as AllTypesRoute;
 
       expect(route.s, 'hi');
       expect(route.i, 1);
@@ -346,17 +349,16 @@ void main() {
         '/all?s=x&i=1.5&d=1&b=true&t=2020-01-01T00:00:00Z',
       );
       expect(
-        find.text('not found: /all?s=x&i=1.5&d=1&b=true&t=2020-01-01T00:00:00Z'),
+        find.text(
+          'not found: /all?s=x&i=1.5&d=1&b=true&t=2020-01-01T00:00:00Z',
+        ),
         findsOneWidget,
       );
       expect(tester.takeException(), isNull);
     });
 
     testWidgets('a missing required parameter', (tester) async {
-      await pumpDeepLink(
-        tester,
-        '/all?s=x&d=1&b=true&t=2020-01-01T00:00:00Z',
-      );
+      await pumpDeepLink(tester, '/all?s=x&d=1&b=true&t=2020-01-01T00:00:00Z');
       expect(find.textContaining('not found: /all'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });

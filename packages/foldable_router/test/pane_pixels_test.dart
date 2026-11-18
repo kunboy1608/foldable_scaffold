@@ -193,9 +193,7 @@ class AItemPageState extends State<AItemPage> {
   @override
   Widget build(BuildContext context) => Material(
     key: Key('page a-${widget.id}'),
-    color: widget.id == '1'
-        ? const Color(0xFF0000FF)
-        : const Color(0xFF800080),
+    color: widget.id == '1' ? const Color(0xFF0000FF) : const Color(0xFF800080),
     child: Center(
       child: Text(
         'item ${widget.id} count $count',
@@ -254,17 +252,13 @@ Future<FoldableRouter> pumpApp(WidgetTester tester) async {
 
 Future<void> tapTab(WidgetTester tester, String label) async {
   await tester.tap(
-    find.descendant(
-      of: find.byType(NavigationBar),
-      matching: find.text(label),
-    ),
+    find.descendant(of: find.byType(NavigationBar), matching: find.text(label)),
   );
   await tester.pumpAndSettle();
 }
 
 /// The rectangle the top page of a two-pane tab is drawn in.
-Rect secondaryArea(WidgetTester tester) =>
-    frameRect(tester, 'secondary-area');
+Rect secondaryArea(WidgetTester tester) => frameRect(tester, 'secondary-area');
 
 /// Number of pixels that differ from [other] *outside* [area].
 ///
@@ -343,7 +337,8 @@ Future<void> expectOutsideSecondaryStable(
   expect(
     worst,
     0,
-    reason: '$scenario: up to $worst pixels painted outside the right pane '
+    reason:
+        '$scenario: up to $worst pixels painted outside the right pane '
         '(worst frame $worstFrame of ${frames.length})',
   );
 }
@@ -379,65 +374,63 @@ void main() {
     },
   );
 
-  testWidgets(
-    'T2a growing one pane to two matches a direct two-pane build',
-    (tester) async {
-      // Direct two-pane image at the wide size, same stack.
-      setSize(tester, 1400, 900);
-      var router = await pumpApp(tester);
-      await router.open(const AItemRoute(id: '1'));
-      await tester.pumpAndSettle();
-      final Screenshot direct = await capture(tester);
+  testWidgets('T2a growing one pane to two matches a direct two-pane build', (
+    tester,
+  ) async {
+    // Direct two-pane image at the wide size, same stack.
+    setSize(tester, 1400, 900);
+    var router = await pumpApp(tester);
+    await router.open(const AItemRoute(id: '1'));
+    await tester.pumpAndSettle();
+    final Screenshot direct = await capture(tester);
 
-      // Same stack built narrow, then grown to the wide size.
-      setSize(tester, 700, 900);
-      router = await pumpApp(tester);
-      await router.open(const AItemRoute(id: '1'));
-      await tester.pumpAndSettle();
-      // One pane while narrow.
-      expect(
-        find.byKey(const Key('primary-frame'), skipOffstage: false),
-        findsNothing,
-      );
+    // Same stack built narrow, then grown to the wide size.
+    setSize(tester, 700, 900);
+    router = await pumpApp(tester);
+    await router.open(const AItemRoute(id: '1'));
+    await tester.pumpAndSettle();
+    // One pane while narrow.
+    expect(
+      find.byKey(const Key('primary-frame'), skipOffstage: false),
+      findsNothing,
+    );
 
-      setSize(tester, 1400, 900);
-      await tester.pumpAndSettle();
-      final Screenshot grown = await capture(tester);
+    setSize(tester, 1400, 900);
+    await tester.pumpAndSettle();
+    final Screenshot grown = await capture(tester);
 
-      expect(
-        grown.diff(direct),
-        0,
-        reason: 'growing to two panes must equal a direct two-pane build',
-      );
-    },
-  );
+    expect(
+      grown.diff(direct),
+      0,
+      reason: 'growing to two panes must equal a direct two-pane build',
+    );
+  });
 
-  testWidgets(
-    'T2b wide -> narrow -> wide matches a direct two-pane build',
-    (tester) async {
-      setSize(tester, 1400, 900);
-      var router = await pumpApp(tester);
-      await router.open(const AItemRoute(id: '1'));
-      await tester.pumpAndSettle();
-      final Screenshot direct = await capture(tester);
+  testWidgets('T2b wide -> narrow -> wide matches a direct two-pane build', (
+    tester,
+  ) async {
+    setSize(tester, 1400, 900);
+    var router = await pumpApp(tester);
+    await router.open(const AItemRoute(id: '1'));
+    await tester.pumpAndSettle();
+    final Screenshot direct = await capture(tester);
 
-      router = await pumpApp(tester);
-      await router.open(const AItemRoute(id: '1'));
-      await tester.pumpAndSettle();
+    router = await pumpApp(tester);
+    await router.open(const AItemRoute(id: '1'));
+    await tester.pumpAndSettle();
 
-      setSize(tester, 700, 900);
-      await tester.pumpAndSettle();
-      setSize(tester, 1400, 900);
-      await tester.pumpAndSettle();
-      final Screenshot back = await capture(tester);
+    setSize(tester, 700, 900);
+    await tester.pumpAndSettle();
+    setSize(tester, 1400, 900);
+    await tester.pumpAndSettle();
+    final Screenshot back = await capture(tester);
 
-      expect(
-        back.diff(direct),
-        0,
-        reason: 'a round trip through the narrow size must land identically',
-      );
-    },
-  );
+    expect(
+      back.diff(direct),
+      0,
+      reason: 'a round trip through the narrow size must land identically',
+    );
+  });
 
   testWidgets(
     'T3 replacing the right page leaves the left pane identical every frame '
@@ -452,8 +445,7 @@ void main() {
       final Rect left = frameRect(tester, 'primary-frame');
       final Rect right = frameRect(tester, 'secondary-frame');
       final Screenshot before = await capture(tester);
-      final double tabHeight =
-          tester.getTopLeft(find.byType(NavigationBar)).dy;
+      final double tabHeight = tester.getTopLeft(find.byType(NavigationBar)).dy;
       // The gutter between the panes, a pixel away from the frame edges so
       // anti-aliasing of the panes' own borders does not count.
       final Rect gutter = Rect.fromLTRB(
@@ -537,9 +529,7 @@ void main() {
       await router.open(const ASubRoute(id: '42'));
       await tester.pumpAndSettle();
 
-      FoldableRouter.close(
-        tester.element(find.byKey(const Key('page a-42'))),
-      );
+      FoldableRouter.close(tester.element(find.byKey(const Key('page a-42'))));
       await tester.pump();
       final Screenshot firstFrame = await capture(tester);
       expect(
@@ -558,26 +548,25 @@ void main() {
     },
   );
 
-  testWidgets(
-    'T5 switching tabs away and back changes no pixel',
-    (tester) async {
-      setSize(tester, 1400, 900);
-      final router = await pumpApp(tester);
-      await router.open(const AItemRoute(id: '1'));
-      await tester.pumpAndSettle();
-      final Screenshot before = await capture(tester);
+  testWidgets('T5 switching tabs away and back changes no pixel', (
+    tester,
+  ) async {
+    setSize(tester, 1400, 900);
+    final router = await pumpApp(tester);
+    await router.open(const AItemRoute(id: '1'));
+    await tester.pumpAndSettle();
+    final Screenshot before = await capture(tester);
 
-      await tapTab(tester, 'B');
-      await tapTab(tester, 'A');
-      final Screenshot after = await capture(tester);
+    await tapTab(tester, 'B');
+    await tapTab(tester, 'A');
+    final Screenshot after = await capture(tester);
 
-      expect(
-        after.diff(before),
-        0,
-        reason: 'a tab round trip must land on the identical image',
-      );
-    },
-  );
+    expect(
+      after.diff(before),
+      0,
+      reason: 'a tab round trip must land on the identical image',
+    );
+  });
 
   testWidgets(
     'T5 a MediaQuery change that does not resize the tab changes no pixel in '
@@ -588,15 +577,12 @@ void main() {
       await router.open(const AItemRoute(id: '1'));
       await tester.pumpAndSettle();
 
-      final double tabHeight =
-          tester.getTopLeft(find.byType(NavigationBar)).dy;
+      final double tabHeight = tester.getTopLeft(find.byType(NavigationBar)).dy;
       final Rect tabArea = Rect.fromLTRB(0, 0, 1400, tabHeight);
       final Screenshot before = await capture(tester);
 
       tester.platformDispatcher.platformBrightnessTestValue = Brightness.dark;
-      addTearDown(
-        tester.platformDispatcher.clearPlatformBrightnessTestValue,
-      );
+      addTearDown(tester.platformDispatcher.clearPlatformBrightnessTestValue);
       await tester.pumpAndSettle();
 
       final Screenshot after = await capture(tester);
@@ -681,20 +667,18 @@ void main() {
     variant: panePlatforms,
   );
 
-  testWidgets(
-    'P2 [A] -> [A,B] never paints outside the right pane',
-    (tester) async {
-      setSize(tester, 1400, 900);
-      final router = await pumpApp(tester);
-      await tester.pumpAndSettle();
-      await expectOutsideSecondaryStable(
-        tester,
-        () => router.open(const AItemRoute(id: '1')),
-        scenario: '[A] -> [A,B]',
-      );
-    },
-    variant: panePlatforms,
-  );
+  testWidgets('P2 [A] -> [A,B] never paints outside the right pane', (
+    tester,
+  ) async {
+    setSize(tester, 1400, 900);
+    final router = await pumpApp(tester);
+    await tester.pumpAndSettle();
+    await expectOutsideSecondaryStable(
+      tester,
+      () => router.open(const AItemRoute(id: '1')),
+      scenario: '[A] -> [A,B]',
+    );
+  }, variant: panePlatforms);
 
   testWidgets(
     'P3 [A,B] -> pop to [A] never paints outside the right pane',
@@ -753,8 +737,8 @@ void main() {
     (Widget widget) => widget is AItemPage && widget.id == id,
     skipOffstage: false,
   );
-  AListPageState aListState(WidgetTester tester) => tester
-      .state<AListPageState>(find.byType(AListPage, skipOffstage: false));
+  AListPageState aListState(WidgetTester tester) =>
+      tester.state<AListPageState>(find.byType(AListPage, skipOffstage: false));
 
   AItemPageState aItemState(WidgetTester tester, String id) =>
       tester.state<AItemPageState>(aItemPage(id));
@@ -769,7 +753,10 @@ void main() {
     final AListPageState state = aListState(tester);
     state.increment();
     await tester.pump();
-    expect(find.textContaining('a count 1', skipOffstage: false), findsOneWidget);
+    expect(
+      find.textContaining('a count 1', skipOffstage: false),
+      findsOneWidget,
+    );
 
     for (final double width in <double>[700, 1400, 700, 1400]) {
       setSize(tester, width, 900);
@@ -779,7 +766,10 @@ void main() {
         isTrue,
         reason: 'the State must survive a resize to width $width',
       );
-      expect(find.textContaining('a count 1', skipOffstage: false), findsOneWidget);
+      expect(
+        find.textContaining('a count 1', skipOffstage: false),
+        findsOneWidget,
+      );
     }
   });
 
@@ -797,8 +787,14 @@ void main() {
     list.increment();
     item.increment();
     await tester.pump();
-    expect(find.textContaining('a count 1', skipOffstage: false), findsOneWidget);
-    expect(find.textContaining('item 1 count 1', skipOffstage: false), findsOneWidget);
+    expect(
+      find.textContaining('a count 1', skipOffstage: false),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('item 1 count 1', skipOffstage: false),
+      findsOneWidget,
+    );
 
     // Pushing C hides A and moves B from the right pane to the left one.
     await router.open(const ASubRoute(id: '42'));
@@ -814,8 +810,14 @@ void main() {
       isTrue,
       reason: 'the page that changed pane must keep its State',
     );
-    expect(find.textContaining('a count 1', skipOffstage: false), findsOneWidget);
-    expect(find.textContaining('item 1 count 1', skipOffstage: false), findsOneWidget);
+    expect(
+      find.textContaining('a count 1', skipOffstage: false),
+      findsOneWidget,
+    );
+    expect(
+      find.textContaining('item 1 count 1', skipOffstage: false),
+      findsOneWidget,
+    );
   });
 
   testWidgets('(c) a page hidden deep in the stack keeps its State', (

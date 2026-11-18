@@ -177,8 +177,7 @@ class BranchA extends FoldableRoute {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      const Counter('a', key: Key('a-root'));
+  Widget build(BuildContext context) => const Counter('a', key: Key('a-root'));
 }
 
 class AChild extends FoldableRoute {
@@ -211,8 +210,7 @@ class BranchB extends FoldableRoute {
   }
 
   @override
-  Widget build(BuildContext context) =>
-      const Counter('b', key: Key('b-root'));
+  Widget build(BuildContext context) => const Counter('b', key: Key('b-root'));
 }
 
 class BChild extends FoldableRoute {
@@ -627,9 +625,8 @@ void main() {
       const OverlayRoute(),
     ]);
 
-    CounterState state(String key) => tester.state<CounterState>(
-      find.byKey(Key(key), skipOffstage: false),
-    );
+    CounterState state(String key) =>
+        tester.state<CounterState>(find.byKey(Key(key), skipOffstage: false));
     final a = state('a-child');
     final bRoot = state('b-root');
     final b = state('b-child');
@@ -654,11 +651,7 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('tab-1')));
     await tester.pumpAndSettle();
-    expect(router.stack, [
-      const StackShell(),
-      const BranchB(),
-      const BChild(),
-    ]);
+    expect(router.stack, [const StackShell(), const BranchB(), const BChild()]);
     expect(identical(state('b-root'), bRoot), isTrue);
     expect(identical(state('b-child'), b), isTrue);
   });
@@ -690,33 +683,34 @@ void main() {
     expect(find.text('login'), findsOneWidget);
   });
 
-  testWidgets('re-parsing the same location on the not-found page does nothing', (
-    tester,
-  ) async {
-    setSize(tester, const Size(800, 600));
-    addTearDown(tester.view.reset);
-    tester.binding.platformDispatcher.defaultRouteNameTestValue = '/nope';
-    addTearDown(
-      tester.binding.platformDispatcher.clearDefaultRouteNameTestValue,
-    );
-    final router = makeRouter();
-    await pumpApp(tester, router);
+  testWidgets(
+    're-parsing the same location on the not-found page does nothing',
+    (tester) async {
+      setSize(tester, const Size(800, 600));
+      addTearDown(tester.view.reset);
+      tester.binding.platformDispatcher.defaultRouteNameTestValue = '/nope';
+      addTearDown(
+        tester.binding.platformDispatcher.clearDefaultRouteNameTestValue,
+      );
+      final router = makeRouter();
+      await pumpApp(tester, router);
 
-    expect(find.text('not found: /nope'), findsOneWidget);
-    expect(router.stack, isEmpty);
-    expect(router.location, Uri.parse('/nope'));
+      expect(find.text('not found: /nope'), findsOneWidget);
+      expect(router.stack, isEmpty);
+      expect(router.location, Uri.parse('/nope'));
 
-    var notifications = 0;
-    router.addListener(() => notifications++);
+      var notifications = 0;
+      router.addListener(() => notifications++);
 
-    tester.view.physicalSize = const Size(900, 700);
-    await tester.pumpAndSettle();
+      tester.view.physicalSize = const Size(900, 700);
+      await tester.pumpAndSettle();
 
-    expect(find.text('not found: /nope'), findsOneWidget);
-    expect(router.stack, isEmpty);
-    expect(router.location, Uri.parse('/nope'));
-    expect(notifications, 0);
-  });
+      expect(find.text('not found: /nope'), findsOneWidget);
+      expect(router.stack, isEmpty);
+      expect(router.location, Uri.parse('/nope'));
+      expect(notifications, 0);
+    },
+  );
 
   testWidgets('repeated dependency changes supersede each other cleanly', (
     tester,
@@ -765,9 +759,8 @@ void main() {
     expect(find.byKey(const Key('pane-root')), findsNothing);
     expect(find.byKey(const Key('pane-detail')), findsOneWidget);
 
-    CounterState state(String key) => tester.state<CounterState>(
-      find.byKey(Key(key), skipOffstage: false),
-    );
+    CounterState state(String key) =>
+        tester.state<CounterState>(find.byKey(Key(key), skipOffstage: false));
     final root = state('pane-root');
     final detail = state('pane-detail');
     final redirectsBefore = paneRedirects;
@@ -876,70 +869,78 @@ void main() {
     expect(done, isTrue);
   });
 
-  testWidgets('a dependency change during an explicit refresh does not cancel it', (
-    tester,
-  ) async {
-    setSize(tester, const Size(800, 600));
-    addTearDown(tester.view.reset);
-    final router = makeRouter(initial: const PendingHomeRoute());
-    pendingRouter = router;
-    addTearDown(() => pendingRouter = null);
-    await pumpApp(tester, router);
+  testWidgets(
+    'a dependency change during an explicit refresh does not cancel it',
+    (tester) async {
+      setSize(tester, const Size(800, 600));
+      addTearDown(tester.view.reset);
+      final router = makeRouter(initial: const PendingHomeRoute());
+      pendingRouter = router;
+      addTearDown(() => pendingRouter = null);
+      await pumpApp(tester, router);
 
-    await router.open(const PendingSlowRoute());
-    await tester.pumpAndSettle();
-    expect(router.stack, [const PendingHomeRoute(), const PendingSlowRoute()]);
+      await router.open(const PendingSlowRoute());
+      await tester.pumpAndSettle();
+      expect(router.stack, [
+        const PendingHomeRoute(),
+        const PendingSlowRoute(),
+      ]);
 
-    pendingGate = Completer<void>();
-    var done = false;
-    final refreshFuture = router.refresh();
-    unawaited(refreshFuture.then((_) => done = true));
-    await tester.pump();
-    expect(router.isNavigating.value, isTrue);
-    final sawSlowBefore = pendingHomeSawSlow;
+      pendingGate = Completer<void>();
+      var done = false;
+      final refreshFuture = router.refresh();
+      unawaited(refreshFuture.then((_) => done = true));
+      await tester.pump();
+      expect(router.isNavigating.value, isTrue);
+      final sawSlowBefore = pendingHomeSawSlow;
 
-    tester.view.physicalSize = const Size(900, 600);
-    await tester.pump();
-    expect(done, isFalse);
+      tester.view.physicalSize = const Size(900, 600);
+      await tester.pump();
+      expect(done, isFalse);
 
-    pendingGate!.complete();
-    pendingGate = null;
-    await tester.pumpAndSettle();
-    await refreshFuture;
+      pendingGate!.complete();
+      pendingGate = null;
+      await tester.pumpAndSettle();
+      await refreshFuture;
 
-    expect(router.stack, [const PendingHomeRoute(), const PendingSlowRoute()]);
-    expect(done, isTrue);
-    expect(pendingHomeSawSlow, sawSlowBefore + 1);
-    expect(router.isNavigating.value, isFalse);
-  });
+      expect(router.stack, [
+        const PendingHomeRoute(),
+        const PendingSlowRoute(),
+      ]);
+      expect(done, isTrue);
+      expect(pendingHomeSawSlow, sawSlowBefore + 1);
+      expect(router.isNavigating.value, isFalse);
+    },
+  );
 
-  testWidgets('a dependency change during a shell tab switch does not cancel it', (
-    tester,
-  ) async {
-    setSize(tester, const Size(800, 600));
-    addTearDown(tester.view.reset);
-    final router = makeRouter(initial: const PendingTabShell());
-    await pumpApp(tester, router);
-    expect(router.stack, [const PendingTabShell(), const PendingTabA()]);
+  testWidgets(
+    'a dependency change during a shell tab switch does not cancel it',
+    (tester) async {
+      setSize(tester, const Size(800, 600));
+      addTearDown(tester.view.reset);
+      final router = makeRouter(initial: const PendingTabShell());
+      await pumpApp(tester, router);
+      expect(router.stack, [const PendingTabShell(), const PendingTabA()]);
 
-    pendingTabBRedirects = 0;
-    tabGate = Completer<void>();
-    await tester.tap(find.byKey(const Key('pending-tab-1')));
-    await tester.pump();
-    expect(pendingTabBRedirects, 1);
+      pendingTabBRedirects = 0;
+      tabGate = Completer<void>();
+      await tester.tap(find.byKey(const Key('pending-tab-1')));
+      await tester.pump();
+      expect(pendingTabBRedirects, 1);
 
-    tester.view.physicalSize = const Size(900, 600);
-    await tester.pump();
+      tester.view.physicalSize = const Size(900, 600);
+      await tester.pump();
 
-    tabGate!.complete();
-    tabGate = null;
-    await tester.pumpAndSettle();
+      tabGate!.complete();
+      tabGate = null;
+      await tester.pumpAndSettle();
 
-    expect(router.stack, [const PendingTabShell(), const PendingTabB()]);
-    expect(pendingTabBRedirects, 2);
-    expect(router.isNavigating.value, isFalse);
-    expect(find.text('pending tab b'), findsOneWidget);
-  });
+      expect(router.stack, [const PendingTabShell(), const PendingTabB()]);
+      expect(pendingTabBRedirects, 2);
+      expect(router.isNavigating.value, isFalse);
+      expect(find.text('pending tab b'), findsOneWidget);
+    },
+  );
 
   testWidgets('several changes during a pending navigation coalesce into one', (
     tester,
@@ -1096,49 +1097,51 @@ void main() {
     expect(router.isNavigating.value, isFalse);
   });
 
-  testWidgets('a silent re-check with a synchronous redirect keeps isNavigating off', (
-    tester,
-  ) async {
-    setSize(tester, const Size(800, 600));
-    addTearDown(tester.view.reset);
-    final router = makeRouter(initial: const SizedRoute());
-    await pumpApp(tester, router);
+  testWidgets(
+    'a silent re-check with a synchronous redirect keeps isNavigating off',
+    (tester) async {
+      setSize(tester, const Size(800, 600));
+      addTearDown(tester.view.reset);
+      final router = makeRouter(initial: const SizedRoute());
+      await pumpApp(tester, router);
 
-    final values = <bool>[];
-    router.isNavigating.addListener(
-      () => values.add(router.isNavigating.value),
-    );
-    final redirectsBefore = sizedRedirects;
+      final values = <bool>[];
+      router.isNavigating.addListener(
+        () => values.add(router.isNavigating.value),
+      );
+      final redirectsBefore = sizedRedirects;
 
-    tester.view.physicalSize = const Size(900, 600);
-    await tester.pumpAndSettle();
+      tester.view.physicalSize = const Size(900, 600);
+      await tester.pumpAndSettle();
 
-    expect(sizedRedirects, greaterThan(redirectsBefore));
-    expect(values.where((value) => value), isEmpty);
-    expect(router.isNavigating.value, isFalse);
-  });
+      expect(sizedRedirects, greaterThan(redirectsBefore));
+      expect(values.where((value) => value), isEmpty);
+      expect(router.isNavigating.value, isFalse);
+    },
+  );
 
-  testWidgets('a silent re-check with an asynchronous redirect keeps isNavigating off', (
-    tester,
-  ) async {
-    setSize(tester, const Size(800, 600));
-    addTearDown(tester.view.reset);
-    final router = makeRouter(initial: const SlowOnResizeRoute());
-    await pumpApp(tester, router);
+  testWidgets(
+    'a silent re-check with an asynchronous redirect keeps isNavigating off',
+    (tester) async {
+      setSize(tester, const Size(800, 600));
+      addTearDown(tester.view.reset);
+      final router = makeRouter(initial: const SlowOnResizeRoute());
+      await pumpApp(tester, router);
 
-    final values = <bool>[];
-    router.isNavigating.addListener(
-      () => values.add(router.isNavigating.value),
-    );
-    final redirectsBefore = slowRedirects;
+      final values = <bool>[];
+      router.isNavigating.addListener(
+        () => values.add(router.isNavigating.value),
+      );
+      final redirectsBefore = slowRedirects;
 
-    tester.view.physicalSize = const Size(900, 600);
-    await tester.pump();
-    expect(router.isNavigating.value, isFalse);
-    await tester.pumpAndSettle();
+      tester.view.physicalSize = const Size(900, 600);
+      await tester.pump();
+      expect(router.isNavigating.value, isFalse);
+      await tester.pumpAndSettle();
 
-    expect(slowRedirects, greaterThan(redirectsBefore));
-    expect(values.where((value) => value), isEmpty);
-    expect(router.isNavigating.value, isFalse);
-  });
+      expect(slowRedirects, greaterThan(redirectsBefore));
+      expect(values.where((value) => value), isEmpty);
+      expect(router.isNavigating.value, isFalse);
+    },
+  );
 }

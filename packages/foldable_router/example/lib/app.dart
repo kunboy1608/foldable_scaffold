@@ -16,7 +16,8 @@ class ExampleApp extends StatelessWidget {
     return MaterialApp.router(
       title: 'foldable_router example',
       debugShowCheckedModeBanner: false,
-      theme: ThemeData(colorSchemeSeed: Colors.teal),
+      theme: ThemeData(),
+      darkTheme: ThemeData.dark(),
       routerConfig: router.routerConfig,
       // Wraps every page: the router's pages on top, a status bar below.
       builder: (context, child) => Column(

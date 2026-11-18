@@ -1,12 +1,14 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 
 import 'foldable_panes.dart';
 import 'foldable_route.dart';
 import 'foldable_router.dart';
 import 'foldable_shell_route.dart';
+import 'page_transitions.dart';
 import 'redirect_resolver.dart';
 
 /// One page in the stack. Entries have their own identity so the same route
@@ -55,9 +57,10 @@ class _Entry implements PaneEntryRef {
   bool frozenHidden = false;
 }
 
-class _EntryPage extends MaterialPage<Object?> {
+class _EntryPage extends FoldableContentPage<Object?> {
   _EntryPage(
     this.entry, {
+    required super.pageTransitionsResolver,
     this.canPopGesture = true,
     ValueListenable<bool>? gestureGate,
   }) : super(
@@ -242,12 +245,14 @@ class _BranchPage extends Page<Object?> {
     required this.metrics,
     required this.popGate,
     required this.contentBuilder,
+    required this.pageTransitionsResolver,
   }) : super(key: entry.key, name: entry.route.uri.toString());
 
   final _Entry entry;
   final PaneMetrics metrics;
   final ValueListenable<bool>? popGate;
   final WidgetBuilder contentBuilder;
+  final FoldablePageTransitionsResolver pageTransitionsResolver;
 
   @override
   Route<Object?> createRoute(BuildContext context) {
@@ -260,9 +265,12 @@ class _BranchPage extends Page<Object?> {
 }
 
 /// The route of a [_BranchPage].
-class _BranchPageRoute<T> extends PageRoute<T>
-    with MaterialRouteTransitionMixin<T> {
+class _BranchPageRoute<T> extends PageRoute<T> with FoldablePageRouteMixin<T> {
   _BranchPageRoute(this.page) : super(settings: page);
+
+  @override
+  FoldablePageTransitionsResolver get pageTransitionsResolver =>
+      page.pageTransitionsResolver;
 
   final _BranchPage page;
 
@@ -338,7 +346,7 @@ class _BranchPageRoute<T> extends PageRoute<T>
       child: child,
       builder: (BuildContext context, Widget? child) {
         final bool twoPane = _metrics.twoPane.value;
-        final Widget transitioned = Theme.of(context).pageTransitionsTheme
+        final Widget transitioned = pageTransitionsResolver(context)
             .buildTransitions<T>(
               this,
               context,
@@ -599,6 +607,24 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
   );
 
   final RedirectResolver _resolver;
+
+  /// Where page transitions come from: the router's own resolver, or the
+  /// `package:flutter/material.dart` theme when the app gave none.
+  FoldablePageTransitionsResolver get _transitions =>
+      router.pageTransitions ?? _sdkMaterialTransitions;
+
+  static PageTransitionsBuilder _sdkMaterialTransitions(BuildContext context) {
+    final ThemeData theme = Theme.of(context);
+    return theme.pageTransitionsTheme.builders[theme.platform] ??
+        switch (theme.platform) {
+          TargetPlatform.iOS ||
+          TargetPlatform.macOS => const CupertinoPageTransitionsBuilder(),
+          TargetPlatform.android ||
+          TargetPlatform.fuchsia ||
+          TargetPlatform.windows ||
+          TargetPlatform.linux => const ZoomPageTransitionsBuilder(),
+        };
+  }
 
   /// The context of the `Router` widget, set by [setRouterContext] the first
   /// time Flutter parses a location. It is the context go_router passes to
@@ -1331,6 +1357,7 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
                       metrics: shell.panes[i],
                       popGate: shell.gestureGates[i],
                       contentBuilder: entry.route.build,
+                      pageTransitionsResolver: _transitions,
                     ),
                 ],
                 onDidRemovePage: (Page<Object?> page) =>
@@ -1598,8 +1625,13 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
           observers: [_rootTop],
           pages: [
             for (final entry in shell.ancestors)
-              _EntryPage(entry, canPopGesture: false),
-            MaterialPage<void>(
+              _EntryPage(
+                entry,
+                pageTransitionsResolver: _transitions,
+                canPopGesture: false,
+              ),
+            FoldableContentPage<void>(
+              pageTransitionsResolver: _transitions,
               key: _shellPageKey,
               name: shell.route.uri.toString(),
               // The shell page never pops with a gesture: back goes through
@@ -1611,7 +1643,8 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
                 ),
               ),
             ),
-            for (final entry in shell.overlays) _EntryPage(entry),
+            for (final entry in shell.overlays)
+              _EntryPage(entry, pageTransitionsResolver: _transitions),
           ],
           onDidRemovePage: _onDidRemoveRootPage,
         ),
@@ -1624,7 +1657,8 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
         observers: [_rootTop],
         pages: [
           if (notFound != null)
-            MaterialPage<void>(
+            FoldableContentPage<void>(
+              pageTransitionsResolver: _transitions,
               key: ValueKey<String>('not-found:$notFound'),
               name: notFound.toString(),
               child: Builder(
@@ -1632,7 +1666,8 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
               ),
             )
           else
-            for (final entry in _stack) _EntryPage(entry),
+            for (final entry in _stack)
+              _EntryPage(entry, pageTransitionsResolver: _transitions),
         ],
         onDidRemovePage: _onDidRemoveRootPage,
       );

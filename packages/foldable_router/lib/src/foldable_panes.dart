@@ -443,7 +443,10 @@ class _RawPaneArea extends RenderBox
           'The two-pane area fills the space its shell body gives it, so it '
           'needs bounded constraints on both axes.',
         ),
-        DiagnosticsProperty<BoxConstraints>('The constraints were', constraints),
+        DiagnosticsProperty<BoxConstraints>(
+          'The constraints were',
+          constraints,
+        ),
       ]);
     }
     return constraints.biggest;

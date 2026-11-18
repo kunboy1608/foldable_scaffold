@@ -1,5 +1,20 @@
 ## 0.0.1
 
+* New `FoldableRouter.pageTransitions` (`FoldablePageTransitionsResolver`):
+  picks the `PageTransitionsBuilder` that animates pages. Fixes apps built on
+  `package:material_ui` (Flutter 3.47+), where the router read the
+  `pageTransitionsTheme` of `package:flutter/material.dart`'s `Theme`, which
+  is not in such an app's tree: the app's transitions were ignored and a
+  light layer faded in over a dark page (a white flash on Android in dark
+  mode). Pages are now built on `widgets` only (no `MaterialPage` /
+  `MaterialRouteTransitionMixin`), so the router no longer needs either
+  Material library; without the parameter the behaviour is unchanged (the
+  SDK Material theme).
+* New `FoldableRouter.navigatorKey`: the key of the root `Navigator`. Its
+  `currentContext` is a context below the root navigator, for code that has
+  no page context at hand (`showDialog`, `showModalBottomSheet`, ...). It is
+  `null` until the first navigation completes. The page stack still belongs
+  to the router: do not push or pop pages through the key.
 * **Breaking:** `FoldableRoute.params` is now `Map<String, Object?>` (was
   `Map<String, String?>`): values may be `String`, `int`, `double`, `bool` or
   `DateTime`. An unsupported type, or a non-finite `double`, throws an

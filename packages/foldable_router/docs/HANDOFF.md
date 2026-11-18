@@ -4,7 +4,7 @@
 lại cách làm việc đã thống nhất, các quyết định thiết kế, hiện trạng, và việc
 còn dở. Cập nhật mục 6 và 7 mỗi khi kết thúc một lượt việc.
 
-Cập nhật lần cuối: 2026-11-13.
+Cập nhật lần cuối: 2026-11-15.
 
 ## 1. Cách làm việc với chủ dự án
 
@@ -149,10 +149,16 @@ Tài liệu cho người dùng nằm ở `README.md`; lịch sử thay đổi �
 ## 6. Hiện trạng
 
 - `fvm flutter analyze`: sạch ở package và example.
-- `fvm flutter test`: 199 test ở package, 19 ở example, không skip.
+- `fvm flutter test`: 226 test ở package, 19 ở example, không skip.
 - Việc đã xong trong các phiên trước, theo thứ tự: router cơ bản, ShellRoute,
   predictive back, back cho route không page, hai ô, sửa lỗi thứ tự vẽ, sửa
   lớp phủ ô trái, params có kiểu, redirect nhận context, kiểm lại ngầm.
+- Phiên 2026-11-15 (phiên chính tự viết, theo yêu cầu trực tiếp của chủ dự án):
+  `test/form_test.dart` xác nhận package không làm hỏng `Form`,
+  `GlobalKey<FormState>`, `TextFormField` (không sửa code); thêm
+  `FoldableRouter.navigatorKey` (key của root Navigator, `currentContext` là
+  `null` tới khi điều hướng đầu tiên xong) kèm `test/navigator_key_test.dart`,
+  mục "Dialogs and the navigator key" trong README và dòng trong CHANGELOG.
 
 ## 7. Việc còn dở
 

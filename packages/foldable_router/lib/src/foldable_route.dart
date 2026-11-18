@@ -140,7 +140,7 @@ abstract class FoldableRoute {
           value,
           key,
           'is not a finite double; params accept only String, int, double, '
-              'bool and DateTime',
+          'bool and DateTime',
         );
       }
       return value.toString();
@@ -151,7 +151,7 @@ abstract class FoldableRoute {
       value,
       key,
       'has the unsupported type ${value.runtimeType}; params accept only '
-          'String, int, double, bool and DateTime',
+      'String, int, double, bool and DateTime',
     );
   }
 

@@ -52,7 +52,10 @@ void main() {
     });
 
     test('equality uses path and params', () {
-      expect(const R('/a', id: '7'), R('/a', id: '7', onRedirect: (_, _) => null));
+      expect(
+        const R('/a', id: '7'),
+        R('/a', id: '7', onRedirect: (_, _) => null),
+      );
       expect(const R('/a', id: '7').hashCode, const R('/a', id: '7').hashCode);
       expect(const R('/a', id: '7'), isNot(const R('/a', id: '8')));
       expect(const R('/a'), isNot(const R('/b')));
@@ -194,7 +197,9 @@ void main() {
           R('/n', id: '$n', onRedirect: (_, _) => numbered(n + 1));
 
       await expectLater(
-        RedirectResolver(maxRedirects: 3).resolve(numbered(0), context: context),
+        RedirectResolver(
+          maxRedirects: 3,
+        ).resolve(numbered(0), context: context),
         throwsA(
           isA<RedirectLimitException>()
               .having((e) => e.maxRedirects, 'maxRedirects', 3)
@@ -219,10 +224,7 @@ void main() {
 
     testWidgets('a throwing redirect fails the navigation', (tester) async {
       final context = await pumpContext(tester);
-      final sync = R(
-        '/sync',
-        onRedirect: (_, _) => throw StateError('sync'),
-      );
+      final sync = R('/sync', onRedirect: (_, _) => throw StateError('sync'));
       final async = R(
         '/async',
         onRedirect: (_, _) async => throw StateError('async'),
