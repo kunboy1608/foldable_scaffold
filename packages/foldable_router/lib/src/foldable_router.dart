@@ -4,7 +4,6 @@ import 'package:flutter/widgets.dart';
 import 'foldable_panes.dart';
 import 'foldable_params.dart';
 import 'foldable_route.dart';
-import 'foldable_shell_route.dart';
 import 'page_transitions.dart';
 import 'redirect_resolver.dart';
 import 'route_information_parser.dart';
@@ -187,7 +186,8 @@ class FoldableRouter implements Listenable {
   /// throws.
   ///
   /// It only creates the route: no redirect runs and nothing is navigated.
-  /// Pass the result to [open] or [push], or use [openUri].
+  /// Pass the result to [open] (or to [push] when it is a
+  /// [FoldableFlatRoute]), or use [openUri].
   FoldableRoute? routeFor(Uri uri) {
     var path = uri.path.isEmpty ? '/' : uri.path;
     if (path.length > 1 && path.endsWith('/')) {
@@ -280,18 +280,22 @@ class FoldableRouter implements Listenable {
 
   /// Puts [route] alone (without its parents) on top of the stack, after
   /// running the redirects of its parent chain. If a redirect answers with
-  /// another route, that one is pushed instead.
+  /// another [FoldableFlatRoute], that one is pushed instead.
   ///
-  /// Pushing is not supported for a route whose parent chain contains a
-  /// [FoldableShellRoute] (or whose redirect lands in one): the returned
-  /// future completes with an [UnsupportedError] and the stack is
-  /// unchanged; use [open] instead. Pushing a route outside the shell shows
-  /// a full-screen page above it.
+  /// Only a [FoldableFlatRoute] can be pushed: a [FoldableShellChildRoute]
+  /// or a [FoldableShellRoute] is reached with [open]. With a shell on
+  /// screen, the pushed page is shown full screen above it.
+  ///
+  /// If a redirect lands inside a [FoldableShellRoute] (on a
+  /// [FoldableShellChildRoute], or on the shell itself), the navigation is
+  /// committed as [open] would commit that route (the shell is shown on the
+  /// right branch, a redirect to the shell opens its first branch) and the
+  /// returned future completes with `null`, like go_router does.
   ///
   /// The future completes with the value given to [pop], or `null` when the
   /// page is removed any other way (system back, [open]) or the navigation
   /// is discarded because a newer one started. Errors are as for [open].
-  Future<T?> push<T extends Object?>(FoldableRoute route) =>
+  Future<T?> push<T extends Object?>(FoldableFlatRoute route) =>
       _delegate.push<T>(route);
 
   /// Removes the top page and completes its [push] future with [result].

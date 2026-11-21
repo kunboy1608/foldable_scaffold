@@ -21,7 +21,10 @@ class TwoPaneShell extends FoldableShellRoute {
   const TwoPaneShell();
 
   @override
-  List<FoldableRoute> get branches => const [UsersRoute(), HomeRoute()];
+  List<FoldableShellChildRoute> get branches => const [
+    UsersRoute(),
+    HomeRoute(),
+  ];
 
   @override
   Widget buildShell(BuildContext context, FoldableShellState shell) => Scaffold(
@@ -64,14 +67,14 @@ class TwoPaneShell extends FoldableShellRoute {
   }
 }
 
-class UsersRoute extends FoldableRoute {
+class UsersRoute extends FoldableShellChildRoute {
   const UsersRoute();
 
   @override
   String get path => '/users';
 
   @override
-  FoldableRoute? get parent => const TwoPaneShell();
+  FoldableShellParent get parent => const TwoPaneShell();
 
   @override
   Widget build(BuildContext context) => const UsersPage();
@@ -136,7 +139,7 @@ class UsersPageState extends State<UsersPage> {
   }
 }
 
-class UserRoute extends FoldableRoute {
+class UserRoute extends FoldableShellChildRoute {
   const UserRoute({required this.id});
 
   final String id;
@@ -148,7 +151,7 @@ class UserRoute extends FoldableRoute {
   Map<String, Object?> get params => {'id': id};
 
   @override
-  FoldableRoute? get parent => const UsersRoute();
+  FoldableShellParent get parent => const UsersRoute();
 
   @override
   Widget build(BuildContext context) => UserPage(id: id);
@@ -240,21 +243,21 @@ class TestHero extends StatelessWidget {
   }
 }
 
-class HomeRoute extends FoldableRoute {
+class HomeRoute extends FoldableShellChildRoute {
   const HomeRoute();
 
   @override
   String get path => '/';
 
   @override
-  FoldableRoute? get parent => const TwoPaneShell();
+  FoldableShellParent get parent => const TwoPaneShell();
 
   @override
   Widget build(BuildContext context) =>
       const Material(key: Key('page home'), child: Text('home'));
 }
 
-class GuardedUserRoute extends FoldableRoute {
+class GuardedUserRoute extends FoldableShellChildRoute {
   const GuardedUserRoute({required this.id});
 
   final String id;
@@ -266,7 +269,7 @@ class GuardedUserRoute extends FoldableRoute {
   Map<String, Object?> get params => {'id': id};
 
   @override
-  FoldableRoute? get parent => const UsersRoute();
+  FoldableShellParent get parent => const UsersRoute();
 
   @override
   Widget build(BuildContext context) => GuardedUserPage(id: id);
@@ -290,14 +293,14 @@ class GuardedUserPage extends StatelessWidget {
   );
 }
 
-class DeepRoute extends FoldableRoute {
+class DeepRoute extends FoldableShellChildRoute {
   const DeepRoute();
 
   @override
   String get path => '/users/deep';
 
   @override
-  FoldableRoute? get parent => const UserRoute(id: '7');
+  FoldableShellParent get parent => const UserRoute(id: '7');
 
   @override
   Widget build(BuildContext context) => const DeepPage();

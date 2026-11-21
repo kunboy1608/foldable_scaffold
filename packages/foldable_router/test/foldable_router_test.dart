@@ -8,7 +8,7 @@ import 'package:foldable_router/foldable_router.dart';
 bool loggedIn = true;
 Completer<void>? gate;
 
-class HomeRoute extends FoldableRoute {
+class HomeRoute extends FoldableFlatRoute {
   const HomeRoute();
 
   @override
@@ -18,7 +18,7 @@ class HomeRoute extends FoldableRoute {
   Widget build(BuildContext context) => const Text('home');
 }
 
-class UsersRoute extends FoldableRoute {
+class UsersRoute extends FoldableFlatRoute {
   const UsersRoute();
 
   @override
@@ -28,7 +28,7 @@ class UsersRoute extends FoldableRoute {
   Widget build(BuildContext context) => const Text('users');
 }
 
-class UserRoute extends FoldableRoute {
+class UserRoute extends FoldableFlatRoute {
   const UserRoute({required this.id, this.tab});
 
   final String id;
@@ -41,7 +41,7 @@ class UserRoute extends FoldableRoute {
   Map<String, Object?> get params => {'id': id, 'tab': tab};
 
   @override
-  FoldableRoute? get parent => const UsersRoute();
+  FoldableFlatRoute? get parent => const UsersRoute();
 
   @override
   Widget build(BuildContext context) => Column(
@@ -59,7 +59,7 @@ class UserRoute extends FoldableRoute {
   );
 }
 
-class LoginRoute extends FoldableRoute {
+class LoginRoute extends FoldableFlatRoute {
   const LoginRoute();
 
   @override
@@ -69,7 +69,7 @@ class LoginRoute extends FoldableRoute {
   Widget build(BuildContext context) => const Text('login');
 }
 
-class AccountRoute extends FoldableRoute {
+class AccountRoute extends FoldableFlatRoute {
   const AccountRoute();
 
   @override
@@ -83,21 +83,21 @@ class AccountRoute extends FoldableRoute {
   Widget build(BuildContext context) => const Text('account');
 }
 
-class SettingsRoute extends FoldableRoute {
+class SettingsRoute extends FoldableFlatRoute {
   const SettingsRoute();
 
   @override
   String get path => '/account/settings';
 
   @override
-  FoldableRoute? get parent => const AccountRoute();
+  FoldableFlatRoute? get parent => const AccountRoute();
 
   @override
   Widget build(BuildContext context) => const Text('settings');
 }
 
 /// Waits for [gate] before allowing the navigation.
-class SlowRoute extends FoldableRoute {
+class SlowRoute extends FoldableFlatRoute {
   const SlowRoute();
 
   @override
@@ -116,7 +116,7 @@ class SlowRoute extends FoldableRoute {
   Widget build(BuildContext context) => const Text('slow');
 }
 
-class BrokenRoute extends FoldableRoute {
+class BrokenRoute extends FoldableFlatRoute {
   const BrokenRoute();
 
   @override
@@ -130,7 +130,7 @@ class BrokenRoute extends FoldableRoute {
   Widget build(BuildContext context) => const Text('broken');
 }
 
-class LoopRoute extends FoldableRoute {
+class LoopRoute extends FoldableFlatRoute {
   const LoopRoute(this.n);
 
   final int n;

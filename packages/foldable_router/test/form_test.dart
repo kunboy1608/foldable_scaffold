@@ -90,7 +90,7 @@ class FormPageState extends State<FormPage> {
 
 // --- Routes without a shell -------------------------------------------------
 
-class LoginRoute extends FoldableRoute {
+class LoginRoute extends FoldableFlatRoute {
   const LoginRoute();
   @override
   String get path => '/login';
@@ -98,28 +98,28 @@ class LoginRoute extends FoldableRoute {
   Widget build(BuildContext context) => const FormPage(tag: 'login');
 }
 
-class SignupRoute extends FoldableRoute {
+class SignupRoute extends FoldableFlatRoute {
   const SignupRoute();
   @override
   String get path => '/login/signup';
   @override
-  FoldableRoute? get parent => const LoginRoute();
+  FoldableFlatRoute? get parent => const LoginRoute();
   @override
   Widget build(BuildContext context) => const FormPage(tag: 'signup');
 }
 
-class LockedRoute extends FoldableRoute {
+class LockedRoute extends FoldableFlatRoute {
   const LockedRoute();
   @override
   String get path => '/login/locked';
   @override
-  FoldableRoute? get parent => const LoginRoute();
+  FoldableFlatRoute? get parent => const LoginRoute();
   @override
   Widget build(BuildContext context) =>
       const FormPage(tag: 'locked', canPop: false);
 }
 
-class PlainRoute extends FoldableRoute {
+class PlainRoute extends FoldableFlatRoute {
   const PlainRoute();
   @override
   String get path => '/plain';
@@ -137,7 +137,10 @@ class FormShell extends FoldableShellRoute {
   String get path => '/';
 
   @override
-  List<FoldableRoute> get branches => const [ItemsRoute(), SettingsRoute()];
+  List<FoldableShellChildRoute> get branches => const [
+    ItemsRoute(),
+    SettingsRoute(),
+  ];
 
   @override
   Widget buildShell(BuildContext context, FoldableShellState shell) => Scaffold(
@@ -169,32 +172,32 @@ class FormShell extends FoldableShellRoute {
   }
 }
 
-class ItemsRoute extends FoldableRoute {
+class ItemsRoute extends FoldableShellChildRoute {
   const ItemsRoute();
   @override
   String get path => '/items';
   @override
-  FoldableRoute? get parent => const FormShell();
+  FoldableShellParent get parent => const FormShell();
   @override
   Widget build(BuildContext context) => const FormPage(tag: 'items');
 }
 
-class SettingsRoute extends FoldableRoute {
+class SettingsRoute extends FoldableShellChildRoute {
   const SettingsRoute();
   @override
   String get path => '/settings';
   @override
-  FoldableRoute? get parent => const FormShell();
+  FoldableShellParent get parent => const FormShell();
   @override
   Widget build(BuildContext context) => const FormPage(tag: 'settings');
 }
 
-class EditRoute extends FoldableRoute {
+class EditRoute extends FoldableShellChildRoute {
   const EditRoute();
   @override
   String get path => '/items/edit';
   @override
-  FoldableRoute? get parent => const ItemsRoute();
+  FoldableShellParent get parent => const ItemsRoute();
   @override
   Widget build(BuildContext context) => const FormPage(
     tag: 'edit',
@@ -202,29 +205,29 @@ class EditRoute extends FoldableRoute {
   );
 }
 
-class DeepRoute extends FoldableRoute {
+class DeepRoute extends FoldableShellChildRoute {
   const DeepRoute();
   @override
   String get path => '/items/edit/deep';
   @override
-  FoldableRoute? get parent => const EditRoute();
+  FoldableShellParent get parent => const EditRoute();
   @override
   Widget build(BuildContext context) => const FormPage(tag: 'deep');
 }
 
-class GuardedRoute extends FoldableRoute {
+class GuardedRoute extends FoldableShellChildRoute {
   const GuardedRoute();
   @override
   String get path => '/items/guarded';
   @override
-  FoldableRoute? get parent => const ItemsRoute();
+  FoldableShellParent get parent => const ItemsRoute();
   @override
   Widget build(BuildContext context) =>
       const FormPage(tag: 'guarded', canPop: false);
 }
 
 /// Two different routes whose pages use the same top-level key.
-class SharedKeyRoute extends FoldableRoute {
+class SharedKeyRoute extends FoldableShellChildRoute {
   const SharedKeyRoute({required this.id});
   final String id;
   @override
@@ -232,7 +235,7 @@ class SharedKeyRoute extends FoldableRoute {
   @override
   Map<String, Object?> get params => {'id': id};
   @override
-  FoldableRoute? get parent => const ItemsRoute();
+  FoldableShellParent get parent => const ItemsRoute();
   @override
   Widget build(BuildContext context) =>
       FormPage(tag: 'shared-$id', externalKey: sharedKey);

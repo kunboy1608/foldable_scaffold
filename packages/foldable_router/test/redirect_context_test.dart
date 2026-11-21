@@ -40,7 +40,7 @@ class Marker extends InheritedWidget {
   bool updateShouldNotify(Marker oldWidget) => value != oldWidget.value;
 }
 
-class RecordingRoute extends FoldableRoute {
+class RecordingRoute extends FoldableFlatRoute {
   const RecordingRoute(this.path);
 
   @override
@@ -60,7 +60,7 @@ class RecordShell extends FoldableShellRoute {
   const RecordShell();
 
   @override
-  List<FoldableRoute> get branches => const [
+  List<FoldableShellChildRoute> get branches => const [
     RecordBranch('a'),
     RecordBranch('b'),
   ];
@@ -90,7 +90,7 @@ class RecordShell extends FoldableShellRoute {
   );
 }
 
-class RecordBranch extends FoldableRoute {
+class RecordBranch extends FoldableShellChildRoute {
   const RecordBranch(this.segment);
 
   final String segment;
@@ -99,7 +99,7 @@ class RecordBranch extends FoldableRoute {
   String get path => '/$segment';
 
   @override
-  FoldableRoute? get parent => const RecordShell();
+  FoldableShellParent get parent => const RecordShell();
 
   @override
   FutureOr<FoldableRoute?> redirect(BuildContext context, RouteState state) {
@@ -111,7 +111,7 @@ class RecordBranch extends FoldableRoute {
   Widget build(BuildContext context) => Text('branch $segment');
 }
 
-class HomeStub extends FoldableRoute {
+class HomeStub extends FoldableFlatRoute {
   const HomeStub();
 
   @override
@@ -124,7 +124,7 @@ class HomeStub extends FoldableRoute {
 Completer<void>? gate;
 
 /// Redirects only after [gate] completes.
-class GatedParent extends FoldableRoute {
+class GatedParent extends FoldableFlatRoute {
   const GatedParent();
 
   @override
@@ -144,7 +144,7 @@ class GatedParent extends FoldableRoute {
 }
 
 /// Counts how many times its redirect ran.
-class CountingChild extends FoldableRoute {
+class CountingChild extends FoldableFlatRoute {
   const CountingChild();
 
   static int redirects = 0;
@@ -153,7 +153,7 @@ class CountingChild extends FoldableRoute {
   String get path => '/gated/child';
 
   @override
-  FoldableRoute? get parent => const GatedParent();
+  FoldableFlatRoute? get parent => const GatedParent();
 
   @override
   FutureOr<FoldableRoute?> redirect(BuildContext context, RouteState state) {

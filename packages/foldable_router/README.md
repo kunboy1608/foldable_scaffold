@@ -6,11 +6,13 @@ constructor fields are the parameters, and guards are (optionally async)
 
 ## Usage
 
-Declare routes by subclassing `FoldableRoute`. Paths are static; parameters
-travel in the query string (`/users/detail?id=7`).
+Declare routes by subclassing `FoldableFlatRoute` (or, inside a shell,
+`FoldableShellChildRoute`: see [Two kinds of routes](#two-kinds-of-routes)).
+Paths are static; parameters travel in the query string
+(`/users/detail?id=7`).
 
 ```dart
-class UsersRoute extends FoldableRoute {
+class UsersRoute extends FoldableFlatRoute {
   const UsersRoute();
 
   @override
@@ -20,7 +22,7 @@ class UsersRoute extends FoldableRoute {
   Widget build(BuildContext context) => const UsersPage();
 }
 
-class UserRoute extends FoldableRoute {
+class UserRoute extends FoldableFlatRoute {
   const UserRoute({required this.id});
 
   final String id;
@@ -32,7 +34,7 @@ class UserRoute extends FoldableRoute {
   Map<String, Object?> get params => {'id': id};
 
   @override
-  FoldableRoute? get parent => const UsersRoute();
+  FoldableFlatRoute? get parent => const UsersRoute();
 
   @override
   FutureOr<FoldableRoute?> redirect(
@@ -195,6 +197,59 @@ widget type) instead of `MediaQuery.of`.
 Calling `open`, `openUri`, `push` or `refresh` before the router is attached
 to the widget tree completes the future with a `StateError`.
 
+## Two kinds of routes
+
+`FoldableRoute` is sealed. Every route extends one of:
+
+- `FoldableFlatRoute`: a page of the root navigator, outside any shell. Its
+  `parent` is another `FoldableFlatRoute` (or `null`, the default).
+- `FoldableShellChildRoute`: a page inside a `FoldableShellRoute`. Its
+  `parent` is required and is a `FoldableShellParent`: the shell itself (for
+  the root of a tab, which must be one of the shell's `branches`) or another
+  `FoldableShellChildRoute` of the same shell.
+- `FoldableShellRoute`, the shell itself (see [ShellRoute](#shellroute)). Its
+  `parent` is a `FoldableFlatRoute` (or `null`) and its `branches` are
+  `FoldableShellChildRoute`s, so a parent chain holds at most one shell.
+
+The rule: if the parent chain of a route reaches a shell, extend
+`FoldableShellChildRoute`; otherwise extend `FoldableFlatRoute`.
+
+`push` only accepts a `FoldableFlatRoute`: a pushed page is always shown on
+the root navigator (full screen, above the shell if one is on screen). Routes
+inside a shell are reached with `open`, `openUri` or a tab switch. If the
+redirect of a pushed route answers with a route inside a shell (or with the
+shell), the navigation becomes an `open` of that route and the push completes
+with `null`, as in go_router.
+
+The same page sometimes belongs both in a tab and full screen. Declare two
+thin routes with different paths that share their body through a mixin (a
+mixin without `on`, so it applies to both kinds):
+
+```dart
+mixin SettingsBody {
+  Widget build(BuildContext context) => const SettingsScreen();
+}
+
+// Inside the shell, as a tab: open(const SettingsTabRoute()).
+class SettingsTabRoute extends FoldableShellChildRoute with SettingsBody {
+  const SettingsTabRoute();
+
+  @override
+  String get path => '/settings';
+
+  @override
+  FoldableShellParent get parent => const MainShellRoute();
+}
+
+// Full screen, above everything: push(const SettingsFullRoute()).
+class SettingsFullRoute extends FoldableFlatRoute with SettingsBody {
+  const SettingsFullRoute();
+
+  @override
+  String get path => '/settings/full';
+}
+```
+
 ## ShellRoute
 
 A `FoldableShellRoute` puts a persistent frame (a bottom navigation bar, a
@@ -210,7 +265,8 @@ class MainShellRoute extends FoldableShellRoute {
   // The root route of each tab, in order. A route belongs to the branch
   // whose root is the element right below the shell in its parent chain.
   @override
-  List<FoldableRoute> get branches => const [HomeRoute(), UsersRoute()];
+  List<FoldableShellChildRoute> get branches =>
+      const [HomeRoute(), UsersRoute()];
 
   @override
   Widget buildShell(BuildContext context, FoldableShellState shell) =>
@@ -227,23 +283,23 @@ class MainShellRoute extends FoldableShellRoute {
       );
 }
 
-class UsersRoute extends FoldableRoute {
+class UsersRoute extends FoldableShellChildRoute {
   const UsersRoute();
 
   @override
   String get path => '/users';
 
   @override
-  FoldableRoute? get parent => const MainShellRoute(); // this is the Users tab
+  FoldableShellParent get parent => const MainShellRoute(); // the Users tab
 
   @override
   Widget build(BuildContext context) => const UsersPage();
 }
 
-class UserRoute extends FoldableRoute {
+class UserRoute extends FoldableShellChildRoute {
   // ...shown inside the Users tab: users -> detail.
   @override
-  FoldableRoute? get parent => const UsersRoute();
+  FoldableShellParent get parent => const UsersRoute();
 }
 ```
 
@@ -259,15 +315,18 @@ Rules:
   from `buildShell`.
 - The shell's `redirect` runs before the redirects of the branch routes,
   as for any ancestor. A route that reaches the shell without one of its
-  `branches` in between, or a parent chain with two shells, is an error.
+  `branches` in between is an error. A parent chain with two shells cannot
+  be written: the parent of a shell is a `FoldableFlatRoute`.
 - `open(route)` inside a branch replaces only that branch's stack (keeping
   its unchanged bottom) and switches to it; the other branches keep their
   stacks. `open(shell)` opens the first branch. `open(route)` outside the
   shell drops the shell and every branch stack.
-- `push` of a route inside a shell throws an `UnsupportedError` (also when
-  a redirect lands there): use `open`. Pushing a route outside the shell
-  shows a full-screen page above it and returns its result through `pop`,
-  as usual.
+- `push` only accepts a `FoldableFlatRoute`, so a route inside the shell is
+  reached with `open`. Pushing a route outside the shell shows a
+  full-screen page above it and returns its result through `pop`, as
+  usual. If the redirect of a pushed route lands inside the shell (or on
+  the shell), the navigation is committed like `open` and the push
+  completes with `null`.
 - `FoldableShellState.goBranch(index)` switches tabs, keeping the stack of
   the target. Branches are built lazily: the first visit runs the redirects
   (shell first, then the branch root) and opens the branch root; a later

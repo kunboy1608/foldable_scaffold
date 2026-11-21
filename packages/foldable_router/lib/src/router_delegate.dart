@@ -7,7 +7,6 @@ import 'package:flutter/material.dart';
 import 'foldable_panes.dart';
 import 'foldable_route.dart';
 import 'foldable_router.dart';
-import 'foldable_shell_route.dart';
 import 'page_transitions.dart';
 import 'redirect_resolver.dart';
 
@@ -763,7 +762,10 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
   }
 
   /// Appends [route] and completes with the value it is popped with.
-  Future<T?> push<T extends Object?>(FoldableRoute route) async {
+  ///
+  /// A redirect that lands inside a shell commits like [open] instead, and
+  /// the future completes with `null`.
+  Future<T?> push<T extends Object?>(FoldableFlatRoute route) async {
     final entry = await _navigate(route, push: true);
     if (entry == null) return null;
     return await entry.result as T?;
@@ -959,41 +961,25 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
     }
   }
 
-  /// Validates a resolved chain: one shell at most, and the route below a
-  /// shell belongs to one of its branches.
-  void _checkChain(List<FoldableRoute> chain) {
-    final shells = chain.whereType<FoldableShellRoute>().toList();
-    if (shells.length > 1) {
-      throw StateError(
-        'More than one FoldableShellRoute in one parent chain is not '
-        'supported: ${chain.join(' <- ')}.',
-      );
-    }
-  }
-
-  /// Returns the committed top entry, or null when superseded.
+  /// Returns the committed top entry, or null when superseded or when a
+  /// push was committed as an open (its redirect landed inside a shell).
+  ///
+  /// The types guarantee at most one shell per parent chain; that the route
+  /// right below a shell is one of its branches is checked when the chain is
+  /// committed ([_commitShellOpen]).
   Future<_Entry?> _navigate(FoldableRoute target, {required bool push}) async {
     if (_disposed) return null;
     final context = _requireRouterContext();
-    if (target is FoldableShellRoute) {
-      if (push) {
-        throw UnsupportedError(
-          'push($target) targets a FoldableShellRoute: use open instead.',
-        );
-      }
-      target = _firstBranch(target);
-    }
+    if (target is FoldableShellRoute) target = _firstBranch(target);
     final token = _begin();
     try {
       final chain = await _resolve(target, token, context);
       if (chain == null) return null;
-      _checkChain(chain);
       if (push && chain.any((r) => r is FoldableShellRoute)) {
-        throw UnsupportedError(
-          'push($target) targets a route inside a FoldableShellRoute '
-          '(${chain.firstWhere((r) => r is FoldableShellRoute)}): '
-          'use open instead.',
-        );
+        // A push whose redirect lands inside a shell (or on the shell) is
+        // committed like open, as go_router does; the push has no result.
+        _commitOpen(chain);
+        return null;
       }
       return push ? _commitPush(chain.last) : _commitOpen(chain);
     } finally {
@@ -1181,7 +1167,6 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
       final target = built == null ? shell.branches[index] : built.last.route;
       final chain = await _resolve(target, token, context);
       if (chain == null) return;
-      _checkChain(chain);
       _commitOpen(chain);
       // A redirect may have moved the navigation elsewhere; otherwise the
       // shell (if it is still the same) is now showing [index].

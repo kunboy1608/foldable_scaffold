@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:foldable_router/foldable_router.dart';
 
-class HomeRoute extends FoldableRoute {
+class HomeRoute extends FoldableFlatRoute {
   const HomeRoute();
   @override
   String get path => '/home';
@@ -13,12 +13,12 @@ class HomeRoute extends FoldableRoute {
       const Scaffold(body: Center(child: Text('home page')));
 }
 
-class DetailRoute extends FoldableRoute {
+class DetailRoute extends FoldableFlatRoute {
   const DetailRoute();
   @override
   String get path => '/home/detail';
   @override
-  FoldableRoute? get parent => const HomeRoute();
+  FoldableFlatRoute? get parent => const HomeRoute();
   @override
   Widget build(BuildContext context) =>
       const Scaffold(body: Center(child: Text('detail page')));
@@ -26,7 +26,7 @@ class DetailRoute extends FoldableRoute {
 
 Completer<void>? gate;
 
-class SlowRoute extends FoldableRoute {
+class SlowRoute extends FoldableFlatRoute {
   const SlowRoute();
   @override
   String get path => '/slow';
@@ -47,7 +47,10 @@ class SlowRoute extends FoldableRoute {
 class Shell extends FoldableShellRoute {
   const Shell();
   @override
-  List<FoldableRoute> get branches => const [TabRoute(), OtherTabRoute()];
+  List<FoldableShellChildRoute> get branches => const [
+    TabRoute(),
+    OtherTabRoute(),
+  ];
 
   @override
   Widget buildShell(BuildContext context, FoldableShellState shell) => Scaffold(
@@ -73,34 +76,34 @@ class Shell extends FoldableShellRoute {
   );
 }
 
-class TabRoute extends FoldableRoute {
+class TabRoute extends FoldableShellChildRoute {
   const TabRoute();
   @override
   String get path => '/tab';
   @override
-  FoldableRoute? get parent => const Shell();
+  FoldableShellParent get parent => const Shell();
   @override
   Widget build(BuildContext context) =>
       const Scaffold(body: Center(child: Text('tab page')));
 }
 
-class TabDetailRoute extends FoldableRoute {
+class TabDetailRoute extends FoldableShellChildRoute {
   const TabDetailRoute();
   @override
   String get path => '/tab/detail';
   @override
-  FoldableRoute? get parent => const TabRoute();
+  FoldableShellParent get parent => const TabRoute();
   @override
   Widget build(BuildContext context) =>
       const Scaffold(body: Center(child: Text('tab detail page')));
 }
 
-class OtherTabRoute extends FoldableRoute {
+class OtherTabRoute extends FoldableShellChildRoute {
   const OtherTabRoute();
   @override
   String get path => '/other';
   @override
-  FoldableRoute? get parent => const Shell();
+  FoldableShellParent get parent => const Shell();
   @override
   Widget build(BuildContext context) =>
       const Scaffold(body: Center(child: Text('other page')));

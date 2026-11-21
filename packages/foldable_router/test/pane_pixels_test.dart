@@ -30,7 +30,10 @@ class PixelShell extends FoldableShellRoute {
   const PixelShell();
 
   @override
-  List<FoldableRoute> get branches => const [AListRoute(), BHomeRoute()];
+  List<FoldableShellChildRoute> get branches => const [
+    AListRoute(),
+    BHomeRoute(),
+  ];
 
   @override
   Widget buildShell(BuildContext context, FoldableShellState shell) => Scaffold(
@@ -88,17 +91,17 @@ class PixelShell extends FoldableShellRoute {
   }
 }
 
-class AListRoute extends FoldableRoute {
+class AListRoute extends FoldableShellChildRoute {
   const AListRoute();
   @override
   String get path => '/a';
   @override
-  FoldableRoute? get parent => const PixelShell();
+  FoldableShellParent get parent => const PixelShell();
   @override
   Widget build(BuildContext context) => const AListPage();
 }
 
-class AItemRoute extends FoldableRoute {
+class AItemRoute extends FoldableShellChildRoute {
   const AItemRoute({required this.id});
   final String id;
   @override
@@ -106,13 +109,13 @@ class AItemRoute extends FoldableRoute {
   @override
   Map<String, Object?> get params => {'id': id};
   @override
-  FoldableRoute? get parent => const AListRoute();
+  FoldableShellParent get parent => const AListRoute();
   @override
   Widget build(BuildContext context) => AItemPage(id: id);
 }
 
 /// A third page of the A branch, opened on top of [AItemRoute] (id `1`).
-class ASubRoute extends FoldableRoute {
+class ASubRoute extends FoldableShellChildRoute {
   const ASubRoute({required this.id});
   final String id;
   @override
@@ -120,17 +123,17 @@ class ASubRoute extends FoldableRoute {
   @override
   Map<String, Object?> get params => {'id': id};
   @override
-  FoldableRoute? get parent => const AItemRoute(id: '1');
+  FoldableShellParent get parent => const AItemRoute(id: '1');
   @override
   Widget build(BuildContext context) => AItemPage(id: id);
 }
 
-class BHomeRoute extends FoldableRoute {
+class BHomeRoute extends FoldableShellChildRoute {
   const BHomeRoute();
   @override
   String get path => '/b';
   @override
-  FoldableRoute? get parent => const PixelShell();
+  FoldableShellParent get parent => const PixelShell();
   @override
   Widget build(BuildContext context) => const BHomePage();
 }

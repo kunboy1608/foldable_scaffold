@@ -8,7 +8,7 @@ import 'package:foldable_router/foldable_router.dart';
 bool loggedIn = true;
 final List<String> redirectOrder = [];
 
-class HomeRoute extends FoldableRoute {
+class HomeRoute extends FoldableFlatRoute {
   const HomeRoute();
 
   @override
@@ -18,7 +18,7 @@ class HomeRoute extends FoldableRoute {
   Widget build(BuildContext context) => const Text('home');
 }
 
-class LoginRoute extends FoldableRoute {
+class LoginRoute extends FoldableFlatRoute {
   const LoginRoute();
 
   @override
@@ -28,7 +28,7 @@ class LoginRoute extends FoldableRoute {
   Widget build(BuildContext context) => const Text('login');
 }
 
-class PickerRoute extends FoldableRoute {
+class PickerRoute extends FoldableFlatRoute {
   const PickerRoute();
 
   @override
@@ -52,7 +52,7 @@ class ShellMain extends FoldableShellRoute {
   const ShellMain();
 
   @override
-  List<FoldableRoute> get branches => const [
+  List<FoldableShellChildRoute> get branches => const [
     TabARoute(),
     TabBRoute(),
     GuardedTabRoute(),
@@ -77,20 +77,20 @@ class ShellMain extends FoldableShellRoute {
   );
 }
 
-class TabARoute extends FoldableRoute {
+class TabARoute extends FoldableShellChildRoute {
   const TabARoute();
 
   @override
   String get path => '/a';
 
   @override
-  FoldableRoute? get parent => const ShellMain();
+  FoldableShellParent get parent => const ShellMain();
 
   @override
   Widget build(BuildContext context) => const CounterPage('tab a');
 }
 
-class ADetailRoute extends FoldableRoute {
+class ADetailRoute extends FoldableShellChildRoute {
   const ADetailRoute({required this.id});
 
   final String id;
@@ -102,13 +102,13 @@ class ADetailRoute extends FoldableRoute {
   Map<String, Object?> get params => {'id': id};
 
   @override
-  FoldableRoute? get parent => const TabARoute();
+  FoldableShellParent get parent => const TabARoute();
 
   @override
   Widget build(BuildContext context) => CounterPage('a detail $id');
 }
 
-class TabBRoute extends FoldableRoute {
+class TabBRoute extends FoldableShellChildRoute {
   const TabBRoute();
 
   static int redirects = 0;
@@ -117,7 +117,7 @@ class TabBRoute extends FoldableRoute {
   String get path => '/b';
 
   @override
-  FoldableRoute? get parent => const ShellMain();
+  FoldableShellParent get parent => const ShellMain();
 
   @override
   FutureOr<FoldableRoute?> redirect(BuildContext context, RouteState state) {
@@ -129,7 +129,7 @@ class TabBRoute extends FoldableRoute {
   Widget build(BuildContext context) => const Text('tab b');
 }
 
-class BDetailRoute extends FoldableRoute {
+class BDetailRoute extends FoldableShellChildRoute {
   const BDetailRoute({required this.id});
 
   final String id;
@@ -141,20 +141,20 @@ class BDetailRoute extends FoldableRoute {
   Map<String, Object?> get params => {'id': id};
 
   @override
-  FoldableRoute? get parent => const TabBRoute();
+  FoldableShellParent get parent => const TabBRoute();
 
   @override
   Widget build(BuildContext context) => Text('b detail $id');
 }
 
-class GuardedTabRoute extends FoldableRoute {
+class GuardedTabRoute extends FoldableShellChildRoute {
   const GuardedTabRoute();
 
   @override
   String get path => '/guarded';
 
   @override
-  FoldableRoute? get parent => const ShellMain();
+  FoldableShellParent get parent => const ShellMain();
 
   @override
   FoldableRoute? redirect(BuildContext context, RouteState state) =>
@@ -165,14 +165,14 @@ class GuardedTabRoute extends FoldableRoute {
 }
 
 /// A route whose parent is the shell but which is not one of its branches.
-class OrphanRoute extends FoldableRoute {
+class OrphanRoute extends FoldableShellChildRoute {
   const OrphanRoute();
 
   @override
   String get path => '/orphan';
 
   @override
-  FoldableRoute? get parent => const ShellMain();
+  FoldableShellParent get parent => const ShellMain();
 
   @override
   Widget build(BuildContext context) => const Text('orphan');
@@ -180,7 +180,7 @@ class OrphanRoute extends FoldableRoute {
 
 /// Sits below [ShellMain] without being one of its branches: only reached
 /// through redirects.
-class RedirectIntoShellRoute extends FoldableRoute {
+class RedirectIntoShellRoute extends FoldableFlatRoute {
   const RedirectIntoShellRoute();
 
   @override
@@ -194,38 +194,6 @@ class RedirectIntoShellRoute extends FoldableRoute {
   Widget build(BuildContext context) => const Text('should not be built');
 }
 
-/// A second shell below [ShellMain]: two shells in one chain are an error.
-class NestedShell extends FoldableShellRoute {
-  const NestedShell();
-
-  @override
-  FoldableRoute? get parent => const ShellMain();
-
-  @override
-  List<FoldableRoute> get branches => const [NestedTabRoute()];
-
-  @override
-  Widget buildShell(BuildContext context, FoldableShellState shell) => Column(
-    children: [
-      const Text('nested shell'),
-      Expanded(child: shell.child),
-    ],
-  );
-}
-
-class NestedTabRoute extends FoldableRoute {
-  const NestedTabRoute();
-
-  @override
-  String get path => '/nested';
-
-  @override
-  FoldableRoute? get parent => const NestedShell();
-
-  @override
-  Widget build(BuildContext context) => const Text('nested tab');
-}
-
 /// A shell whose redirect runs before the redirect of its branch.
 class OrderedShell extends FoldableShellRoute {
   const OrderedShell();
@@ -237,7 +205,7 @@ class OrderedShell extends FoldableShellRoute {
   }
 
   @override
-  List<FoldableRoute> get branches => const [OrderedTabRoute()];
+  List<FoldableShellChildRoute> get branches => const [OrderedTabRoute()];
 
   @override
   Widget buildShell(BuildContext context, FoldableShellState shell) => Column(
@@ -248,14 +216,14 @@ class OrderedShell extends FoldableShellRoute {
   );
 }
 
-class OrderedTabRoute extends FoldableRoute {
+class OrderedTabRoute extends FoldableShellChildRoute {
   const OrderedTabRoute();
 
   @override
   String get path => '/ordered';
 
   @override
-  FoldableRoute? get parent => const OrderedShell();
+  FoldableShellParent get parent => const OrderedShell();
 
   @override
   FutureOr<FoldableRoute?> redirect(BuildContext context, RouteState state) {
@@ -269,7 +237,7 @@ class OrderedTabRoute extends FoldableRoute {
 
 /// A page of the root navigator that sits *below* [LandingShell] in its
 /// parent chain.
-class LandingRoute extends FoldableRoute {
+class LandingRoute extends FoldableFlatRoute {
   const LandingRoute();
 
   @override
@@ -284,10 +252,10 @@ class LandingShell extends FoldableShellRoute {
   const LandingShell();
 
   @override
-  FoldableRoute? get parent => const LandingRoute();
+  FoldableFlatRoute? get parent => const LandingRoute();
 
   @override
-  List<FoldableRoute> get branches => const [LandingTabRoute()];
+  List<FoldableShellChildRoute> get branches => const [LandingTabRoute()];
 
   @override
   Widget buildShell(BuildContext context, FoldableShellState shell) => Column(
@@ -298,14 +266,14 @@ class LandingShell extends FoldableShellRoute {
   );
 }
 
-class LandingTabRoute extends FoldableRoute {
+class LandingTabRoute extends FoldableShellChildRoute {
   const LandingTabRoute();
 
   @override
   String get path => '/landing/tab';
 
   @override
-  FoldableRoute? get parent => const LandingShell();
+  FoldableShellParent get parent => const LandingShell();
 
   @override
   Widget build(BuildContext context) => const Text('landing tab');
@@ -316,7 +284,7 @@ class GuardedShell extends FoldableShellRoute {
   const GuardedShell();
 
   @override
-  List<FoldableRoute> get branches => const [SecretRoute()];
+  List<FoldableShellChildRoute> get branches => const [SecretRoute()];
 
   @override
   FoldableRoute? redirect(BuildContext context, RouteState state) =>
@@ -331,14 +299,14 @@ class GuardedShell extends FoldableShellRoute {
   );
 }
 
-class SecretRoute extends FoldableRoute {
+class SecretRoute extends FoldableShellChildRoute {
   const SecretRoute();
 
   @override
   String get path => '/secret';
 
   @override
-  FoldableRoute? get parent => const GuardedShell();
+  FoldableShellParent get parent => const GuardedShell();
 
   @override
   Widget build(BuildContext context) => const Text('secret');
@@ -348,21 +316,21 @@ class HeroShell extends FoldableShellRoute {
   const HeroShell();
 
   @override
-  List<FoldableRoute> get branches => const [HeroListRoute()];
+  List<FoldableShellChildRoute> get branches => const [HeroListRoute()];
 
   @override
   Widget buildShell(BuildContext context, FoldableShellState shell) =>
       Scaffold(body: shell.child);
 }
 
-class HeroListRoute extends FoldableRoute {
+class HeroListRoute extends FoldableShellChildRoute {
   const HeroListRoute();
 
   @override
   String get path => '/hero';
 
   @override
-  FoldableRoute? get parent => const HeroShell();
+  FoldableShellParent get parent => const HeroShell();
 
   @override
   Widget build(BuildContext context) => Scaffold(
@@ -389,14 +357,14 @@ class HeroListRoute extends FoldableRoute {
   );
 }
 
-class HeroDetailRoute extends FoldableRoute {
+class HeroDetailRoute extends FoldableShellChildRoute {
   const HeroDetailRoute();
 
   @override
   String get path => '/hero/detail';
 
   @override
-  FoldableRoute? get parent => const HeroListRoute();
+  FoldableShellParent get parent => const HeroListRoute();
 
   @override
   Widget build(BuildContext context) => const Scaffold(
@@ -626,26 +594,24 @@ void main() {
     expect(find.text('secret', skipOffstage: false), findsNothing);
   });
 
-  testWidgets('push of a route inside the shell throws UnsupportedError', (
+  testWidgets('push whose redirect lands inside the shell opens it', (
     tester,
   ) async {
     final router = await pumpShell(tester);
 
-    await expectLater(
-      router.push<void>(const ADetailRoute(id: '7')),
-      throwsUnsupportedError,
-    );
-    await tester.pumpAndSettle();
-    expect(router.stack, [const ShellMain(), const TabARoute()]);
-    expect(router.isNavigating.value, isFalse);
-
-    // Also when the redirect of the pushed route lands inside the shell.
+    // The redirect of the pushed route lands inside the shell: committed
+    // like open, and the push completes with null.
     await expectLater(
       router.push<void>(const RedirectIntoShellRoute()),
-      throwsUnsupportedError,
+      completion(isNull),
     );
     await tester.pumpAndSettle();
-    expect(router.stack, [const ShellMain(), const TabARoute()]);
+    expect(router.stack, [
+      const ShellMain(),
+      const TabARoute(),
+      const ADetailRoute(id: '9'),
+    ]);
+    expect(router.isNavigating.value, isFalse);
   });
 
   testWidgets('push outside the shell covers it and returns its result', (
@@ -921,16 +887,6 @@ void main() {
     final router = await pumpShell(tester);
 
     await expectLater(router.open(const OrphanRoute()), throwsStateError);
-    await tester.pumpAndSettle();
-
-    expect(router.stack, [const ShellMain(), const TabARoute()]);
-    expect(tester.takeException(), isNull);
-  });
-
-  testWidgets('two shells in one parent chain are an error', (tester) async {
-    final router = await pumpShell(tester);
-
-    await expectLater(router.open(const NestedTabRoute()), throwsStateError);
     await tester.pumpAndSettle();
 
     expect(router.stack, [const ShellMain(), const TabARoute()]);

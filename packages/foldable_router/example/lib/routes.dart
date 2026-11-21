@@ -17,7 +17,7 @@ class MainShellRoute extends FoldableShellRoute {
   const MainShellRoute();
 
   @override
-  List<FoldableRoute> get branches => const [
+  List<FoldableShellChildRoute> get branches => const [
     HomeRoute(),
     UsersRoute(),
     ProfileRoute(),
@@ -52,20 +52,23 @@ class MainShellRoute extends FoldableShellRoute {
   }
 }
 
-class HomeRoute extends FoldableRoute {
+class HomeRoute extends FoldableShellChildRoute {
   const HomeRoute();
 
   @override
   String get path => '/';
 
   @override
-  FoldableRoute? get parent => const MainShellRoute();
+  FoldableShellParent get parent => const MainShellRoute();
 
   // Slow on first launch only: this is what makes `pendingBuilder` visible.
   // It runs again when the shell re-checks the Home branch (goBranch,
   // refresh) but `session.restore` only waits the first time.
   @override
-  FutureOr<FoldableRoute?> redirect(BuildContext context, RouteState state) async {
+  FutureOr<FoldableRoute?> redirect(
+    BuildContext context,
+    RouteState state,
+  ) async {
     await session.restore();
     return null;
   }
@@ -74,20 +77,20 @@ class HomeRoute extends FoldableRoute {
   Widget build(BuildContext context) => const HomePage();
 }
 
-class UsersRoute extends FoldableRoute {
+class UsersRoute extends FoldableShellChildRoute {
   const UsersRoute();
 
   @override
   String get path => '/users';
 
   @override
-  FoldableRoute? get parent => const MainShellRoute();
+  FoldableShellParent get parent => const MainShellRoute();
 
   @override
   Widget build(BuildContext context) => const UsersPage();
 }
 
-class UserRoute extends FoldableRoute {
+class UserRoute extends FoldableShellChildRoute {
   const UserRoute({required this.id});
 
   final String id;
@@ -101,13 +104,13 @@ class UserRoute extends FoldableRoute {
 
   // `open(UserRoute(...))` builds the stack [UsersRoute, UserRoute].
   @override
-  FoldableRoute? get parent => const UsersRoute();
+  FoldableShellParent get parent => const UsersRoute();
 
   @override
   Widget build(BuildContext context) => UserPage(id: id);
 }
 
-class LoginRoute extends FoldableRoute {
+class LoginRoute extends FoldableFlatRoute {
   const LoginRoute({this.from});
 
   /// The location the user wanted, e.g. `/profile/settings`.
@@ -123,14 +126,14 @@ class LoginRoute extends FoldableRoute {
   Widget build(BuildContext context) => LoginPage(from: from);
 }
 
-class ProfileRoute extends FoldableRoute {
+class ProfileRoute extends FoldableShellChildRoute {
   const ProfileRoute();
 
   @override
   String get path => '/profile';
 
   @override
-  FoldableRoute? get parent => const MainShellRoute();
+  FoldableShellParent get parent => const MainShellRoute();
 
   // The auth guard. Redirects run from the root ancestor down, so this also
   // protects every route that has ProfileRoute in its parent chain.
@@ -138,7 +141,10 @@ class ProfileRoute extends FoldableRoute {
   // descendant); we hand it to the login page so it can send the user back.
   // LoginRoute is outside this chain, so the guard cannot loop.
   @override
-  FutureOr<FoldableRoute?> redirect(BuildContext context, RouteState state) async {
+  FutureOr<FoldableRoute?> redirect(
+    BuildContext context,
+    RouteState state,
+  ) async {
     if (await session.check()) return null;
     return LoginRoute(from: state.target.uri.toString());
   }
@@ -147,7 +153,7 @@ class ProfileRoute extends FoldableRoute {
   Widget build(BuildContext context) => const ProfilePage();
 }
 
-class SettingsRoute extends FoldableRoute {
+class SettingsRoute extends FoldableShellChildRoute {
   const SettingsRoute();
 
   @override
@@ -155,13 +161,13 @@ class SettingsRoute extends FoldableRoute {
 
   // No redirect of its own: the parent's guard covers it.
   @override
-  FoldableRoute? get parent => const ProfileRoute();
+  FoldableShellParent get parent => const ProfileRoute();
 
   @override
   Widget build(BuildContext context) => const SettingsPage();
 }
 
-class ColorPickerRoute extends FoldableRoute {
+class ColorPickerRoute extends FoldableFlatRoute {
   const ColorPickerRoute();
 
   @override

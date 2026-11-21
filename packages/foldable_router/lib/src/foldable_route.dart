@@ -1,16 +1,27 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
+import 'foldable_panes.dart';
 import 'route_state.dart';
+
+part 'foldable_shell_route.dart';
 
 /// A destination in the app.
 ///
-/// Every app route is a subclass; the constructor fields of the subclass are
-/// the route's parameters:
+/// This class is sealed: an app route extends one of
+///
+/// * [FoldableFlatRoute] for a route shown on the root navigator (its parent
+///   chain contains no [FoldableShellRoute]);
+/// * [FoldableShellChildRoute] for a route shown inside a shell (its parent
+///   chain reaches a [FoldableShellRoute]);
+/// * [FoldableShellRoute] for the shell itself.
+///
+/// The constructor fields of the subclass are the route's parameters:
 ///
 /// ```dart
-/// class UserRoute extends FoldableRoute {
+/// class UserRoute extends FoldableFlatRoute {
 ///   const UserRoute({required this.id});
 ///
 ///   final String id;
@@ -22,7 +33,7 @@ import 'route_state.dart';
 ///   Map<String, Object?> get params => {'id': id};
 ///
 ///   @override
-///   FoldableRoute? get parent => const UsersRoute();
+///   FoldableFlatRoute? get parent => const UsersRoute();
 ///
 ///   @override
 ///   Widget build(BuildContext context) => UserPage(id: id);
@@ -34,7 +45,7 @@ import 'route_state.dart';
 /// `{'id': '1'}` compare equal, as do two [DateTime]s for the same instant
 /// written with different time zones.
 @immutable
-abstract class FoldableRoute {
+sealed class FoldableRoute {
   /// Const constructor for subclasses.
   const FoldableRoute();
 
@@ -63,7 +74,12 @@ abstract class FoldableRoute {
 
   /// The route shown below this one when it is opened with
   /// `FoldableRouter.open`, or `null` for a root route.
-  FoldableRoute? get parent => null;
+  ///
+  /// Each kind of route narrows the type: a [FoldableFlatRoute] and a
+  /// [FoldableShellRoute] have a [FoldableFlatRoute] parent (or none), a
+  /// [FoldableShellChildRoute] always has a [FoldableShellParent] parent.
+  /// So a parent chain contains at most one shell.
+  FoldableRoute? get parent;
 
   /// Decides whether this route may be shown.
   ///
@@ -178,4 +194,85 @@ abstract class FoldableRoute {
 
   @override
   String toString() => '$runtimeType($uri)';
+}
+
+/// A route shown on the root navigator, outside any [FoldableShellRoute].
+///
+/// Its parent chain is made of [FoldableFlatRoute]s only. This is the only
+/// kind of route `FoldableRouter.push` accepts: it puts the page alone on
+/// top of the stack (above the shell, when one is on screen).
+///
+/// ```dart
+/// class LoginRoute extends FoldableFlatRoute {
+///   const LoginRoute();
+///
+///   @override
+///   String get path => '/login';
+///
+///   @override
+///   Widget build(BuildContext context) => const LoginPage();
+/// }
+/// ```
+abstract class FoldableFlatRoute extends FoldableRoute {
+  /// Const constructor for subclasses.
+  const FoldableFlatRoute();
+
+  /// The route shown below this one when it is opened, or `null` (the
+  /// default) for a root route. Only another [FoldableFlatRoute] can be the
+  /// parent of a flat route.
+  @override
+  FoldableFlatRoute? get parent => null;
+}
+
+/// A [FoldableShellRoute] or a route shown inside one: the type of the
+/// parent of a [FoldableShellChildRoute].
+///
+/// This class is sealed: it cannot be extended or implemented outside the
+/// package. Extend [FoldableShellChildRoute] or [FoldableShellRoute].
+sealed class FoldableShellParent extends FoldableRoute {
+  /// Const constructor for the subclasses of the package.
+  const FoldableShellParent();
+}
+
+/// A route shown inside a [FoldableShellRoute], in the nested navigator of
+/// one of its branches.
+///
+/// [parent] is required and is either the shell (the route is then the root
+/// of a branch and must be one of [FoldableShellRoute.branches]) or another
+/// route inside the same shell:
+///
+/// ```dart
+/// class UsersRoute extends FoldableShellChildRoute {
+///   const UsersRoute();
+///
+///   @override
+///   String get path => '/users';
+///
+///   @override
+///   FoldableShellParent get parent => const MainShellRoute();
+///
+///   @override
+///   Widget build(BuildContext context) => const UsersPage();
+/// }
+///
+/// class UserRoute extends FoldableShellChildRoute {
+///   // ...
+///   @override
+///   FoldableShellParent get parent => const UsersRoute();
+/// }
+/// ```
+///
+/// Such a route is reached with `FoldableRouter.open` (or `openUri`, or a
+/// tab switch); it cannot be pushed. To show the same page both in a tab and
+/// full screen, declare two routes with different paths that share their
+/// body (for example through a mixin), one [FoldableShellChildRoute] and one
+/// [FoldableFlatRoute].
+abstract class FoldableShellChildRoute extends FoldableShellParent {
+  /// Const constructor for subclasses.
+  const FoldableShellChildRoute();
+
+  /// The route shown below this one: the shell, for the root of a branch,
+  /// or another route inside the same shell.
+  @override
+  FoldableShellParent get parent;
 }

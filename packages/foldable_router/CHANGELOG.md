@@ -1,5 +1,19 @@
 ## 0.0.1
 
+* **Breaking:** `FoldableRoute` is now `sealed`: a route extends
+  `FoldableFlatRoute` (outside any shell) or `FoldableShellChildRoute`
+  (inside a `FoldableShellRoute`); `FoldableShellParent` (exported, sealed)
+  is the common type of a shell and of the routes inside it. The type of
+  `parent` follows: `FoldableFlatRoute?` for a flat route and for a shell,
+  `FoldableShellParent` (required, not nullable) for a route inside a shell,
+  so a parent chain holds at most one shell by construction.
+  `FoldableShellRoute.branches` is now `List<FoldableShellChildRoute>`.
+  `FoldableRouter.push` only accepts a `FoldableFlatRoute` (pushing a route
+  inside a shell, or a shell, no longer compiles).
+* Changed: when the redirect of a pushed route lands inside a shell (on a
+  `FoldableShellChildRoute` or on the shell itself), the navigation is
+  committed like `open` of that route and the push completes with `null`,
+  as in go_router, instead of completing with an `UnsupportedError`.
 * New `FoldableRouter.pageTransitions` (`FoldablePageTransitionsResolver`):
   picks the `PageTransitionsBuilder` that animates pages. Fixes apps built on
   `package:material_ui` (Flutter 3.47+), where the router read the
@@ -70,9 +84,9 @@
 * `FoldableShellRoute` (with `FoldableShellState`): a persistent frame
   (bottom navigation, rail, ...) in the middle of a parent chain, with one
   lazily built nested navigator and stack per branch (`goBranch` keeps the
-  stacks, `open` only replaces the stack of the target branch, `push` inside
-  a shell throws `UnsupportedError`, back and `pop` work per navigator, and
-  the Android predictive-back state is reported to the engine).
+  stacks, `open` only replaces the stack of the target branch, back and
+  `pop` work per navigator, and the Android predictive-back state is
+  reported to the engine).
 * Fixed: the Android predictive back gesture only acts on the branch that is
   actually on screen. A hidden tab, or a branch covered by a full-screen
   page, no longer takes the gesture (its pages are kept, heroes and all).

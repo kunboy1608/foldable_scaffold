@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
-import 'foldable_shell_route.dart';
+import 'foldable_route.dart';
 
 /// Which pane of a two-pane tab the calling page is shown in.
 ///

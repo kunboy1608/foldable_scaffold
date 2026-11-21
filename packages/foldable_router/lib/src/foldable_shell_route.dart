@@ -1,8 +1,4 @@
-import 'package:flutter/foundation.dart';
-import 'package:flutter/widgets.dart';
-
-import 'foldable_panes.dart';
-import 'foldable_route.dart';
+part of 'foldable_route.dart';
 
 /// Everything a shell needs to draw its frame around the current branch.
 ///
@@ -41,8 +37,9 @@ class FoldableShellState {
 /// A route that shows a persistent frame (bottom navigation, side rail, ...)
 /// around the routes of its [branches], each with its own stack.
 ///
-/// A shell sits in the middle of a parent chain: a route whose
-/// [FoldableRoute.parent] chain contains the shell is shown *inside* it. The
+/// A shell sits in the middle of a parent chain: a
+/// [FoldableShellChildRoute], whose [FoldableRoute.parent] chain contains
+/// the shell, is shown *inside* it. The
 /// shell is one page of the root navigator, and every branch gets a nested
 /// navigator, so each branch keeps its own stack (and the state of its
 /// pages) while the user switches between branches:
@@ -52,7 +49,8 @@ class FoldableShellState {
 ///   const MainShellRoute();
 ///
 ///   @override
-///   List<FoldableRoute> get branches => const [HomeRoute(), UsersRoute()];
+///   List<FoldableShellChildRoute> get branches =>
+///       const [HomeRoute(), UsersRoute()];
 ///
 ///   @override
 ///   Widget buildShell(BuildContext context, FoldableShellState shell) =>
@@ -69,7 +67,7 @@ class FoldableShellState {
 ///       );
 /// }
 ///
-/// class UsersRoute extends FoldableRoute {
+/// class UsersRoute extends FoldableShellChildRoute {
 ///   const UsersRoute();
 ///
 ///   @override
@@ -77,7 +75,7 @@ class FoldableShellState {
 ///
 ///   // The element right below the shell decides the branch.
 ///   @override
-///   FoldableRoute? get parent => const MainShellRoute();
+///   FoldableShellParent get parent => const MainShellRoute();
 ///
 ///   @override
 ///   Widget build(BuildContext context) => const UsersPage();
@@ -104,23 +102,32 @@ class FoldableShellState {
 ///   stack of *its* branch (keeping the unchanged bottom, as usual) and
 ///   switches to it; other branches keep their stacks. Opening the shell
 ///   itself opens its first branch.
-/// * Pushing such a route is not supported and throws an
-///   [UnsupportedError]: use `FoldableRouter.open`. Pushing a route
-///   *outside* the shell shows a full-screen page above it, as usual.
+/// * `FoldableRouter.push` only accepts a [FoldableFlatRoute]: pushing a
+///   route *outside* the shell shows a full-screen page above it, as usual.
+///   A push whose redirect lands inside the shell (or on the shell) is
+///   committed like `FoldableRouter.open` and its future completes with
+///   `null`.
 /// * Back (and `FoldableRouter.pop`) leaves a full-screen page above the
 ///   shell first, then goes one page back inside the current branch, and
 ///   does nothing at the branch root (the system then leaves the app).
-/// * Only one shell may appear in a parent chain.
+/// * Only one shell may appear in a parent chain. The types guarantee it:
+///   the parent of a shell is a [FoldableFlatRoute] (or `null`).
 ///
 /// Two shells are equal when they have the same runtime type and equal
 /// [branches]. As long as the router navigates within a shell, its branches
 /// (and so the state of their pages) survive.
-abstract class FoldableShellRoute extends FoldableRoute {
+abstract class FoldableShellRoute extends FoldableShellParent {
   /// Const constructor for subclasses.
   const FoldableShellRoute();
 
+  /// The route shown below the shell when it is opened, or `null` (the
+  /// default). A shell sits outside any other shell, so its parent is a
+  /// [FoldableFlatRoute].
+  @override
+  FoldableFlatRoute? get parent => null;
+
   /// The root route of each branch, in the order shown by the shell.
-  List<FoldableRoute> get branches;
+  List<FoldableShellChildRoute> get branches;
 
   /// Builds the frame around the current branch.
   ///

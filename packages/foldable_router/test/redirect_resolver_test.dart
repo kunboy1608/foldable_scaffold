@@ -8,13 +8,13 @@ import 'package:foldable_router/src/redirect_resolver.dart';
 typedef Redirect =
     FutureOr<FoldableRoute?> Function(BuildContext context, RouteState state);
 
-class R extends FoldableRoute {
+class R extends FoldableFlatRoute {
   const R(this.path, {this.parent, this.onRedirect, this.id});
 
   @override
   final String path;
   @override
-  final FoldableRoute? parent;
+  final FoldableFlatRoute? parent;
   final Redirect? onRedirect;
   final String? id;
 

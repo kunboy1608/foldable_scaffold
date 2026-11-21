@@ -3,7 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:foldable_router/foldable_router.dart';
 
 /// A route whose parameter map is set directly, used to test the URL encoding.
-class RawRoute extends FoldableRoute {
+class RawRoute extends FoldableFlatRoute {
   const RawRoute(this.values, {this.path = '/raw'});
 
   final Map<String, Object?> values;
@@ -19,7 +19,7 @@ class RawRoute extends FoldableRoute {
 }
 
 /// A route holding one value of each supported type.
-class AllTypesRoute extends FoldableRoute {
+class AllTypesRoute extends FoldableFlatRoute {
   const AllTypesRoute({
     required this.s,
     required this.i,
@@ -44,7 +44,7 @@ class AllTypesRoute extends FoldableRoute {
   Widget build(BuildContext context) => const SizedBox.shrink();
 }
 
-class HomeStub extends FoldableRoute {
+class HomeStub extends FoldableFlatRoute {
   const HomeStub();
 
   @override

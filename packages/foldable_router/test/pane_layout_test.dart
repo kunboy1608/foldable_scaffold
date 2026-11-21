@@ -25,7 +25,7 @@ class LayoutShell extends FoldableShellRoute {
   const LayoutShell();
 
   @override
-  List<FoldableRoute> get branches => const [AlphaRoute()];
+  List<FoldableShellChildRoute> get branches => const [AlphaRoute()];
 
   @override
   Widget buildShell(BuildContext context, FoldableShellState shell) =>
@@ -82,27 +82,27 @@ class LayoutShell extends FoldableShellRoute {
 
 int gutterTaps = 0;
 
-class AlphaRoute extends FoldableRoute {
+class AlphaRoute extends FoldableShellChildRoute {
   const AlphaRoute();
 
   @override
   String get path => '/alpha';
 
   @override
-  FoldableRoute? get parent => const LayoutShell();
+  FoldableShellParent get parent => const LayoutShell();
 
   @override
   Widget build(BuildContext context) => const AlphaPage();
 }
 
-class BetaRoute extends FoldableRoute {
+class BetaRoute extends FoldableShellChildRoute {
   const BetaRoute();
 
   @override
   String get path => '/alpha/beta';
 
   @override
-  FoldableRoute? get parent => const AlphaRoute();
+  FoldableShellParent get parent => const AlphaRoute();
 
   @override
   Widget build(BuildContext context) => const BetaPage();

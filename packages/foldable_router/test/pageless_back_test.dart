@@ -10,14 +10,14 @@ import 'shell_route_test.dart';
 
 /// A branch page that vetoes its own pop, to check that user [PopScope]s
 /// keep working with the shell's back routing.
-class GuardedDetailRoute extends FoldableRoute {
+class GuardedDetailRoute extends FoldableShellChildRoute {
   const GuardedDetailRoute();
 
   @override
   String get path => '/a/guarded';
 
   @override
-  FoldableRoute? get parent => const TabARoute();
+  FoldableShellParent get parent => const TabARoute();
 
   @override
   Widget build(BuildContext context) => PopScope(

@@ -11,7 +11,9 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:foldable_router/foldable_router.dart';
 
 /// Lines written by the redirects, newest last.
-final ValueNotifier<List<String>> labLog = ValueNotifier<List<String>>(const []);
+final ValueNotifier<List<String>> labLog = ValueNotifier<List<String>>(
+  const [],
+);
 int _redirectRuns = 0;
 
 /// Redirects may run while the framework is building (a dependency of the
@@ -24,7 +26,7 @@ void _log(String line) {
   });
 }
 
-class LabHomeRoute extends FoldableRoute {
+class LabHomeRoute extends FoldableFlatRoute {
   const LabHomeRoute();
 
   @override
@@ -35,7 +37,7 @@ class LabHomeRoute extends FoldableRoute {
 }
 
 /// One parameter of every supported type.
-class TypedRoute extends FoldableRoute {
+class TypedRoute extends FoldableFlatRoute {
   const TypedRoute({
     required this.count,
     required this.ratio,
@@ -63,7 +65,7 @@ class TypedRoute extends FoldableRoute {
   };
 
   @override
-  FoldableRoute? get parent => const LabHomeRoute();
+  FoldableFlatRoute? get parent => const LabHomeRoute();
 
   @override
   Widget build(BuildContext context) => TypedPage(route: this);
@@ -72,14 +74,14 @@ class TypedRoute extends FoldableRoute {
 /// A slow redirect that depends on MediaQuery (all of it: size, keyboard
 /// insets, orientation). Any such change while it is on the stack makes the
 /// router re-check it.
-class SlowRoute extends FoldableRoute {
+class SlowRoute extends FoldableFlatRoute {
   const SlowRoute();
 
   @override
   String get path => '/slow';
 
   @override
-  FoldableRoute? get parent => const LabHomeRoute();
+  FoldableFlatRoute? get parent => const LabHomeRoute();
 
   @override
   FutureOr<FoldableRoute?> redirect(
@@ -87,7 +89,9 @@ class SlowRoute extends FoldableRoute {
     RouteState state,
   ) async {
     final Size size = MediaQuery.of(context).size;
-    _log('Slow.redirect started at ${size.width.round()}x${size.height.round()}');
+    _log(
+      'Slow.redirect started at ${size.width.round()}x${size.height.round()}',
+    );
     await Future<void>.delayed(const Duration(seconds: 4));
     return null;
   }
@@ -98,7 +102,7 @@ class SlowRoute extends FoldableRoute {
 }
 
 /// Only allowed while the window is at least 700 wide.
-class WideOnlyRoute extends FoldableRoute {
+class WideOnlyRoute extends FoldableFlatRoute {
   const WideOnlyRoute();
 
   static const double minWidth = 700;
@@ -107,14 +111,16 @@ class WideOnlyRoute extends FoldableRoute {
   String get path => '/wide';
 
   @override
-  FoldableRoute? get parent => const LabHomeRoute();
+  FoldableFlatRoute? get parent => const LabHomeRoute();
 
   @override
   FutureOr<FoldableRoute?> redirect(BuildContext context, RouteState state) {
     final double width = MediaQuery.sizeOf(context).width;
     final bool allowed = width >= minWidth;
-    _log('WideOnly.redirect at width ${width.round()}: '
-        '${allowed ? 'allowed' : 'go Home'}');
+    _log(
+      'WideOnly.redirect at width ${width.round()}: '
+      '${allowed ? 'allowed' : 'go Home'}',
+    );
     return allowed ? null : const LabHomeRoute();
   }
 
@@ -124,7 +130,7 @@ class WideOnlyRoute extends FoldableRoute {
 }
 
 /// A page with state (text + counter), pushed above whatever is shown.
-class NoteRoute extends FoldableRoute {
+class NoteRoute extends FoldableFlatRoute {
   const NoteRoute();
 
   @override
@@ -240,7 +246,10 @@ class LabStatus extends StatelessWidget {
                     'stack: ${router.stack.map((r) => r.uri).join('  >  ')}',
                     key: const Key('stack'),
                   ),
-                  Text('location: ${router.location}', key: const Key('location')),
+                  Text(
+                    'location: ${router.location}',
+                    key: const Key('location'),
+                  ),
                   Text(
                     'window: ${size.width.round()} x ${size.height.round()}'
                     '   isNavigating: ${router.isNavigating.value}',

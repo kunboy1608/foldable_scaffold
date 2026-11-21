@@ -14,7 +14,7 @@ import 'package:foldable_router/foldable_router.dart';
 // So while a page can be popped, the router must never send `false`, not
 // even for one frame.
 
-class HomeRoute extends FoldableRoute {
+class HomeRoute extends FoldableFlatRoute {
   const HomeRoute();
 
   @override
@@ -26,14 +26,14 @@ class HomeRoute extends FoldableRoute {
 
 /// Its redirect reads MediaQuery, so the `Router` rebuilds (and hands the
 /// Navigator a new `pages` list) whenever the keyboard insets change.
-class SizedRoute extends FoldableRoute {
+class SizedRoute extends FoldableFlatRoute {
   const SizedRoute();
 
   @override
   String get path => '/sized';
 
   @override
-  FoldableRoute? get parent => const HomeRoute();
+  FoldableFlatRoute? get parent => const HomeRoute();
 
   @override
   FoldableRoute? redirect(BuildContext context, RouteState state) {
@@ -45,7 +45,7 @@ class SizedRoute extends FoldableRoute {
   Widget build(BuildContext context) => const Text('sized');
 }
 
-class NoteRoute extends FoldableRoute {
+class NoteRoute extends FoldableFlatRoute {
   const NoteRoute();
 
   @override

@@ -1,16 +1,22 @@
 /// A small Navigation 2.0 router where every route is a plain Dart class.
 ///
 /// See [FoldableRouter] for the entry point, [FoldableRoute] for how to
-/// declare routes and [FoldableShellRoute] for a persistent frame (tabs,
-/// rail, ...) with one stack per branch.
+/// declare routes ([FoldableFlatRoute] outside a shell,
+/// [FoldableShellChildRoute] inside one) and [FoldableShellRoute] for a
+/// persistent frame (tabs, rail, ...) with one stack per branch.
 library;
 
-export 'src/foldable_route.dart' show FoldableRoute;
+export 'src/foldable_route.dart'
+    show
+        FoldableRoute,
+        FoldableFlatRoute,
+        FoldableShellChildRoute,
+        FoldableShellParent,
+        FoldableShellRoute,
+        FoldableShellState;
 export 'src/foldable_params.dart' show FoldableParams;
 export 'src/foldable_router.dart'
     show FoldableRouter, FoldableRouteFactory, FoldableNotFoundBuilder;
-export 'src/foldable_shell_route.dart'
-    show FoldableShellRoute, FoldableShellState;
 export 'src/foldable_panes.dart' show FoldablePane, FoldablePanes;
 export 'src/page_transitions.dart' show FoldablePageTransitionsResolver;
 export 'src/redirect_resolver.dart'
