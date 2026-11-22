@@ -56,7 +56,7 @@ class HomeRoute extends FoldableShellChildRoute {
   const HomeRoute();
 
   @override
-  String get path => '/';
+  String get segment => '';
 
   @override
   FoldableShellParent get parent => const MainShellRoute();
@@ -81,7 +81,7 @@ class UsersRoute extends FoldableShellChildRoute {
   const UsersRoute();
 
   @override
-  String get path => '/users';
+  String get segment => 'users';
 
   @override
   FoldableShellParent get parent => const MainShellRoute();
@@ -96,7 +96,7 @@ class UserRoute extends FoldableShellChildRoute {
   final String id;
 
   @override
-  String get path => '/users/detail';
+  String get segment => 'detail';
 
   // Constructor fields travel in the query string: /users/detail?id=7
   @override
@@ -117,7 +117,7 @@ class LoginRoute extends FoldableFlatRoute {
   final String? from;
 
   @override
-  String get path => '/login';
+  String get segment => 'login';
 
   @override
   Map<String, Object?> get params => {'from': from};
@@ -130,7 +130,7 @@ class ProfileRoute extends FoldableShellChildRoute {
   const ProfileRoute();
 
   @override
-  String get path => '/profile';
+  String get segment => 'profile';
 
   @override
   FoldableShellParent get parent => const MainShellRoute();
@@ -157,7 +157,7 @@ class SettingsRoute extends FoldableShellChildRoute {
   const SettingsRoute();
 
   @override
-  String get path => '/profile/settings';
+  String get segment => 'settings';
 
   // No redirect of its own: the parent's guard covers it.
   @override
@@ -171,7 +171,7 @@ class ColorPickerRoute extends FoldableFlatRoute {
   const ColorPickerRoute();
 
   @override
-  String get path => '/pick-color';
+  String get segment => 'pick-color';
 
   @override
   Widget build(BuildContext context) => const ColorPickerPage();

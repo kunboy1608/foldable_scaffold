@@ -12,7 +12,7 @@ class HomeRoute extends FoldableFlatRoute {
   const HomeRoute();
 
   @override
-  String get path => '/';
+  String get segment => '';
 
   @override
   Widget build(BuildContext context) => const Text('home');
@@ -22,7 +22,7 @@ class UsersRoute extends FoldableFlatRoute {
   const UsersRoute();
 
   @override
-  String get path => '/users';
+  String get segment => 'users';
 
   @override
   Widget build(BuildContext context) => const Text('users');
@@ -35,7 +35,7 @@ class UserRoute extends FoldableFlatRoute {
   final String? tab;
 
   @override
-  String get path => '/users/detail';
+  String get segment => 'detail';
 
   @override
   Map<String, Object?> get params => {'id': id, 'tab': tab};
@@ -63,7 +63,7 @@ class LoginRoute extends FoldableFlatRoute {
   const LoginRoute();
 
   @override
-  String get path => '/login';
+  String get segment => 'login';
 
   @override
   Widget build(BuildContext context) => const Text('login');
@@ -73,7 +73,7 @@ class AccountRoute extends FoldableFlatRoute {
   const AccountRoute();
 
   @override
-  String get path => '/account';
+  String get segment => 'account';
 
   @override
   FoldableRoute? redirect(BuildContext context, RouteState state) =>
@@ -87,7 +87,7 @@ class SettingsRoute extends FoldableFlatRoute {
   const SettingsRoute();
 
   @override
-  String get path => '/account/settings';
+  String get segment => 'settings';
 
   @override
   FoldableFlatRoute? get parent => const AccountRoute();
@@ -101,7 +101,7 @@ class SlowRoute extends FoldableFlatRoute {
   const SlowRoute();
 
   @override
-  String get path => '/slow';
+  String get segment => 'slow';
 
   @override
   Future<FoldableRoute?> redirect(
@@ -120,7 +120,7 @@ class BrokenRoute extends FoldableFlatRoute {
   const BrokenRoute();
 
   @override
-  String get path => '/broken';
+  String get segment => 'broken';
 
   @override
   FoldableRoute? redirect(BuildContext context, RouteState state) =>
@@ -136,7 +136,7 @@ class LoopRoute extends FoldableFlatRoute {
   final int n;
 
   @override
-  String get path => '/loop';
+  String get segment => 'loop';
 
   @override
   Map<String, Object?> get params => {'n': '$n'};

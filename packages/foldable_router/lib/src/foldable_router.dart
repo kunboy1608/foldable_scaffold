@@ -65,7 +65,7 @@ class FoldableRouter implements Listenable {
   /// The route opened on launch when the platform supplies no deep link.
   final FoldableRoute initial;
 
-  /// Maps a static path to a factory creating the route from URL query
+  /// Maps a [FoldableRoute.fullPath] to a factory creating the route from URL query
   /// parameters. Used for deep links and the web address bar.
   ///
   /// A path missing here, or a factory that throws (a missing parameter, a
@@ -196,7 +196,7 @@ class FoldableRouter implements Listenable {
     final normalized = uri.replace(path: path);
     // A shell has no path of its own, so when it is the initial route `/`
     // resolves to it (opening it opens its first branch).
-    final initialPath = initial is FoldableShellRoute ? '/' : initial.path;
+    final initialPath = initial.fullPath;
     if (path == initialPath &&
         mapEquals(normalized.queryParameters, initial.uri.queryParameters)) {
       return initial;
@@ -211,9 +211,9 @@ class FoldableRouter implements Listenable {
       return null;
     }
     assert(
-      route.path == path,
-      'The factory registered for "$path" returned $route, whose path is '
-      '"${route.path}".',
+      route.fullPath == path,
+      'The factory registered for "$path" returned $route, whose full path is '
+      '"${route.fullPath}".',
     );
     return route;
   }

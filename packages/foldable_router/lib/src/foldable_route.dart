@@ -27,7 +27,7 @@ part 'foldable_shell_route.dart';
 ///   final String id;
 ///
 ///   @override
-///   String get path => '/users/detail';
+///   String get segment => 'detail'; // full path: /users/detail
 ///
 ///   @override
 ///   Map<String, Object?> get params => {'id': id};
@@ -40,7 +40,7 @@ part 'foldable_shell_route.dart';
 /// }
 /// ```
 ///
-/// Two routes are equal when they have the same [path] and the same non-null
+/// Two routes are equal when they have the same [fullPath] and the same non-null
 /// [params] *after encoding them to strings*. So `{'id': 1}` and
 /// `{'id': '1'}` compare equal, as do two [DateTime]s for the same instant
 /// written with different time zones.
@@ -49,11 +49,31 @@ sealed class FoldableRoute {
   /// Const constructor for subclasses.
   const FoldableRoute();
 
-  /// The static path of this route, for example `/users/detail`.
+  /// The part of the URL path that belongs to this route alone, for example
+  /// `detail` for a route whose [fullPath] is `/users/detail`.
   ///
-  /// Paths never contain placeholders such as `:id`; all parameters travel in
-  /// the query string (see [params]).
-  String get path;
+  /// The full path is built from the [segment]s of the [parent] chain (see
+  /// [fullPath]), so a route never repeats the path of its parent. Leading and
+  /// trailing slashes are ignored, and an empty segment adds nothing (the
+  /// root route of an app uses `''`, as does a [FoldableShellRoute]).
+  ///
+  /// A segment never contains placeholders such as `:id`; all parameters
+  /// travel in the query string (see [params]).
+  String get segment;
+
+  /// The full URL path of this route: the [segment]s of its [parent] chain,
+  /// from the root down to this route, joined with `/`. It always starts with
+  /// `/`, for example `/users/detail`.
+  ///
+  /// This is the key of the route in the `routes` table of [FoldableRouter].
+  String get fullPath {
+    final parts = <String>[];
+    for (FoldableRoute? r = this; r != null; r = r.parent) {
+      final part = r.segment.replaceAll(RegExp(r'^/+|/+$'), '');
+      if (part.isNotEmpty) parts.add(part);
+    }
+    return '/${parts.reversed.join('/')}';
+  }
 
   /// The parameters of this route, written to the URL as the query string.
   ///
@@ -132,13 +152,13 @@ sealed class FoldableRoute {
   /// Builds the page content for this route.
   Widget build(BuildContext context);
 
-  /// The location of this route: [path] plus a query built from [params].
+  /// The location of this route: [fullPath] plus a query built from [params].
   ///
   /// Throws an [ArgumentError] (also in release builds) when a parameter has
   /// an unsupported type or is a non-finite `double`.
   Uri get uri {
     final query = _query;
-    return Uri(path: path, queryParameters: query.isEmpty ? null : query);
+    return Uri(path: fullPath, queryParameters: query.isEmpty ? null : query);
   }
 
   /// [params] encoded to strings, with the `null` entries left out.
@@ -174,7 +194,7 @@ sealed class FoldableRoute {
   @override
   bool operator ==(Object other) {
     if (identical(this, other)) return true;
-    if (other is! FoldableRoute || other.path != path) return false;
+    if (other is! FoldableRoute || other.fullPath != fullPath) return false;
     final a = _query;
     final b = other._query;
     if (a.length != b.length) return false;
@@ -186,7 +206,7 @@ sealed class FoldableRoute {
 
   @override
   int get hashCode => Object.hash(
-    path,
+    fullPath,
     Object.hashAllUnordered(
       _query.entries.map((e) => Object.hash(e.key, e.value)),
     ),
@@ -207,7 +227,7 @@ sealed class FoldableRoute {
 ///   const LoginRoute();
 ///
 ///   @override
-///   String get path => '/login';
+///   String get segment => 'login';
 ///
 ///   @override
 ///   Widget build(BuildContext context) => const LoginPage();
@@ -246,7 +266,7 @@ sealed class FoldableShellParent extends FoldableRoute {
 ///   const UsersRoute();
 ///
 ///   @override
-///   String get path => '/users';
+///   String get segment => 'users';
 ///
 ///   @override
 ///   FoldableShellParent get parent => const MainShellRoute();

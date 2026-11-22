@@ -4,12 +4,12 @@ import 'package:foldable_router/foldable_router.dart';
 
 /// A route whose parameter map is set directly, used to test the URL encoding.
 class RawRoute extends FoldableFlatRoute {
-  const RawRoute(this.values, {this.path = '/raw'});
+  const RawRoute(this.values, {this.segment = '/raw'});
 
   final Map<String, Object?> values;
 
   @override
-  final String path;
+  final String segment;
 
   @override
   Map<String, Object?> get params => values;
@@ -35,7 +35,7 @@ class AllTypesRoute extends FoldableFlatRoute {
   final DateTime t;
 
   @override
-  String get path => '/all';
+  String get segment => 'all';
 
   @override
   Map<String, Object?> get params => {'s': s, 'i': i, 'd': d, 'b': b, 't': t};
@@ -48,7 +48,7 @@ class HomeStub extends FoldableFlatRoute {
   const HomeStub();
 
   @override
-  String get path => '/';
+  String get segment => '';
 
   @override
   Widget build(BuildContext context) => const Text('home');

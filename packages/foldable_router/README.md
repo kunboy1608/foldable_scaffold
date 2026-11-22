@@ -11,12 +11,16 @@ Declare routes by subclassing `FoldableFlatRoute` (or, inside a shell,
 Paths are static; parameters travel in the query string
 (`/users/detail?id=7`).
 
+A route declares only its own `segment`; its `fullPath` (the URL path, and the
+key in the `routes` table) is the segments of its `parent` chain joined with
+`/`, so renaming a parent updates the URL of all its children.
+
 ```dart
 class UsersRoute extends FoldableFlatRoute {
   const UsersRoute();
 
   @override
-  String get path => '/users';
+  String get segment => 'users';
 
   @override
   Widget build(BuildContext context) => const UsersPage();
@@ -28,7 +32,7 @@ class UserRoute extends FoldableFlatRoute {
   final String id;
 
   @override
-  String get path => '/users/detail';
+  String get segment => 'detail'; // full path: /users/detail
 
   @override
   Map<String, Object?> get params => {'id': id};
@@ -235,7 +239,7 @@ class SettingsTabRoute extends FoldableShellChildRoute with SettingsBody {
   const SettingsTabRoute();
 
   @override
-  String get path => '/settings';
+  String get segment => 'settings';
 
   @override
   FoldableShellParent get parent => const MainShellRoute();
@@ -246,7 +250,7 @@ class SettingsFullRoute extends FoldableFlatRoute with SettingsBody {
   const SettingsFullRoute();
 
   @override
-  String get path => '/settings/full';
+  String get segment => 'settings/full';
 }
 ```
 
@@ -287,7 +291,7 @@ class UsersRoute extends FoldableShellChildRoute {
   const UsersRoute();
 
   @override
-  String get path => '/users';
+  String get segment => 'users';
 
   @override
   FoldableShellParent get parent => const MainShellRoute(); // the Users tab
@@ -310,7 +314,7 @@ Rules:
 
 - The shell has no path and never appears in the URL: `location` is always
   the URI of the top page of the current branch (or of the topmost
-  full-screen page above the shell). The shell's `path` is `''` and
+  full-screen page above the shell). The shell's `segment` is `''` and
   `build` is never called (it throws `UnsupportedError`): the frame comes
   from `buildShell`.
 - The shell's `redirect` runs before the redirects of the branch routes,

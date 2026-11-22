@@ -86,7 +86,7 @@ class AlphaRoute extends FoldableShellChildRoute {
   const AlphaRoute();
 
   @override
-  String get path => '/alpha';
+  String get segment => 'alpha';
 
   @override
   FoldableShellParent get parent => const LayoutShell();
@@ -99,7 +99,7 @@ class BetaRoute extends FoldableShellChildRoute {
   const BetaRoute();
 
   @override
-  String get path => '/alpha/beta';
+  String get segment => 'beta';
 
   @override
   FoldableShellParent get parent => const AlphaRoute();

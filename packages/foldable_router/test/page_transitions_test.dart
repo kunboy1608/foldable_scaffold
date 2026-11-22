@@ -27,7 +27,7 @@ class _RecordingTransitions extends PageTransitionsBuilder {
 class _Home extends FoldableFlatRoute {
   const _Home();
   @override
-  String get path => '/home';
+  String get segment => 'home';
   @override
   Widget build(BuildContext context) => const Text('home');
 }
@@ -35,7 +35,7 @@ class _Home extends FoldableFlatRoute {
 class _Detail extends FoldableFlatRoute {
   const _Detail();
   @override
-  String get path => '/home/detail';
+  String get segment => 'detail';
   @override
   FoldableFlatRoute? get parent => const _Home();
   @override

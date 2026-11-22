@@ -94,7 +94,7 @@ class PixelShell extends FoldableShellRoute {
 class AListRoute extends FoldableShellChildRoute {
   const AListRoute();
   @override
-  String get path => '/a';
+  String get segment => 'a';
   @override
   FoldableShellParent get parent => const PixelShell();
   @override
@@ -105,7 +105,7 @@ class AItemRoute extends FoldableShellChildRoute {
   const AItemRoute({required this.id});
   final String id;
   @override
-  String get path => '/a/item';
+  String get segment => 'item';
   @override
   Map<String, Object?> get params => {'id': id};
   @override
@@ -119,7 +119,7 @@ class ASubRoute extends FoldableShellChildRoute {
   const ASubRoute({required this.id});
   final String id;
   @override
-  String get path => '/a/item/sub';
+  String get segment => 'sub';
   @override
   Map<String, Object?> get params => {'id': id};
   @override
@@ -131,7 +131,7 @@ class ASubRoute extends FoldableShellChildRoute {
 class BHomeRoute extends FoldableShellChildRoute {
   const BHomeRoute();
   @override
-  String get path => '/b';
+  String get segment => 'b';
   @override
   FoldableShellParent get parent => const PixelShell();
   @override

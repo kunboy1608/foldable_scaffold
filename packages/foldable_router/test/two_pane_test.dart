@@ -71,7 +71,7 @@ class UsersRoute extends FoldableShellChildRoute {
   const UsersRoute();
 
   @override
-  String get path => '/users';
+  String get segment => 'users';
 
   @override
   FoldableShellParent get parent => const TwoPaneShell();
@@ -145,7 +145,7 @@ class UserRoute extends FoldableShellChildRoute {
   final String id;
 
   @override
-  String get path => '/users/detail';
+  String get segment => 'detail';
 
   @override
   Map<String, Object?> get params => {'id': id};
@@ -247,7 +247,7 @@ class HomeRoute extends FoldableShellChildRoute {
   const HomeRoute();
 
   @override
-  String get path => '/';
+  String get segment => '';
 
   @override
   FoldableShellParent get parent => const TwoPaneShell();
@@ -263,7 +263,7 @@ class GuardedUserRoute extends FoldableShellChildRoute {
   final String id;
 
   @override
-  String get path => '/users/guarded';
+  String get segment => 'guarded';
 
   @override
   Map<String, Object?> get params => {'id': id};
@@ -297,7 +297,7 @@ class DeepRoute extends FoldableShellChildRoute {
   const DeepRoute();
 
   @override
-  String get path => '/users/deep';
+  String get segment => 'deep';
 
   @override
   FoldableShellParent get parent => const UserRoute(id: '7');
@@ -325,7 +325,7 @@ FoldableRouter createRouter() {
     routes: {
       '/users': (_) => const UsersRoute(),
       '/users/detail': (params) => UserRoute(id: params['id']!),
-      '/users/deep': (_) => const DeepRoute(),
+      '/users/detail/deep': (_) => const DeepRoute(),
     },
     notFoundBuilder: (context, uri) => Text('not found: $uri'),
   );

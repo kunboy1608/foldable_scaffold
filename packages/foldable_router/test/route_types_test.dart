@@ -6,7 +6,7 @@ class HomeRoute extends FoldableFlatRoute {
   const HomeRoute();
 
   @override
-  String get path => '/home';
+  String get segment => 'home';
 
   @override
   Widget build(BuildContext context) => const Text('home');
@@ -35,7 +35,7 @@ class TabOneRoute extends FoldableShellChildRoute {
   const TabOneRoute();
 
   @override
-  String get path => '/one';
+  String get segment => 'one';
 
   @override
   FoldableShellParent get parent => const TypesShell();
@@ -48,7 +48,7 @@ class TabTwoRoute extends FoldableShellChildRoute {
   const TabTwoRoute();
 
   @override
-  String get path => '/two';
+  String get segment => 'two';
 
   @override
   FoldableShellParent get parent => const TypesShell();
@@ -63,7 +63,7 @@ class TwoDetailRoute extends FoldableShellChildRoute {
   final String id;
 
   @override
-  String get path => '/two/detail';
+  String get segment => 'detail';
 
   @override
   Map<String, Object?> get params => {'id': id};
@@ -80,7 +80,7 @@ class OrphanRoute extends FoldableShellChildRoute {
   const OrphanRoute();
 
   @override
-  String get path => '/orphan';
+  String get segment => 'orphan';
 
   @override
   FoldableShellParent get parent => const TypesShell();
@@ -96,7 +96,7 @@ class RedirectingRoute extends FoldableFlatRoute {
   final FoldableRoute target;
 
   @override
-  String get path => '/redirecting';
+  String get segment => 'redirecting';
 
   @override
   FoldableRoute? redirect(BuildContext context, RouteState state) =>
@@ -110,7 +110,7 @@ class PickerRoute extends FoldableFlatRoute {
   const PickerRoute();
 
   @override
-  String get path => '/pick';
+  String get segment => 'pick';
 
   @override
   Widget build(BuildContext context) => const Text('picker');
@@ -132,7 +132,7 @@ class SettingsTabRoute extends FoldableShellChildRoute with SettingsBody {
   const SettingsTabRoute();
 
   @override
-  String get path => '/settings';
+  String get segment => 'settings';
 
   @override
   FoldableShellParent get parent => const TypesShell();
@@ -142,7 +142,7 @@ class SettingsFullRoute extends FoldableFlatRoute with SettingsBody {
   const SettingsFullRoute();
 
   @override
-  String get path => '/settings/full';
+  String get segment => 'settings/full';
 }
 
 Future<FoldableRouter> pumpRouter(

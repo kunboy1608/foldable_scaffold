@@ -42,7 +42,7 @@ class HomeRoute extends FoldableFlatRoute {
   const HomeRoute();
 
   @override
-  String get path => '/';
+  String get segment => '';
 
   @override
   Widget build(BuildContext context) => const Text('home');
@@ -52,7 +52,7 @@ class OtherRoute extends FoldableFlatRoute {
   const OtherRoute();
 
   @override
-  String get path => '/other';
+  String get segment => 'other';
 
   @override
   Widget build(BuildContext context) => const Text('other');
@@ -62,7 +62,7 @@ class LoginRoute extends FoldableFlatRoute {
   const LoginRoute();
 
   @override
-  String get path => '/login';
+  String get segment => 'login';
 
   @override
   Widget build(BuildContext context) => const Text('login');
@@ -73,7 +73,7 @@ class SizedRoute extends FoldableFlatRoute {
   const SizedRoute();
 
   @override
-  String get path => '/sized';
+  String get segment => 'sized';
 
   @override
   FutureOr<FoldableRoute?> redirect(BuildContext context, RouteState state) {
@@ -92,7 +92,7 @@ class SlowOnResizeRoute extends FoldableFlatRoute {
   const SlowOnResizeRoute();
 
   @override
-  String get path => '/slow';
+  String get segment => 'slow';
 
   @override
   FutureOr<FoldableRoute?> redirect(
@@ -126,7 +126,7 @@ class GuardedRoute extends FoldableFlatRoute {
   const GuardedRoute();
 
   @override
-  String get path => '/guarded';
+  String get segment => 'guarded';
 
   @override
   FutureOr<FoldableRoute?> redirect(BuildContext context, RouteState state) =>
@@ -165,7 +165,7 @@ class BranchA extends FoldableShellChildRoute {
   const BranchA();
 
   @override
-  String get path => '/a';
+  String get segment => 'a';
 
   @override
   FoldableShellParent get parent => const StackShell();
@@ -184,7 +184,7 @@ class AChild extends FoldableShellChildRoute {
   const AChild();
 
   @override
-  String get path => '/a/child';
+  String get segment => 'child';
 
   @override
   FoldableShellParent get parent => const BranchA();
@@ -198,7 +198,7 @@ class BranchB extends FoldableShellChildRoute {
   const BranchB();
 
   @override
-  String get path => '/b';
+  String get segment => 'b';
 
   @override
   FoldableShellParent get parent => const StackShell();
@@ -217,7 +217,7 @@ class BChild extends FoldableShellChildRoute {
   const BChild();
 
   @override
-  String get path => '/b/child';
+  String get segment => 'child';
 
   @override
   FoldableShellParent get parent => const BranchB();
@@ -231,7 +231,7 @@ class OverlayRoute extends FoldableFlatRoute {
   const OverlayRoute();
 
   @override
-  String get path => '/overlay';
+  String get segment => 'overlay';
 
   @override
   Widget build(BuildContext context) =>
@@ -265,7 +265,7 @@ class PaneRoot extends FoldableShellChildRoute {
   const PaneRoot();
 
   @override
-  String get path => '/pane';
+  String get segment => 'pane';
 
   @override
   FoldableShellParent get parent => const PaneShell();
@@ -286,7 +286,7 @@ class PaneDetail extends FoldableShellChildRoute {
   const PaneDetail();
 
   @override
-  String get path => '/pane/detail';
+  String get segment => 'detail';
 
   @override
   FoldableShellParent get parent => const PaneRoot();
@@ -303,7 +303,7 @@ class PendingHomeRoute extends FoldableFlatRoute {
   const PendingHomeRoute();
 
   @override
-  String get path => '/';
+  String get segment => '';
 
   @override
   FutureOr<FoldableRoute?> redirect(BuildContext context, RouteState state) {
@@ -323,7 +323,7 @@ class PendingSlowRoute extends FoldableFlatRoute {
   const PendingSlowRoute();
 
   @override
-  String get path => '/pending-slow';
+  String get segment => 'pending-slow';
 
   @override
   FoldableFlatRoute? get parent => const PendingHomeRoute();
@@ -346,7 +346,7 @@ class ThrowingSlowRoute extends FoldableFlatRoute {
   const ThrowingSlowRoute();
 
   @override
-  String get path => '/throwing-slow';
+  String get segment => 'throwing-slow';
 
   @override
   FoldableFlatRoute? get parent => const PendingHomeRoute();
@@ -369,7 +369,7 @@ class SlowGuardedRoute extends FoldableFlatRoute {
   const SlowGuardedRoute();
 
   @override
-  String get path => '/slow-guarded';
+  String get segment => 'slow-guarded';
 
   @override
   FutureOr<FoldableRoute?> redirect(
@@ -393,7 +393,7 @@ class SometimesThrowingRoute extends FoldableFlatRoute {
   const SometimesThrowingRoute();
 
   @override
-  String get path => '/sometimes-throwing';
+  String get segment => 'sometimes-throwing';
 
   @override
   FutureOr<FoldableRoute?> redirect(BuildContext context, RouteState state) {
@@ -438,7 +438,7 @@ class PendingTabA extends FoldableShellChildRoute {
   const PendingTabA();
 
   @override
-  String get path => '/pending-tab-a';
+  String get segment => 'pending-tab-a';
 
   @override
   FoldableShellParent get parent => const PendingTabShell();
@@ -457,7 +457,7 @@ class PendingTabB extends FoldableShellChildRoute {
   const PendingTabB();
 
   @override
-  String get path => '/pending-tab-b';
+  String get segment => 'pending-tab-b';
 
   @override
   FoldableShellParent get parent => const PendingTabShell();

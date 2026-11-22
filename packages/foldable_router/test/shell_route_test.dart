@@ -12,7 +12,7 @@ class HomeRoute extends FoldableFlatRoute {
   const HomeRoute();
 
   @override
-  String get path => '/';
+  String get segment => '';
 
   @override
   Widget build(BuildContext context) => const Text('home');
@@ -22,7 +22,7 @@ class LoginRoute extends FoldableFlatRoute {
   const LoginRoute();
 
   @override
-  String get path => '/login';
+  String get segment => 'login';
 
   @override
   Widget build(BuildContext context) => const Text('login');
@@ -32,7 +32,7 @@ class PickerRoute extends FoldableFlatRoute {
   const PickerRoute();
 
   @override
-  String get path => '/pick';
+  String get segment => 'pick';
 
   @override
   Widget build(BuildContext context) => Column(
@@ -81,7 +81,7 @@ class TabARoute extends FoldableShellChildRoute {
   const TabARoute();
 
   @override
-  String get path => '/a';
+  String get segment => 'a';
 
   @override
   FoldableShellParent get parent => const ShellMain();
@@ -96,7 +96,7 @@ class ADetailRoute extends FoldableShellChildRoute {
   final String id;
 
   @override
-  String get path => '/a/detail';
+  String get segment => 'detail';
 
   @override
   Map<String, Object?> get params => {'id': id};
@@ -114,7 +114,7 @@ class TabBRoute extends FoldableShellChildRoute {
   static int redirects = 0;
 
   @override
-  String get path => '/b';
+  String get segment => 'b';
 
   @override
   FoldableShellParent get parent => const ShellMain();
@@ -135,7 +135,7 @@ class BDetailRoute extends FoldableShellChildRoute {
   final String id;
 
   @override
-  String get path => '/b/detail';
+  String get segment => 'detail';
 
   @override
   Map<String, Object?> get params => {'id': id};
@@ -151,7 +151,7 @@ class GuardedTabRoute extends FoldableShellChildRoute {
   const GuardedTabRoute();
 
   @override
-  String get path => '/guarded';
+  String get segment => 'guarded';
 
   @override
   FoldableShellParent get parent => const ShellMain();
@@ -169,7 +169,7 @@ class OrphanRoute extends FoldableShellChildRoute {
   const OrphanRoute();
 
   @override
-  String get path => '/orphan';
+  String get segment => 'orphan';
 
   @override
   FoldableShellParent get parent => const ShellMain();
@@ -184,7 +184,7 @@ class RedirectIntoShellRoute extends FoldableFlatRoute {
   const RedirectIntoShellRoute();
 
   @override
-  String get path => '/redirect-into';
+  String get segment => 'redirect-into';
 
   @override
   FoldableRoute? redirect(BuildContext context, RouteState state) =>
@@ -220,7 +220,7 @@ class OrderedTabRoute extends FoldableShellChildRoute {
   const OrderedTabRoute();
 
   @override
-  String get path => '/ordered';
+  String get segment => 'ordered';
 
   @override
   FoldableShellParent get parent => const OrderedShell();
@@ -241,7 +241,7 @@ class LandingRoute extends FoldableFlatRoute {
   const LandingRoute();
 
   @override
-  String get path => '/landing';
+  String get segment => 'landing';
 
   @override
   Widget build(BuildContext context) => const CounterPage('landing');
@@ -270,7 +270,7 @@ class LandingTabRoute extends FoldableShellChildRoute {
   const LandingTabRoute();
 
   @override
-  String get path => '/landing/tab';
+  String get segment => 'tab';
 
   @override
   FoldableShellParent get parent => const LandingShell();
@@ -303,7 +303,7 @@ class SecretRoute extends FoldableShellChildRoute {
   const SecretRoute();
 
   @override
-  String get path => '/secret';
+  String get segment => 'secret';
 
   @override
   FoldableShellParent get parent => const GuardedShell();
@@ -327,7 +327,7 @@ class HeroListRoute extends FoldableShellChildRoute {
   const HeroListRoute();
 
   @override
-  String get path => '/hero';
+  String get segment => 'hero';
 
   @override
   FoldableShellParent get parent => const HeroShell();
@@ -361,7 +361,7 @@ class HeroDetailRoute extends FoldableShellChildRoute {
   const HeroDetailRoute();
 
   @override
-  String get path => '/hero/detail';
+  String get segment => 'detail';
 
   @override
   FoldableShellParent get parent => const HeroListRoute();

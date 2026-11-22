@@ -1,5 +1,14 @@
 ## 0.0.1
 
+* **Breaking:** `FoldableRoute.path` is replaced by `segment`: the part of the
+  URL path that belongs to the route alone (`'detail'`, not
+  `'/users/detail'`). The new getter `fullPath` joins the segments of the
+  `parent` chain (empty segments, such as a shell's, add nothing; leading and
+  trailing slashes are ignored) and is used for `uri`, equality and the keys
+  of `FoldableRouter.routes`. A route no longer repeats the path of its
+  parent. To migrate, rename `path` to `segment` and drop the prefix shared
+  with the parent; a route with no parent keeps its path, e.g. `'/login'` or
+  `'login'`.
 * **Breaking:** `FoldableRoute` is now `sealed`: a route extends
   `FoldableFlatRoute` (outside any shell) or `FoldableShellChildRoute`
   (inside a `FoldableShellRoute`); `FoldableShellParent` (exported, sealed)

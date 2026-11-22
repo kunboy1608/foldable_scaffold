@@ -41,10 +41,10 @@ class Marker extends InheritedWidget {
 }
 
 class RecordingRoute extends FoldableFlatRoute {
-  const RecordingRoute(this.path);
+  const RecordingRoute(this.segment);
 
   @override
-  final String path;
+  final String segment;
 
   @override
   FutureOr<FoldableRoute?> redirect(BuildContext context, RouteState state) {
@@ -53,7 +53,7 @@ class RecordingRoute extends FoldableFlatRoute {
   }
 
   @override
-  Widget build(BuildContext context) => Text('recording $path');
+  Widget build(BuildContext context) => Text('recording $segment');
 }
 
 class RecordShell extends FoldableShellRoute {
@@ -93,10 +93,8 @@ class RecordShell extends FoldableShellRoute {
 class RecordBranch extends FoldableShellChildRoute {
   const RecordBranch(this.segment);
 
-  final String segment;
-
   @override
-  String get path => '/$segment';
+  final String segment;
 
   @override
   FoldableShellParent get parent => const RecordShell();
@@ -115,7 +113,7 @@ class HomeStub extends FoldableFlatRoute {
   const HomeStub();
 
   @override
-  String get path => '/';
+  String get segment => '';
 
   @override
   Widget build(BuildContext context) => const Text('home');
@@ -128,7 +126,7 @@ class GatedParent extends FoldableFlatRoute {
   const GatedParent();
 
   @override
-  String get path => '/gated';
+  String get segment => 'gated';
 
   @override
   FutureOr<FoldableRoute?> redirect(
@@ -150,7 +148,7 @@ class CountingChild extends FoldableFlatRoute {
   static int redirects = 0;
 
   @override
-  String get path => '/gated/child';
+  String get segment => 'child';
 
   @override
   FoldableFlatRoute? get parent => const GatedParent();

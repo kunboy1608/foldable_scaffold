@@ -7,7 +7,7 @@ import 'package:foldable_router/foldable_router.dart';
 class HomeRoute extends FoldableFlatRoute {
   const HomeRoute();
   @override
-  String get path => '/home';
+  String get segment => 'home';
   @override
   Widget build(BuildContext context) =>
       const Scaffold(body: Center(child: Text('home page')));
@@ -16,7 +16,7 @@ class HomeRoute extends FoldableFlatRoute {
 class DetailRoute extends FoldableFlatRoute {
   const DetailRoute();
   @override
-  String get path => '/home/detail';
+  String get segment => 'detail';
   @override
   FoldableFlatRoute? get parent => const HomeRoute();
   @override
@@ -29,7 +29,7 @@ Completer<void>? gate;
 class SlowRoute extends FoldableFlatRoute {
   const SlowRoute();
   @override
-  String get path => '/slow';
+  String get segment => 'slow';
   @override
   Future<FoldableRoute?> redirect(
     BuildContext context,
@@ -79,7 +79,7 @@ class Shell extends FoldableShellRoute {
 class TabRoute extends FoldableShellChildRoute {
   const TabRoute();
   @override
-  String get path => '/tab';
+  String get segment => 'tab';
   @override
   FoldableShellParent get parent => const Shell();
   @override
@@ -90,7 +90,7 @@ class TabRoute extends FoldableShellChildRoute {
 class TabDetailRoute extends FoldableShellChildRoute {
   const TabDetailRoute();
   @override
-  String get path => '/tab/detail';
+  String get segment => 'detail';
   @override
   FoldableShellParent get parent => const TabRoute();
   @override
@@ -101,7 +101,7 @@ class TabDetailRoute extends FoldableShellChildRoute {
 class OtherTabRoute extends FoldableShellChildRoute {
   const OtherTabRoute();
   @override
-  String get path => '/other';
+  String get segment => 'other';
   @override
   FoldableShellParent get parent => const Shell();
   @override

@@ -71,7 +71,7 @@ class FoldableShellState {
 ///   const UsersRoute();
 ///
 ///   @override
-///   String get path => '/users';
+///   String get segment => 'users';
 ///
 ///   // The element right below the shell decides the branch.
 ///   @override
@@ -90,7 +90,7 @@ class FoldableShellState {
 ///   error.
 /// * The shell has no path and never appears in the URL: the location is
 ///   the one of the top page of the current branch (or of the topmost
-///   full-screen page above the shell). [path] is the empty string and the
+///   full-screen page above the shell). [segment] is the empty string and the
 ///   shell needs no entry in the router's `routes` table.
 /// * [buildShell] draws the frame; [build] is never called by the router.
 /// * [redirect] runs before the redirects of the branch routes, as for any
@@ -137,7 +137,7 @@ abstract class FoldableShellRoute extends FoldableShellParent {
 
   /// The shell has no path: it never appears in a URL.
   @override
-  String get path => '';
+  String get segment => '';
 
   /// Never called: a shell is drawn through [buildShell].
   @override

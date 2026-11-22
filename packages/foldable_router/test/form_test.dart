@@ -93,7 +93,7 @@ class FormPageState extends State<FormPage> {
 class LoginRoute extends FoldableFlatRoute {
   const LoginRoute();
   @override
-  String get path => '/login';
+  String get segment => 'login';
   @override
   Widget build(BuildContext context) => const FormPage(tag: 'login');
 }
@@ -101,7 +101,7 @@ class LoginRoute extends FoldableFlatRoute {
 class SignupRoute extends FoldableFlatRoute {
   const SignupRoute();
   @override
-  String get path => '/login/signup';
+  String get segment => 'signup';
   @override
   FoldableFlatRoute? get parent => const LoginRoute();
   @override
@@ -111,7 +111,7 @@ class SignupRoute extends FoldableFlatRoute {
 class LockedRoute extends FoldableFlatRoute {
   const LockedRoute();
   @override
-  String get path => '/login/locked';
+  String get segment => 'locked';
   @override
   FoldableFlatRoute? get parent => const LoginRoute();
   @override
@@ -122,7 +122,7 @@ class LockedRoute extends FoldableFlatRoute {
 class PlainRoute extends FoldableFlatRoute {
   const PlainRoute();
   @override
-  String get path => '/plain';
+  String get segment => 'plain';
   @override
   Widget build(BuildContext context) =>
       const Scaffold(body: Center(child: Text('plain page')));
@@ -134,7 +134,7 @@ class FormShell extends FoldableShellRoute {
   const FormShell();
 
   @override
-  String get path => '/';
+  String get segment => '';
 
   @override
   List<FoldableShellChildRoute> get branches => const [
@@ -175,7 +175,7 @@ class FormShell extends FoldableShellRoute {
 class ItemsRoute extends FoldableShellChildRoute {
   const ItemsRoute();
   @override
-  String get path => '/items';
+  String get segment => 'items';
   @override
   FoldableShellParent get parent => const FormShell();
   @override
@@ -185,7 +185,7 @@ class ItemsRoute extends FoldableShellChildRoute {
 class SettingsRoute extends FoldableShellChildRoute {
   const SettingsRoute();
   @override
-  String get path => '/settings';
+  String get segment => 'settings';
   @override
   FoldableShellParent get parent => const FormShell();
   @override
@@ -195,7 +195,7 @@ class SettingsRoute extends FoldableShellChildRoute {
 class EditRoute extends FoldableShellChildRoute {
   const EditRoute();
   @override
-  String get path => '/items/edit';
+  String get segment => 'edit';
   @override
   FoldableShellParent get parent => const ItemsRoute();
   @override
@@ -208,7 +208,7 @@ class EditRoute extends FoldableShellChildRoute {
 class DeepRoute extends FoldableShellChildRoute {
   const DeepRoute();
   @override
-  String get path => '/items/edit/deep';
+  String get segment => 'deep';
   @override
   FoldableShellParent get parent => const EditRoute();
   @override
@@ -218,7 +218,7 @@ class DeepRoute extends FoldableShellChildRoute {
 class GuardedRoute extends FoldableShellChildRoute {
   const GuardedRoute();
   @override
-  String get path => '/items/guarded';
+  String get segment => 'guarded';
   @override
   FoldableShellParent get parent => const ItemsRoute();
   @override
@@ -231,7 +231,7 @@ class SharedKeyRoute extends FoldableShellChildRoute {
   const SharedKeyRoute({required this.id});
   final String id;
   @override
-  String get path => '/items/shared';
+  String get segment => 'shared';
   @override
   Map<String, Object?> get params => {'id': id};
   @override

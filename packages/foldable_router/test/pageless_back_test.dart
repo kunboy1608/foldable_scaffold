@@ -14,7 +14,7 @@ class GuardedDetailRoute extends FoldableShellChildRoute {
   const GuardedDetailRoute();
 
   @override
-  String get path => '/a/guarded';
+  String get segment => 'a/guarded';
 
   @override
   FoldableShellParent get parent => const TabARoute();

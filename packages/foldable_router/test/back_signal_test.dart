@@ -18,7 +18,7 @@ class HomeRoute extends FoldableFlatRoute {
   const HomeRoute();
 
   @override
-  String get path => '/';
+  String get segment => '';
 
   @override
   Widget build(BuildContext context) => const Text('home');
@@ -30,7 +30,7 @@ class SizedRoute extends FoldableFlatRoute {
   const SizedRoute();
 
   @override
-  String get path => '/sized';
+  String get segment => 'sized';
 
   @override
   FoldableFlatRoute? get parent => const HomeRoute();
@@ -49,7 +49,7 @@ class NoteRoute extends FoldableFlatRoute {
   const NoteRoute();
 
   @override
-  String get path => '/note';
+  String get segment => 'note';
 
   @override
   Widget build(BuildContext context) => const Text('note');

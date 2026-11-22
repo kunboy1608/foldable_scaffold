@@ -9,10 +9,10 @@ typedef Redirect =
     FutureOr<FoldableRoute?> Function(BuildContext context, RouteState state);
 
 class R extends FoldableFlatRoute {
-  const R(this.path, {this.parent, this.onRedirect, this.id});
+  const R(this.segment, {this.parent, this.onRedirect, this.id});
 
   @override
-  final String path;
+  final String segment;
   @override
   final FoldableFlatRoute? parent;
   final Redirect? onRedirect;
@@ -46,6 +46,19 @@ Future<BuildContext> pumpContext(WidgetTester tester) async {
 
 void main() {
   group('FoldableRoute', () {
+    test('fullPath joins the segments of the parent chain', () {
+      const root = R('users');
+      const leaf = R('detail', parent: R('users'));
+      expect(root.fullPath, '/users');
+      expect(leaf.fullPath, '/users/detail');
+      expect(const R('/a/', parent: R('/b/')).fullPath, '/b/a');
+      expect(const R('').fullPath, '/');
+      expect(const R('', parent: R('x')).fullPath, '/x');
+      expect(leaf.uri.toString(), '/users/detail');
+      // Same segment under different parents: different routes.
+      expect(const R('e', parent: R('a')), isNot(const R('e', parent: R('b'))));
+    });
+
     test('uri is path plus non-null params', () {
       expect(const R('/a').uri.toString(), '/a');
       expect(const R('/a', id: '7').uri.toString(), '/a?id=7');
@@ -107,7 +120,7 @@ void main() {
       final context = await pumpContext(tester);
       final log = <String>[];
       Redirect logging(String name) => (_, state) async {
-        log.add('$name start (target ${state.target.path})');
+        log.add('$name start (target ${state.target.fullPath})');
         await Future<void>.value();
         log.add('$name end');
         return null;
@@ -119,11 +132,11 @@ void main() {
       await RedirectResolver().resolve(leaf, context: context);
 
       expect(log, [
-        'root start (target /leaf)',
+        'root start (target /root/mid/leaf)',
         'root end',
-        'mid start (target /leaf)',
+        'mid start (target /root/mid/leaf)',
         'mid end',
-        'leaf start (target /leaf)',
+        'leaf start (target /root/mid/leaf)',
         'leaf end',
       ]);
     });
@@ -170,7 +183,7 @@ void main() {
       ]);
       expect(states.single.route, c);
       expect(states.single.target, c);
-      expect(states.single.uri, Uri.parse('/c'));
+      expect(states.single.uri, Uri.parse('/c-parent/c'));
     });
 
     testWidgets('loop is detected', (tester) async {
@@ -183,7 +196,7 @@ void main() {
         RedirectResolver().resolve(a, context: context),
         throwsA(
           isA<RedirectLoopException>().having(
-            (e) => e.trail.map((r) => r.path),
+            (e) => e.trail.map((r) => r.fullPath),
             'trail',
             ['/a', '/b', '/a'],
           ),

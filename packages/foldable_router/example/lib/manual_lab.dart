@@ -30,7 +30,7 @@ class LabHomeRoute extends FoldableFlatRoute {
   const LabHomeRoute();
 
   @override
-  String get path => '/';
+  String get segment => '';
 
   @override
   Widget build(BuildContext context) => const LabHomePage();
@@ -53,7 +53,7 @@ class TypedRoute extends FoldableFlatRoute {
   final String? note;
 
   @override
-  String get path => '/typed';
+  String get segment => 'typed';
 
   @override
   Map<String, Object?> get params => {
@@ -78,7 +78,7 @@ class SlowRoute extends FoldableFlatRoute {
   const SlowRoute();
 
   @override
-  String get path => '/slow';
+  String get segment => 'slow';
 
   @override
   FoldableFlatRoute? get parent => const LabHomeRoute();
@@ -108,7 +108,7 @@ class WideOnlyRoute extends FoldableFlatRoute {
   static const double minWidth = 700;
 
   @override
-  String get path => '/wide';
+  String get segment => 'wide';
 
   @override
   FoldableFlatRoute? get parent => const LabHomeRoute();
@@ -134,7 +134,7 @@ class NoteRoute extends FoldableFlatRoute {
   const NoteRoute();
 
   @override
-  String get path => '/note';
+  String get segment => 'note';
 
   @override
   Widget build(BuildContext context) => const NotePage();
