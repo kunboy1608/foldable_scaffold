@@ -374,7 +374,23 @@ class _BranchPageRoute<T> extends PageRoute<T> with FoldablePageRouteMixin<T> {
     final List<OverlayEntry> entries = overlayEntries.toList();
     if (entries.isEmpty) return;
     final bool settled = animation?.status == AnimationStatus.completed;
-    entries.first.opaque = opaque && settled;
+    if (entries.first.opaque == (opaque && settled)) return;
+    // This is called while the tab area builds, i.e. inside the layout
+    // callback of a LayoutBuilder. Flipping `opaque` rebuilds the Overlay,
+    // which re-parents the (GlobalKey'd) overlay entries; reactivating them
+    // here attaches render objects (LayoutBuilder, OverlayPortal of a Tooltip,
+    // ...) in the middle of a layout pass and asserts "A RenderObject was
+    // mutated during layout" (seen on the web when resizing). Apply it after
+    // the frame instead: the opacity only decides whether the pages below are
+    // painted, and they are all kept alive.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final List<OverlayEntry> current = overlayEntries.toList();
+      if (current.isEmpty || navigator == null) return;
+      final bool nowSettled = animation?.status == AnimationStatus.completed;
+      final bool target = opaque && nowSettled;
+      if (current.first.opaque != target) current.first.opaque = target;
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
   }
 }
 
@@ -1323,6 +1339,11 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
       if (entries == null) continue;
       children.add(
         Offstage(
+          // Keyed by branch: a branch that appears later (first visit of a
+          // tab) must not shift the others, or the GlobalKey'd navigators
+          // would be re-parented -- and reactivated -- in the middle of the
+          // layout callback of BranchArea.
+          key: ValueKey<int>(i),
           offstage: i != shell.current,
           child: TickerMode(
             enabled: i == shell.current,

@@ -1,4 +1,5 @@
 name: foldable_router_example
+resolution: workspace
 description: "Example app for foldable_router: open vs push, parent chains, async guards, refresh and push results."
 publish_to: 'none'
 version: 1.0.0+1
