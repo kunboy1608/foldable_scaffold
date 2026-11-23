@@ -113,6 +113,9 @@ class _Options {
 class _ScaffoldExampleState extends State<ScaffoldExample> {
   int _tab = 0;
   String? _message = 'The first message';
+
+  /// Moves the divider of the scaffold: the reset button in the app bar.
+  final _controller = FoldableScaffoldController();
   SimulatedFold _fold = SimulatedFold.device;
   bool _composing = false;
   final _options = _Options();
@@ -130,11 +133,25 @@ class _ScaffoldExampleState extends State<ScaffoldExample> {
   void _update(VoidCallback change) => setState(change);
 
   @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final options = _options;
     return MaterialApp(
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: Colors.indigo),
+        // The handle of the divider, for every scaffold of the app. The
+        // scaffold can also take a `theme` for itself.
+        extensions: const [
+          FoldableScaffoldThemeData(
+            handleSize: Size(6, 56),
+            handleActiveWidth: 16,
+          ),
+        ],
       ),
       // The fake fold goes where the real one would come from.
       builder: (context, child) {
@@ -148,13 +165,14 @@ class _ScaffoldExampleState extends State<ScaffoldExample> {
       home: FoldableMotion(
         scale: options.slowMotion ? _slowMotion : _normalMotion,
         child: FoldableScaffold(
+          controller: _controller,
           breakpoints: _breakpoints,
           followFold: options.followFold,
           focusOnPrimaryBody: options.focusOnPrimaryBody,
           minBodySize: options.minBodySize,
           dividerSize: options.dividerSize,
           snapWidths: options.snap ? _snapWidths : const [],
-          topNavigationBuilder: (context, constraints) => AppBar(
+          appBar: AppBar(
             title: Text(_mailboxes[_tab].$2),
             // The end drawer button below replaces the implied one.
             automaticallyImplyActions: false,
@@ -165,6 +183,11 @@ class _ScaffoldExampleState extends State<ScaffoldExample> {
                 onFold: (fold) => _update(() => _fold = fold),
                 onHandheldRules: (value) =>
                     _update(() => _handheldRules = value),
+              ),
+              IconButton(
+                icon: const Icon(Icons.restart_alt),
+                tooltip: 'Reset layout',
+                onPressed: _controller.resetDivider,
               ),
               Builder(
                 builder: (context) => IconButton(
@@ -195,52 +218,44 @@ class _ScaffoldExampleState extends State<ScaffoldExample> {
           bottomSheet: _composing
               ? _ComposeSheet(onDone: () => _update(() => _composing = false))
               : null,
-          primaryNavigationBuilder: (context, constraints, padding) {
-            return NavigationRail(
-              selectedIndex: _tab,
-              onDestinationSelected: (index) => _update(() {
-                _tab = index;
-                _message = null;
-              }),
-              labelType: NavigationRailLabelType.all,
-              destinations: [
-                for (final (icon, label, _) in _mailboxes)
-                  NavigationRailDestination(
-                    icon: Icon(icon),
-                    label: Text(label),
-                  ),
-              ],
-            );
-          },
-          bottomNavigationBuilder: (context, constraints) {
-            return NavigationBar(
-              selectedIndex: _tab,
-              onDestinationSelected: (index) => _update(() {
-                _tab = index;
-                _message = null;
-              }),
-              destinations: [
-                for (final (icon, label, _) in _mailboxes)
-                  NavigationDestination(icon: Icon(icon), label: label),
-              ],
-            );
-          },
-          bodyBuilder: (context, constraints) {
-            return ListView(
-              children: [
-                const _LayoutCard(),
-                for (final message in _mailboxes[_tab].$3)
-                  ListTile(
-                    selected: message == _message,
-                    title: Text(message),
-                    onTap: () => _update(() => _message = message),
-                  ),
-              ],
-            );
-          },
+          primaryNavigation: NavigationRail(
+            selectedIndex: _tab,
+            onDestinationSelected: (index) => _update(() {
+              _tab = index;
+              _message = null;
+            }),
+            labelType: NavigationRailLabelType.all,
+            destinations: [
+              for (final (icon, label, _) in _mailboxes)
+                NavigationRailDestination(icon: Icon(icon), label: Text(label)),
+            ],
+          ),
+          bottomNavigationBar: NavigationBar(
+            selectedIndex: _tab,
+            onDestinationSelected: (index) => _update(() {
+              _tab = index;
+              _message = null;
+            }),
+            destinations: [
+              for (final (icon, label, _) in _mailboxes)
+                NavigationDestination(icon: Icon(icon), label: label),
+            ],
+          ),
+          body: ListView(
+            children: [
+              const _LayoutCard(),
+              for (final message in _mailboxes[_tab].$3)
+                ListTile(
+                  selected: message == _message,
+                  title: Text(message),
+                  onTap: () => _update(() => _message = message),
+                ),
+            ],
+          ),
           hasSecondaryBody: _message != null,
           // The system back closes the message before it leaves the app.
           onSecondBodyClose: (didPop, _) => _update(() => _message = null),
+          // A builder, for the pane width: the divider is dragged.
           secondaryBodyBuilder: (context, constraints) {
             final message = _message;
             if (message == null) return null;

@@ -1,6 +1,7 @@
 import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/gestures.dart' show DragStartBehavior;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:foldable_scaffold/foldable_scaffold.dart';
 import 'package:material_ui/material_ui.dart';
@@ -38,13 +39,10 @@ Future<void> _pumpScaffold(
         minBodySize: minBodySize,
         paneTransition: paneTransition,
         onSecondBodyClose: onSecondBodyClose,
-        bodyBuilder: (_, _) => const Text('body'),
-        secondaryBodyBuilder: secondary
-            ? (_, _) => const Text('secondary')
-            : null,
-        primaryNavigationBuilder: withNavigation
-            ? (context, constraints, padding) =>
-                  const SizedBox(width: 80, child: Text('rail'))
+        body: const Text('body'),
+        secondaryBody: secondary ? const Text('secondary') : null,
+        primaryNavigation: withNavigation
+            ? const SizedBox(width: 80, child: Text('rail'))
             : null,
       ),
     ),
@@ -227,62 +225,219 @@ void main() {
     expect(find.text('body'), findsOneWidget);
   });
 
-  testWidgets('hasSecondaryBody skips probing the builder', (tester) async {
-    tester.view.physicalSize = const Size(800, 600);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
+  group('the pane slots', () {
+    Future<void> pumpAt(WidgetTester tester, Size size, Widget scaffold) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
 
-    Future<int> pumpWith({required bool? hasSecondaryBody}) async {
-      var calls = 0;
-      // Start from an empty tree so both runs build from scratch.
-      await tester.pumpWidget(const SizedBox());
       await tester.pumpWidget(
         MaterialApp(
           theme: ThemeData(platform: TargetPlatform.linux),
-          home: FoldableScaffold(
-            hasSecondaryBody: hasSecondaryBody,
-            bodyBuilder: (_, _) => const Text('body'),
-            secondaryBodyBuilder: (_, _) {
-              calls++;
-              return const Text('secondary');
-            },
-          ),
+          home: scaffold,
         ),
       );
       await tester.pumpAndSettle();
-      return calls;
     }
 
-    final probed = await pumpWith(hasSecondaryBody: null);
-    final flagged = await pumpWith(hasSecondaryBody: true);
+    bool canPop(WidgetTester tester) {
+      final popScope = tester.widget(
+        find.byWidgetPredicate((widget) => widget is PopScope),
+      );
+      return (popScope as PopScope).canPop;
+    }
 
-    // One call to probe for null plus one to build the pane, or only the latter.
-    expect(probed, 2);
-    expect(flagged, 1);
-    expect(find.text('secondary'), findsOneWidget);
-  });
-
-  testWidgets('hasSecondaryBody false hides the secondary pane', (
-    tester,
-  ) async {
-    tester.view.physicalSize = const Size(800, 600);
-    tester.view.devicePixelRatio = 1;
-    addTearDown(tester.view.reset);
-
-    await tester.pumpWidget(
-      MaterialApp(
-        theme: ThemeData(platform: TargetPlatform.linux),
-        home: FoldableScaffold(
-          hasSecondaryBody: false,
-          bodyBuilder: (_, _) => const Text('body'),
-          secondaryBodyBuilder: (_, _) => const Text('secondary'),
+    testWidgets('take widgets, as Scaffold does', (tester) async {
+      await pumpAt(
+        tester,
+        const Size(1400, 600),
+        FoldableScaffold(
+          appBar: AppBar(title: const Text('title')),
+          primaryNavigation: const SizedBox(width: 80, child: Text('rail')),
+          bottomNavigationBar: const SizedBox(height: 80, child: Text('bar')),
+          body: const Text('body'),
+          secondaryBody: const Text('secondary'),
         ),
-      ),
-    );
-    await tester.pumpAndSettle();
+      );
 
-    expect(_paneWidth(tester, 'body_builder'), 800);
-    expect(_paneWidth(tester, 'secondary_body_builder'), 0);
+      expect(find.text('title'), findsOneWidget);
+      expect(find.text('body'), findsOneWidget);
+      expect(find.text('secondary'), findsOneWidget);
+      // A wide window shows the rail instead of the bottom bar.
+      expect(find.text('rail'), findsOneWidget);
+      expect(find.text('bar'), findsNothing);
+      expect(_paneWidth(tester, 'body_builder'), greaterThan(0));
+      expect(_paneWidth(tester, 'secondary_body_builder'), greaterThan(0));
+
+      await pumpAt(
+        tester,
+        const Size(500, 600),
+        const FoldableScaffold(
+          primaryNavigation: Text('rail'),
+          bottomNavigationBar: SizedBox(height: 80, child: Text('bar')),
+          body: Text('body'),
+        ),
+      );
+
+      expect(find.text('rail'), findsNothing);
+      expect(find.text('bar'), findsOneWidget);
+    });
+
+    testWidgets('take builders, with the constraints of the slot', (
+      tester,
+    ) async {
+      final appBarConstraints = <BoxConstraints>[];
+      final bodyConstraints = <BoxConstraints>[];
+
+      await pumpAt(
+        tester,
+        const Size(1400, 600),
+        FoldableScaffold(
+          appBarBuilder: (context, constraints) {
+            appBarConstraints.add(constraints);
+            return AppBar(title: const Text('title'));
+          },
+          primaryNavigationBuilder: (context, constraints, padding) {
+            return const SizedBox(width: 80, child: Text('rail'));
+          },
+          bottomNavigationBarBuilder: (context, constraints) {
+            return const SizedBox(height: 80, child: Text('bar'));
+          },
+          bodyBuilder: (context, constraints) {
+            bodyConstraints.add(constraints);
+            return const Text('body');
+          },
+          secondaryBodyBuilder: (context, constraints) =>
+              const Text('secondary'),
+        ),
+      );
+
+      expect(find.text('title'), findsOneWidget);
+      expect(find.text('rail'), findsOneWidget);
+      expect(find.text('body'), findsOneWidget);
+      expect(find.text('secondary'), findsOneWidget);
+      // The app bar gets the scaffold width and the toolbar height.
+      expect(appBarConstraints.last.maxWidth, 1400);
+      expect(appBarConstraints.last.maxHeight, kToolbarHeight);
+      // The body gets the constraints of its pane.
+      expect(bodyConstraints.last.maxWidth, greaterThan(0));
+      expect(bodyConstraints.last.minWidth, bodyConstraints.last.maxWidth);
+    });
+
+    test('need a body', () {
+      expect(FoldableScaffold.new, throwsAssertionError);
+    });
+
+    test('take a widget or a builder, not both', () {
+      const body = SizedBox();
+      final wrong = <void Function()>[
+        () => FoldableScaffold(
+          body: body,
+          bodyBuilder: (_, _) => const SizedBox(),
+        ),
+        () => FoldableScaffold(
+          body: body,
+          secondaryBody: body,
+          secondaryBodyBuilder: (_, _) => const SizedBox(),
+        ),
+        () => FoldableScaffold(
+          body: body,
+          appBar: AppBar(),
+          appBarBuilder: (_, _) => AppBar(),
+        ),
+        () => FoldableScaffold(
+          body: body,
+          primaryNavigation: body,
+          primaryNavigationBuilder: (_, _, _) => const SizedBox(),
+        ),
+        () => FoldableScaffold(
+          body: body,
+          bottomNavigationBar: body,
+          bottomNavigationBarBuilder: (_, _) => const SizedBox(),
+        ),
+      ];
+
+      for (final build in wrong) {
+        expect(build, throwsAssertionError);
+      }
+    });
+
+    testWidgets('build the secondary body once, never to probe for null', (
+      tester,
+    ) async {
+      final paneConstraints = <BoxConstraints>[];
+
+      await pumpAt(
+        tester,
+        const Size(800, 600),
+        FoldableScaffold(
+          body: const Text('body'),
+          secondaryBodyBuilder: (context, constraints) {
+            paneConstraints.add(constraints);
+            return const Text('secondary');
+          },
+        ),
+      );
+
+      expect(find.text('secondary'), findsOneWidget);
+      expect(paneConstraints, isNotEmpty);
+      // A probe asked with the loose scaffold size; a pane build is tight.
+      for (final constraints in paneConstraints) {
+        expect(constraints.minWidth, constraints.maxWidth);
+        expect(constraints.minHeight, constraints.maxHeight);
+      }
+    });
+
+    testWidgets('a secondary body builder returning null keeps the layout', (
+      tester,
+    ) async {
+      await pumpAt(
+        tester,
+        const Size(1400, 600),
+        FoldableScaffold(
+          body: const Text('body'),
+          secondaryBodyBuilder: (context, constraints) => null,
+        ),
+      );
+
+      // The pane is there, empty: the layout does not fall back to one pane.
+      expect(_layout(tester).primaryVisible, isTrue);
+      expect(_layout(tester).secondaryVisible, isTrue);
+      expect(_paneWidth(tester, 'body_builder'), greaterThan(0));
+      expect(canPop(tester), isFalse);
+    });
+
+    testWidgets('hasSecondaryBody false hides the pane and lets back through', (
+      tester,
+    ) async {
+      await pumpAt(
+        tester,
+        const Size(800, 600),
+        FoldableScaffold(
+          hasSecondaryBody: false,
+          body: const Text('body'),
+          secondaryBody: const Text('secondary'),
+        ),
+      );
+
+      expect(_paneWidth(tester, 'body_builder'), 800);
+      expect(_paneWidth(tester, 'secondary_body_builder'), 0);
+      expect(canPop(tester), isTrue);
+    });
+
+    testWidgets('a secondary body refuses the back gesture', (tester) async {
+      await pumpAt(
+        tester,
+        const Size(800, 600),
+        FoldableScaffold(
+          body: const Text('body'),
+          secondaryBody: const Text('secondary'),
+        ),
+      );
+
+      expect(_paneWidth(tester, 'secondary_body_builder'), 800);
+      expect(canPop(tester), isFalse);
+    });
   });
 
   group('breakpoints by platform', () {
@@ -930,6 +1085,362 @@ void main() {
       expect(a.hashCode, b.hashCode);
       expect(a, isNot(c));
       expect(a.toString(), contains('isSeparating: true'));
+    });
+  });
+
+  group('text direction (RTL)', () {
+    DisplayFeature hinge(double left, double right, double height) {
+      return DisplayFeature(
+        bounds: Rect.fromLTRB(left, 0, right, height),
+        type: DisplayFeatureType.hinge,
+        state: DisplayFeatureState.postureFlat,
+      );
+    }
+
+    DisplayFeature fold(
+      double x,
+      double height, {
+      DisplayFeatureState state = DisplayFeatureState.postureFlat,
+    }) {
+      return DisplayFeature(
+        bounds: Rect.fromLTRB(x, 0, x, height),
+        type: DisplayFeatureType.fold,
+        state: state,
+      );
+    }
+
+    Future<void> pumpRtl(
+      WidgetTester tester, {
+      required Size size,
+      TargetPlatform platform = TargetPlatform.linux,
+      bool secondary = false,
+      bool withNavigation = false,
+      List<double> snapWidths = const [],
+      List<DisplayFeature> features = const [],
+      double minBodySize = 200.0,
+      FakeViewPadding? viewPadding,
+    }) async {
+      tester.view.physicalSize = size;
+      tester.view.devicePixelRatio = 1;
+      tester.view.displayFeatures = features;
+      if (viewPadding != null) {
+        tester.view.viewPadding = viewPadding;
+        tester.view.padding = viewPadding;
+      }
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(platform: platform),
+          home: Directionality(
+            textDirection: TextDirection.rtl,
+            child: FoldableScaffold(
+              followFold: true,
+              minBodySize: minBodySize,
+              snapWidths: snapWidths,
+              body: const Text('body'),
+              secondaryBody: secondary ? const Text('secondary') : null,
+              primaryNavigation: withNavigation
+                  ? SizedBox.expand(
+                      key: const Key('rail_builder'),
+                      child: const Text('rail'),
+                    )
+                  : null,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('the navigation rail is on the right in RTL', (tester) async {
+      await pumpRtl(tester, size: const Size(800, 600), withNavigation: true);
+
+      expect(find.text('rail'), findsOneWidget);
+      final rail = tester.getRect(find.byKey(const Key('rail_builder')));
+      expect(rail.right, closeTo(800, 0.01));
+      expect(rail.width, closeTo(72, 0.01));
+      // The pane area ends where the rail starts.
+      final body = tester.getRect(
+        find.byKey(const Key('body_builder'), skipOffstage: false),
+      );
+      expect(body.right, closeTo(728, 0.01));
+    });
+
+    testWidgets('the rail takes the start side system inset in RTL', (
+      tester,
+    ) async {
+      await pumpRtl(
+        tester,
+        size: const Size(900, 600),
+        withNavigation: true,
+        viewPadding: const FakeViewPadding(right: 44),
+      );
+
+      final rail = tester.getRect(find.byKey(const Key('rail_builder')));
+      expect(rail.width, closeTo(116, 0.01)); // 72 + the right inset
+      expect(rail.right, closeTo(900, 0.01));
+      // The rail took the start side inset, the pane area ends where it starts.
+      final body = tester.getRect(
+        find.byKey(const Key('body_builder'), skipOffstage: false),
+      );
+      expect(body.right, closeTo(784, 0.01));
+    });
+
+    testWidgets('the secondary body is on the left in a split RTL layout', (
+      tester,
+    ) async {
+      await pumpRtl(
+        tester,
+        size: const Size(1400, 600),
+        secondary: true,
+        withNavigation: true,
+      );
+
+      final rail = tester.getRect(find.byKey(const Key('rail_builder')));
+      expect(rail.right, closeTo(1400, 0.01));
+      expect(rail.width, closeTo(192, 0.01)); // the wide rail
+
+      final secondary = tester.getRect(
+        find.byKey(const Key('secondary_body_builder'), skipOffstage: false),
+      );
+      final divider = tester.getRect(find.byKey(const Key('pane_divider')));
+      final body = tester.getRect(
+        find.byKey(const Key('body_builder'), skipOffstage: false),
+      );
+
+      expect(secondary.left, closeTo(0, 0.01));
+      expect(secondary.right, closeTo(divider.left, 0.01));
+      expect(divider.right, closeTo(body.left, 0.01));
+      expect(body.right, closeTo(1400 - 192, 0.01)); // rail on the right edge
+      expect(_paneWidth(tester, 'secondary_body_builder'), greaterThan(0));
+      expect(_paneWidth(tester, 'body_builder'), greaterThan(0));
+    });
+
+    testWidgets('dragging left shrinks the secondary pane in RTL', (
+      tester,
+    ) async {
+      await pumpRtl(tester, size: const Size(1400, 600), secondary: true);
+
+      await tester.drag(
+        find.byKey(const Key('pane_divider')),
+        const Offset(-5000, 0),
+      );
+      await tester.pumpAndSettle();
+
+      expect(_paneWidth(tester, 'secondary_body_builder'), closeTo(200, 0.01));
+      expect(_layout(tester).primaryVisible, isTrue);
+      expect(_layout(tester).secondaryVisible, isTrue);
+    });
+
+    testWidgets('snapWidths snap to the secondary width in RTL', (
+      tester,
+    ) async {
+      await pumpRtl(
+        tester,
+        size: const Size(1400, 600),
+        secondary: true,
+        minBodySize: 100,
+        snapWidths: const [360.0],
+      );
+      // The divider starts at half of the pane area; drag it left so the
+      // secondary body lands on 360.
+      await tester.drag(
+        find.byKey(const Key('pane_divider')),
+        const Offset(-340, 0),
+      );
+      await tester.pumpAndSettle();
+
+      expect(_paneWidth(tester, 'secondary_body_builder'), closeTo(360, 0.01));
+    });
+
+    testWidgets(
+      'a separating hinge puts the secondary body on the left in RTL',
+      (tester) async {
+        await pumpRtl(
+          tester,
+          size: const Size(1000, 700),
+          secondary: true,
+          features: [hinge(480, 520, 700)],
+        );
+
+        expect(
+          _paneWidth(tester, 'secondary_body_builder'),
+          closeTo(480, 0.01),
+        );
+        expect(_paneWidth(tester, 'pane_divider'), closeTo(40, 0.01));
+        expect(_paneWidth(tester, 'body_builder'), closeTo(480, 0.01));
+
+        final secondary = tester.getRect(
+          find.byKey(const Key('secondary_body_builder'), skipOffstage: false),
+        );
+        final divider = tester.getRect(find.byKey(const Key('pane_divider')));
+        final body = tester.getRect(
+          find.byKey(const Key('body_builder'), skipOffstage: false),
+        );
+        expect(secondary.left, closeTo(0, 0.01));
+        expect(secondary.right, closeTo(480, 0.01));
+        expect(divider.left, closeTo(480, 0.01));
+        expect(divider.right, closeTo(520, 0.01));
+        expect(body.left, closeTo(520, 0.01));
+        expect(body.right, closeTo(1000, 0.01));
+      },
+    );
+
+    testWidgets('a separating hinge plus a rail in RTL', (tester) async {
+      await pumpRtl(
+        tester,
+        size: const Size(1000, 700),
+        secondary: true,
+        withNavigation: true,
+        features: [hinge(480, 520, 700)],
+      );
+
+      expect(_paneWidth(tester, 'secondary_body_builder'), closeTo(480, 0.01));
+      expect(_paneWidth(tester, 'pane_divider'), closeTo(40, 0.01));
+      expect(_paneWidth(tester, 'body_builder'), closeTo(408, 0.01));
+      // Rail on the right edge, then body, divider, secondary body to its left.
+      final rail = tester.getRect(find.byKey(const Key('rail_builder')));
+      final divider = tester.getRect(find.byKey(const Key('pane_divider')));
+      final body = tester.getRect(
+        find.byKey(const Key('body_builder'), skipOffstage: false),
+      );
+      expect(rail.right, closeTo(1000, 0.01));
+      expect(rail.left, closeTo(928, 0.01)); // 72 wide, on the right edge
+      expect(body.right, closeTo(928, 0.01));
+      expect(divider.right, closeTo(520, 0.01));
+      expect(divider.left, closeTo(480, 0.01));
+    });
+
+    testWidgets('a flat fold starts the divider on the crease in RTL', (
+      tester,
+    ) async {
+      await pumpRtl(
+        tester,
+        size: const Size(1400, 800),
+        secondary: true,
+        features: [fold(900, 800)],
+      );
+
+      final divider = tester.getRect(find.byKey(const Key('pane_divider')));
+      expect(divider.center.dx, closeTo(900, 0.01));
+      expect(_paneWidth(tester, 'secondary_body_builder'), closeTo(888, 0.01));
+    });
+
+    testWidgets('a half-open fold separates like a hinge in RTL', (
+      tester,
+    ) async {
+      await pumpRtl(
+        tester,
+        size: const Size(700, 800),
+        secondary: true,
+        features: [
+          fold(350, 800, state: DisplayFeatureState.postureHalfOpened),
+        ],
+      );
+
+      expect(_layout(tester).primaryVisible, isTrue);
+      expect(_layout(tester).secondaryVisible, isTrue);
+      expect(_paneWidth(tester, 'secondary_body_builder'), closeTo(350, 0.01));
+      expect(_paneWidth(tester, 'body_builder'), closeTo(350, 0.01));
+    });
+  });
+
+  group('forwarded Scaffold parameters', () {
+    Future<void> pumpForwarded(
+      WidgetTester tester, {
+      Widget? secondaryBody,
+    }) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.linux),
+          home: FoldableScaffold(
+            body: const Text('body'),
+            secondaryBody: secondaryBody,
+            floatingActionButtonAnimator: FloatingActionButtonAnimator.scaling,
+            persistentFooterButtons: const [Text('footer')],
+            persistentFooterAlignment: AlignmentDirectional.centerStart,
+            persistentFooterDecoration: const BoxDecoration(color: Colors.red),
+            onDrawerChanged: (opened) {},
+            onEndDrawerChanged: (opened) {},
+            drawerDragStartBehavior: DragStartBehavior.down,
+            drawerScrimColor: Colors.black,
+            drawerEdgeDragWidth: 12.0,
+            drawerEnableOpenDragGesture: false,
+            endDrawerEnableOpenDragGesture: false,
+            restorationId: 'restoration',
+            drawerBarrierDismissible: false,
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    Scaffold scaffoldOf(WidgetTester tester) =>
+        tester.widget<Scaffold>(find.byType(Scaffold));
+
+    testWidgets('forwards the new Scaffold parameters', (tester) async {
+      await pumpForwarded(tester);
+
+      final scaffold = scaffoldOf(tester);
+      expect(
+        scaffold.floatingActionButtonAnimator,
+        const TypeMatcher<FloatingActionButtonAnimator>(),
+      );
+      expect(scaffold.persistentFooterButtons, hasLength(1));
+      expect(
+        scaffold.persistentFooterAlignment,
+        AlignmentDirectional.centerStart,
+      );
+      expect(
+        scaffold.persistentFooterDecoration,
+        const TypeMatcher<BoxDecoration>(),
+      );
+      expect(scaffold.onDrawerChanged, isNotNull);
+      expect(scaffold.onEndDrawerChanged, isNotNull);
+      expect(scaffold.drawerDragStartBehavior, DragStartBehavior.down);
+      expect(scaffold.drawerScrimColor, Colors.black);
+      expect(scaffold.drawerEdgeDragWidth, 12.0);
+      expect(scaffold.drawerEnableOpenDragGesture, isFalse);
+      expect(scaffold.endDrawerEnableOpenDragGesture, isFalse);
+      expect(scaffold.restorationId, 'restoration');
+      expect(scaffold.drawerBarrierDismissible, isFalse);
+    });
+
+    testWidgets('extendBody defaults to false', (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.linux),
+          home: const FoldableScaffold(body: Text('body')),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(scaffoldOf(tester).extendBody, isFalse);
+    });
+
+    testWidgets('extendBody can still be set to true', (tester) async {
+      tester.view.physicalSize = const Size(400, 800);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.linux),
+          home: const FoldableScaffold(body: Text('body'), extendBody: true),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(scaffoldOf(tester).extendBody, isTrue);
     });
   });
 }

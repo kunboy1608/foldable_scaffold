@@ -1,7 +1,7 @@
 # foldable_scaffold
 
 > [!WARNING]
-> **Experimental.** This is a prerelease (`0.1.0-dev.1`). The API will change
+> **Experimental.** This is a prerelease (`0.1.0-dev.4`). The API will change
 > without notice and the package is not ready for production use.
 
 A [Scaffold](https://pub.dev/documentation/material_ui/latest/material_ui/Scaffold-class.html)
@@ -14,7 +14,7 @@ but a `FoldableScaffold` works on its own.
 ## Install
 
 ```sh
-flutter pub add foldable_scaffold:^0.1.0-dev.1
+flutter pub add foldable_scaffold:^0.1.0-dev.4
 ```
 
 ## Usage
@@ -36,13 +36,10 @@ class _MailScreenState extends State<MailScreen> {
   @override
   Widget build(BuildContext context) {
     return FoldableScaffold(
-      topNavigationBuilder: (context, constraints) =>
-          AppBar(title: const Text('Mail')),
-      primaryNavigationBuilder: (context, constraints, padding) =>
-          NavigationRail(/* ... */),
-      bottomNavigationBuilder: (context, constraints) =>
-          NavigationBar(/* ... */),
-      bodyBuilder: (context, constraints) => ListView(
+      appBar: AppBar(title: const Text('Mail')),
+      primaryNavigation: NavigationRail(/* ... */),
+      bottomNavigationBar: NavigationBar(/* ... */),
+      body: ListView(
         children: [
           ListTile(
             title: const Text('Hello'),
@@ -50,16 +47,54 @@ class _MailScreenState extends State<MailScreen> {
           ),
         ],
       ),
+      // Passing a secondary body is enough to show the second pane.
       hasSecondaryBody: _message != null,
-      secondaryBodyBuilder: (context, constraints) =>
-          Center(child: Text(_message ?? '')),
-      // hasSecondaryBody: false hides the second pane. Without it, the scaffold
-      // calls the builder an extra time to see whether it returns null.
+      secondaryBody: Center(child: Text(_message ?? '')),
+      // hasSecondaryBody: false hides the pane and keeps the widget.
       onSecondBodyClose: (didPop, _) => setState(() => _message = null),
     );
   }
 }
 ```
+
+### Widgets or builders
+
+The slots take a widget, as `Scaffold` does: `body`, `secondaryBody`, `appBar`,
+`primaryNavigation` and `bottomNavigationBar`. Each one also has a builder for
+the widgets that need the constraints of the slot: `bodyBuilder`,
+`secondaryBodyBuilder`, `appBarBuilder`, `primaryNavigationBuilder` and
+`bottomNavigationBarBuilder`. A slot takes one or the other, not both.
+
+Use a builder when the content depends on the width of the pane, which changes
+while the divider is dragged:
+
+```dart
+FoldableScaffold(
+  body: const MessageList(),
+  secondaryBodyBuilder: (context, constraints) => Text(
+    'This pane is ${constraints.maxWidth.round()} wide.',
+  ),
+)
+```
+
+A builder may return null, which leaves the pane empty. That never changes the
+layout: whether there is a second pane is decided by `secondaryBody` (or
+`secondaryBodyBuilder`) and `hasSecondaryBody`, not by what the builder returns.
+
+### The hidden pane
+
+A pane that is not on screen (one-pane layouts, `hasSecondaryBody: false`, or a
+pane that collapsed into the other one) is never taken out of the widget tree.
+Its widgets stay mounted, so a page stack, a scroll position or text being typed
+is still there when the pane comes back, and it comes back instantly with
+nothing jumping.
+
+While it has no width, though, nothing of it is seen or reachable: it does not
+take focus (Tab or a screen reader), it is left out of the semantics tree, it
+does not take pointer events, and its tickers (animations) are muted. This only
+kicks in once the pane has actually collapsed to zero width: a pane that is
+sliding in or out still has a non-zero width and stays fully live, so the page
+slides of `FoldableNavigator` are never cut short.
 
 ## Layout rules
 
@@ -68,9 +103,33 @@ and iOS (also in a mobile browser) are *handheld*, everything else is *desktop*.
 
 | Scaffold width | Handheld | Desktop |
 | --- | --- | --- |
-| < 600 | one pane, `bottomNavigationBuilder` | one pane, `bottomNavigationBuilder` |
-| 600 and above | `primaryNavigationBuilder` on the left | `primaryNavigationBuilder` on the left |
+| < 600 | one pane, `bottomNavigationBar` | one pane, `bottomNavigationBar` |
+| 600 and above | `primaryNavigation` on the left | `primaryNavigation` on the left |
 | two panes | from 600, if the window is at least 600 on its **short** side | from 1200 |
+
+| Scaffold width | Handheld | Desktop |
+| --- | --- | --- |
+| < 600 | one pane, `bottomNavigationBar` | one pane, `bottomNavigationBar` |
+| 600 and above | `primaryNavigation` on the start side | `primaryNavigation` on the start side |
+| two panes | from 600, if the window is at least 600 on its **short** side | from 1200 |
+
+### Text direction
+
+The layout follows the `TextDirection` of the closest `Directionality`
+(usually set by the `Localizations`/`MaterialApp` locale):
+
+* In `TextDirection.ltr` (the default) the rail is on the left edge, the body
+  is left of the secondary body, and dragging the divider right shrinks the
+  secondary body.
+* In `TextDirection.rtl` everything is mirrored: the rail is on the right
+  edge, the secondary body is on the left and the body on the right, and
+  dragging the divider left shrinks the secondary body. The system inset on
+  the start side is added to the rail width, and the pane's `MediaQuery`
+  clears that inset instead.
+
+The fold or hinge coordinates stay in physical window coordinates
+(left → right); the scaffold mirrors them internally, so a separating hinge
+still puts one pane on each side with the hinge area in the middle.
 
 On a handheld, body and secondary body are shown side by side, with a draggable
 divider, on the inner screen of a foldable (a Galaxy Z Fold, an unfolded iPhone
@@ -121,11 +180,12 @@ The panes get the `MediaQuery` that the `Scaffold` makes for its body, so a
 
 | | `MediaQuery.padding.bottom` in a pane |
 | --- | --- |
-| `bottomNavigationBuilder` on screen, `extendBody: true` (the default) | the height of the bar: the pane runs under it, pad the end of the content |
-| `bottomNavigationBuilder` on screen, `extendBody: false` | 0: the pane ends above the bar |
-| no bar on screen (the rail replaces it, or no builder) | the system inset |
+| `bottomNavigationBar` on screen, `extendBody: true` | the height of the bar: the pane runs under it, pad the end of the content |
+| `bottomNavigationBar` on screen, `extendBody: false` (the default) | 0: the pane ends above the bar |
+| no bar on screen (the rail replaces it, or no bar) | the system inset |
 
-The top inset is taken by the app bar (`topNavigationBuilder`), and the left one
+The top inset is taken by the app bar (`appBar`), and the start-side inset
+(the left one in LTR, the right one in RTL)
 by the rail. With the keyboard open the body is resized, and the panes see no
 `viewInsets`, so a `Scaffold` in a pane does not shrink a second time.
 
@@ -146,11 +206,156 @@ FoldableScaffold(
 
 Around a hinge the divider is not a handle, and snapping does not apply.
 
+## Theming
+
+The divider is themed with `FoldableScaffoldThemeData`, a `ThemeExtension`: put
+it in the `ThemeData` of the app to style every divider below it. Every field is
+optional, and a field left null keeps the look the divider always had.
+
+```dart
+MaterialApp(
+  theme: ThemeData(
+    extensions: const [
+      FoldableScaffoldThemeData(
+        dividerColor: Colors.black26, // the handle at rest
+        dividerActiveColor: Colors.teal, // hovered, dragged or focused
+        dividerBackgroundColor: Colors.white, // the divider slot
+        handleSize: Size(6, 64),
+        handleActiveWidth: 16,
+        handleBorderRadius: BorderRadius.all(Radius.circular(3)),
+        animationDuration: Duration(milliseconds: 150),
+      ),
+    ],
+  ),
+  // ...
+)
+```
+
+`FoldableScaffold.theme` overrides it for one scaffold: a field that the
+scaffold sets wins over the one of the `ThemeData`, and a field that is null in
+both is defaulted. The defaults are the ones the divider always had: a 4 x 50
+handle, 12 wide when it is active, a pill of `ThemeData.dividerColor` that turns
+`ColorScheme.primary`, on the `scaffoldBackgroundColor`.
+
+## Custom divider
+
+`dividerBuilder` replaces the handle, and nothing else: the scaffold keeps
+dragging it, sets the resize cursor, runs the keyboard shortcuts and gives it
+the focus and the semantics.
+
+```dart
+FoldableScaffold(
+  dividerBuilder: (context, state) => Icon(
+    state.isDragging ? Icons.drag_handle : Icons.drag_indicator,
+    color: state.isFocused ? Theme.of(context).colorScheme.primary : null,
+  ),
+  // ...
+)
+```
+
+`FoldableDividerState` says whether the divider is `isHovering`, `isDragging`
+and `isFocused`, whether it is `atFold` (a builder is not called then, as there
+is no handle), and the `textDirection` and `axis` of the divider.
+
+## Keyboard and screen readers
+
+The divider takes the keyboard focus, in the tab order, whenever it is a handle
+(not around a hinge, not in a one-pane layout), and the default handle shows the
+focus.
+
+| Key | What it does |
+| --- | --- |
+| Left / Right arrow | Move the divider by `dividerKeyboardStep` (16 by default), so the secondary pane shrinks or grows, following the text direction exactly like a drag does |
+| Shift + arrow | The same, four steps at once |
+| Home / End | The smallest, or the largest, the secondary pane can be, then snapped like a released drag |
+
+The width stays within `minBodySize` and the room the divider has; the arrow keys
+do not snap to `snapWidths`.
+
+A screen reader reads the divider as a slider, labelled `dividerSemanticLabel`
+("Resize panes"), valued with the share of the pane area the secondary pane
+takes, and its increase and decrease actions move the divider by one step.
+
+## Controller
+
+```dart
+class _MailScreenState extends State<MailScreen> {
+  final _controller = FoldableScaffoldController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Column(
+    children: [
+      Expanded(
+        child: FoldableScaffold(
+          controller: _controller,
+          body: const MessageList(),
+          secondaryBody: const Message(),
+        ),
+      ),
+      ListenableBuilder(
+        listenable: _controller,
+        builder: (context, _) => TextButton(
+          onPressed: _controller.resetDivider,
+          child: Text('Secondary pane: ${_controller.secondaryWidth?.round()}'),
+        ),
+      ),
+    ],
+  );
+}
+```
+
+The controller tells where the divider is (`secondaryWidth`, null while there is
+one pane, `isSplit`, `isDraggingDivider`), moves it (`setSecondaryWidth`, clamped
+like a drag and snapped to `snapWidths` when asked) and puts it back where it
+starts (`resetDivider`: the middle, or the crease of a flat fold).
+
+It does not open or close the secondary body: `secondaryBody` and
+`hasSecondaryBody` (and the width of the scaffold) decide that, not the divider.
+A controller that is passed belongs to the widget that created it, which disposes
+it; the scaffold only disposes the one it made. `FoldableScaffold.of(context)`
+and `FoldableScaffold.maybeOf(context)` find the controller of the closest
+scaffold above, the one that was passed or the one the scaffold made, the way
+`Scaffold.of` finds a scaffold.
+
+## State restoration
+
+With `restorationId`, the position of the divider, and whether the user placed
+it, are restored with the rest of the app state:
+
+```dart
+FoldableScaffold(
+  restorationId: 'mail',
+  // ...
+)
+```
+
+The divider keeps its data under an id of its own, `'mail_panes'`, in a scope of
+its own, so it does not collide with the `'mail'` that the underlying `Scaffold`
+claims. Without a `restorationId` nothing is restored, as before.
+
 ## Other Scaffold slots
 
-`floatingActionButton`, `floatingActionButtonLocation`, `drawer`, `endDrawer`,
-`bottomSheet`, `backgroundColor` and `resizeToAvoidBottomInset` go to the
-underlying `Scaffold`. They span the whole scaffold, rail and both panes.
+`floatingActionButton`, `floatingActionButtonLocation`,
+`floatingActionButtonAnimator`, `persistentFooterButtons`,
+`persistentFooterAlignment`, `persistentFooterDecoration`, `drawer`,
+`onDrawerChanged`, `endDrawer`, `onEndDrawerChanged`, `bottomSheet`,
+`backgroundColor`, `resizeToAvoidBottomInset`, `primary`,
+`drawerDragStartBehavior`, `drawerScrimColor`, `drawerEdgeDragWidth`,
+`drawerEnableOpenDragGesture`, `endDrawerEnableOpenDragGesture` and
+`restorationId` and `drawerBarrierDismissible` go to the underlying `Scaffold`, with the same names and
+defaults as `Scaffold` (so `extendBody` defaults to `false`). They span the
+whole scaffold, rail and both panes.
+
+Two slots are not forwarded because `FoldableScaffold` manages them itself:
+`appBar`/`bottomNavigationBar` (use the `appBar` and `bottomNavigationBar`
+arguments above) and `body` (the two panes). `bottomSheetScrimBuilder` is not
+forwarded either, because `Scaffold`'s default for it is private.
 
 ## Folds and hinges
 

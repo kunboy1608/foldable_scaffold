@@ -38,14 +38,10 @@ Future<void> _pump(
       home: FoldableScaffold(
         extendBody: extendBody,
         hasSecondaryBody: secondary != null,
-        topNavigationBuilder: withAppBar
-            ? (_, _) => AppBar(title: const Text('title'))
-            : null,
-        primaryNavigationBuilder: withNavigation
-            ? (_, _, _) => const SizedBox.expand()
-            : null,
-        bottomNavigationBuilder: withBottomNavigation
-            ? (_, _) => const SizedBox(height: 80)
+        appBar: withAppBar ? AppBar(title: const Text('title')) : null,
+        primaryNavigation: withNavigation ? const SizedBox.expand() : null,
+        bottomNavigationBar: withBottomNavigation
+            ? const SizedBox(height: 80)
             : null,
         bodyBuilder: (context, _) {
           body
@@ -74,9 +70,46 @@ void main() {
   group('the bottom navigation bar', () {
     testWidgets('extendBody: the panes pad for the bar', (tester) async {
       final body = _Insets();
-      await _pump(tester, compact, body: body);
+      await _pump(tester, compact, body: body, extendBody: true);
 
       expect(body.padding.bottom, 80);
+    });
+
+    testWidgets('extendBody defaults to false: the body ends above the bar', (
+      tester,
+    ) async {
+      final body = _Insets();
+      tester.view.physicalSize = compact;
+      tester.view.devicePixelRatio = 1;
+      tester.view.viewPadding = const FakeViewPadding(bottom: 34);
+      tester.view.padding = const FakeViewPadding(bottom: 34);
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: ThemeData(platform: TargetPlatform.linux),
+          home: FoldableScaffold(
+            hasSecondaryBody: false,
+            appBar: null,
+            primaryNavigation: const SizedBox.expand(),
+            bottomNavigationBar: const SizedBox(height: 80),
+            bodyBuilder: (context, _) {
+              body
+                ..padding = MediaQuery.paddingOf(context)
+                ..viewInsets = MediaQuery.viewInsetsOf(context);
+              return const SizedBox.expand();
+            },
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // As in Scaffold, the body stops above the bar unless asked otherwise.
+      expect(body.padding.bottom, 0);
+      expect(
+        tester.widget<Scaffold>(find.byType(Scaffold)).extendBody,
+        isFalse,
+      );
     });
 
     testWidgets('extendBody false: the body ends above the bar', (
@@ -92,7 +125,13 @@ void main() {
     testWidgets('the secondary body pads for it too', (tester) async {
       final body = _Insets();
       final secondary = _Insets();
-      await _pump(tester, compact, body: body, secondary: secondary);
+      await _pump(
+        tester,
+        compact,
+        body: body,
+        secondary: secondary,
+        extendBody: true,
+      );
 
       expect(secondary.padding.bottom, 80);
     });
@@ -142,7 +181,13 @@ void main() {
   group('the app bar', () {
     testWidgets('takes the top inset, the bar the bottom one', (tester) async {
       final body = _Insets();
-      await _pump(tester, compact, body: body, withAppBar: true);
+      await _pump(
+        tester,
+        compact,
+        body: body,
+        withAppBar: true,
+        extendBody: true,
+      );
 
       expect(body.padding.top, 0);
       expect(body.padding.bottom, 80);

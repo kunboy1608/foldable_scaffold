@@ -54,7 +54,7 @@ A small bug button appears in the corner of the screen and opens the panel.
 
   ```dart
   FoldableScaffold(
-    bodyBuilder: (_, _) => Stack(
+    body: Stack(
       children: [const FoldablePaneLayoutObserver(), body],
     ),
     // ...

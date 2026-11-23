@@ -28,8 +28,8 @@ Future<void> _pump(
         drawer: drawer,
         endDrawer: endDrawer,
         bottomSheet: bottomSheet,
-        bodyBuilder: (_, _) => const Text('body'),
-        secondaryBodyBuilder: (_, _) => const Text('secondary'),
+        body: const Text('body'),
+        secondaryBody: secondary ? const Text('secondary') : null,
       ),
     ),
   );
