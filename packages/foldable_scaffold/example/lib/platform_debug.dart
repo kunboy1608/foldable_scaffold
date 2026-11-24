@@ -1,6 +1,7 @@
 import 'dart:ui' show DisplayFeature;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show Clipboard, ClipboardData;
 import 'package:foldable_scaffold/foldable_scaffold.dart';
 import 'package:material_ui/material_ui.dart';
 
@@ -105,21 +106,71 @@ class PlatformDebugButton extends StatelessWidget {
 }
 
 /// Shows [describePlatformData], live: it is rebuilt when the data changes.
-class PlatformDebugDialog extends StatelessWidget {
+///
+/// The **Copy** button puts the text on the clipboard, with the name of the pose
+/// typed in the field on top, so each pose of a device can be pasted as one
+/// block.
+class PlatformDebugDialog extends StatefulWidget {
   const PlatformDebugDialog({super.key});
 
   @override
+  State<PlatformDebugDialog> createState() => _PlatformDebugDialogState();
+}
+
+class _PlatformDebugDialogState extends State<PlatformDebugDialog> {
+  final _pose = TextEditingController();
+  bool _copied = false;
+
+  @override
+  void dispose() {
+    _pose.dispose();
+    super.dispose();
+  }
+
+  Future<void> _copy(String report) async {
+    final pose = _pose.text.trim();
+    await Clipboard.setData(
+      ClipboardData(text: pose.isEmpty ? report : 'pose: $pose\n$report'),
+    );
+    if (!mounted) return;
+    setState(() => _copied = true);
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final report = describePlatformData(context);
     return AlertDialog(
       title: const Text('Platform data'),
       content: SingleChildScrollView(
-        child: SelectableText(
-          describePlatformData(context),
-          key: const Key('platform_data'),
-          style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              key: const Key('platform_data_pose'),
+              controller: _pose,
+              decoration: const InputDecoration(
+                labelText: 'Pose (optional)',
+                hintText: 'outer, inner portrait, half folded...',
+              ),
+              onChanged: (_) => setState(() => _copied = false),
+            ),
+            const SizedBox(height: 12),
+            SelectableText(
+              report,
+              key: const Key('platform_data'),
+              style: const TextStyle(fontFamily: 'monospace', fontSize: 12),
+            ),
+          ],
         ),
       ),
       actions: [
+        TextButton.icon(
+          key: const Key('platform_data_copy'),
+          onPressed: () => _copy(report),
+          icon: Icon(_copied ? Icons.check : Icons.copy),
+          label: Text(_copied ? 'Copied' : 'Copy'),
+        ),
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
           child: const Text('Close'),

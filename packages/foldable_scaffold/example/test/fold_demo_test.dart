@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show MethodCall, SystemChannels;
 import 'package:flutter/widgets.dart' show Key, Offset, Size;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:foldable_scaffold_example/main.dart';
@@ -163,5 +164,54 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.textContaining('the scope only works on iOS'), findsOneWidget);
     expect(find.textContaining('MediaQuery.displayFeatures'), findsOneWidget);
+  }, variant: desktop);
+
+  testWidgets('the platform data dialog copies the data with the pose', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+    final copied = <String>[];
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (MethodCall call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied.add((call.arguments as Map)['text'] as String);
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+
+    await tester.pumpWidget(const ScaffoldExample());
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('Platform data'));
+    await tester.pumpAndSettle();
+
+    // Without a pose, the text is the data.
+    await tester.tap(find.byKey(const Key('platform_data_copy')));
+    await tester.pumpAndSettle();
+    expect(copied, hasLength(1));
+    expect(copied.single, startsWith('platform: '));
+    expect(copied.single, contains('MediaQuery.size: 1400.00 x 700.00'));
+    expect(find.text('Copied'), findsOneWidget);
+
+    // With one, it goes on top, and the button asks to be pressed again.
+    await tester.enterText(
+      find.byKey(const Key('platform_data_pose')),
+      'outer display',
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('Copy'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('platform_data_copy')));
+    await tester.pumpAndSettle();
+    expect(copied, hasLength(2));
+    expect(copied.last, startsWith('pose: outer display\nplatform: '));
   }, variant: desktop);
 }
