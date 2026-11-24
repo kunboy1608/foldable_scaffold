@@ -1370,11 +1370,24 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
             ),
             child: LayoutBuilder(
               key: keyed ? key : null,
-              builder: (context, constraints) => _navigationFor(
-                context,
-                placement,
-                constraints,
-                builderPadding,
+              // The scaffold applied the system inset of the edge (and the
+              // bottom one when it padded it), so a widget with its own
+              // SafeArea, like NavigationRail, must not take it a second time:
+              // inside the 84 wide strip that leaves it no room at all.
+              builder: (context, constraints) => MediaQuery.removePadding(
+                context: context,
+                removeLeft: !isRight,
+                removeRight: isRight,
+                removeBottom:
+                    padding.bottom > 0 && bottomPadding >= padding.bottom,
+                child: Builder(
+                  builder: (context) => _navigationFor(
+                    context,
+                    placement,
+                    constraints,
+                    builderPadding,
+                  ),
+                ),
               ),
             ),
           ),

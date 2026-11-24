@@ -12,6 +12,10 @@ New:
 * `avoidCutouts: false` only switches off the cutout avoidance: the placement in the strip and the bottom inset of `alignment: end` stay.
 * The `padding` given to a side navigation builder is still 0 on its edge and the system's on the other sides, the bottom included, also when the scaffold padded it (`alignment: end`): do not apply it again.
 
+Fixed:
+
+* A `NavigationRail` (or any widget with its own `SafeArea`) in a side navigation took the system inset of its edge a second time, because `MediaQuery.padding` still held it after the scaffold had applied it. Inside the 84 wide strip that left the rail no width: its icons and labels were drawn outside the strip (seen on the iPhone Duo outer display, 678x466, vertical bar on the start edge). The scaffold now removes the edge inset, and the bottom one when it padded it, from the `MediaQuery` of the side navigation. Test: `foldable_scaffold_rail_safe_area_test.dart`.
+
 Example: the rail uses `groupAlignment` from `placement.alignment` and a `minWidth` that fits `constraints.maxWidth`.
 
 Tests that changed: `defaultNavigationPlacement puts the navigation on the side the platform asks for` and `FoldableVerticalBarScope puts the navigation on the side below the rail width` (navigation test) now expect `alignment: end, insideInset: true`; the slot test of the real iPhone Duo case in `foldable_scaffold_side_inset_test.dart` now uses an explicit `insideInset: false` placement (the dev.8 layout).
