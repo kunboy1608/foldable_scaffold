@@ -1,3 +1,23 @@
+## 0.1.0-dev.9
+
+Changed (behaviour, breaking in the pre-release):
+
+* On iPhone Duo the default navigation (the platform asks for vertical bars) now follows Apple's guidelines: it sits **inside** the system strip of its side (84 wide on the inner display in landscape, with the clock, Wi-Fi and the camera), in line with the system icons, and at the **bottom**. Before, the slot was the extent plus the strip (156) with the rail beside the strip, at the top.
+* `FoldableNavigationPlacementResolver` default (`FoldableNavigationPlacements`) for a vertical bar edge returns `alignment: end, insideInset: true`. Bottom bars and rails by breakpoint are unchanged. With no system inset on that side the slot is the extent as before.
+
+New:
+
+* `FoldableNavigationAlignment` (`start`, `center`, `end`) and `FoldableNavigationPlacement.alignment` (default `start`): the position along the edge (top, middle, bottom for a side navigation). With `end` the scaffold keeps the bottom system inset (home indicator) off a side navigation; the builder reads it to align its content (`NavigationRail.groupAlignment`). For a top or bottom bar it is the horizontal direction and only the builder reads it.
+* `FoldableNavigationPlacement.insideInset` (default false): a side navigation sits in the system inset strip of its edge. With an inset greater than zero the slot is as wide as the strip (`extent` ignored), the navigation fills it with no side padding and `constraints.maxWidth` is the strip's width; with no inset it is a normal slot. The cutouts in that strip (the camera) are avoided, so the navigation moves under them. All named constructors take both new parameters; `==`, `hashCode` and `toString` include them.
+* `avoidCutouts: false` only switches off the cutout avoidance: the placement in the strip and the bottom inset of `alignment: end` stay.
+* The `padding` given to a side navigation builder is still 0 on its edge and the system's on the other sides, the bottom included, also when the scaffold padded it (`alignment: end`): do not apply it again.
+
+Example: the rail uses `groupAlignment` from `placement.alignment` and a `minWidth` that fits `constraints.maxWidth`.
+
+Tests that changed: `defaultNavigationPlacement puts the navigation on the side the platform asks for` and `FoldableVerticalBarScope puts the navigation on the side below the rail width` (navigation test) now expect `alignment: end, insideInset: true`; the slot test of the real iPhone Duo case in `foldable_scaffold_side_inset_test.dart` now uses an explicit `insideInset: false` placement (the dev.8 layout).
+
+Not verified: not run on a device.
+
 ## 0.1.0-dev.8
 
 Fixed:

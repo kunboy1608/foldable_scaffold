@@ -1,7 +1,7 @@
 # foldable_scaffold
 
 > [!WARNING]
-> **Experimental.** This is a prerelease (`0.1.0-dev.8`). The API will change
+> **Experimental.** This is a prerelease (`0.1.0-dev.9`). The API will change
 > without notice and the package is not ready for production use.
 
 A [Scaffold](https://pub.dev/documentation/material_ui/latest/material_ui/Scaffold-class.html)
@@ -14,7 +14,7 @@ but a `FoldableScaffold` works on its own.
 ## Install
 
 ```sh
-flutter pub add foldable_scaffold:^0.1.0-dev.8
+flutter pub add foldable_scaffold:^0.1.0-dev.9
 ```
 
 ## Usage
@@ -302,18 +302,43 @@ those.
 
 ### System insets beside the navigation
 
-A navigation beside the panes (a rail) takes its extent plus the system inset of
-its edge (the status bar strip or camera strip of a phone held sideways, a notch
-on Android, the vertical camera strip of iPhone Duo). The scaffold puts the
-navigation in the extent only and keeps the inset clear: the content of the rail
-(a `NavigationRail` centres its icons in the width it gets) is never under the
-system bars. The background of the navigation does not cover the inset strip;
-paint it behind the scaffold if you want it there. This is done whatever
-`avoidCutouts` is.
+A navigation beside the panes (a rail) normally takes its extent plus the system
+inset of its edge (the status bar strip or camera strip of a phone held sideways,
+a notch on Android). The scaffold puts the navigation in the extent only and
+keeps the inset clear, so the content of the rail is never under the system
+bars. The background of the navigation does not cover the inset strip. This is
+done whatever `avoidCutouts` is.
+
+On **iPhone Duo** (when the platform wants vertical bars, through
+`FoldablePlatformScope` or `FoldableVerticalBarScope`) the default placement
+follows Apple's guidelines instead: the navigation sits **inside** the system
+strip of that side (84 wide on the inner display in landscape), lined up with
+the clock, the Wi-Fi icon and the camera, and at the **bottom**, above the home
+indicator. The slot is exactly as wide as the strip, the navigation fills it
+(`constraints.maxWidth` is the strip's width: keep a `NavigationRail`'s
+`minWidth` within it) and the scaffold moves it below the camera (needs
+`avoidCutouts`, which only switches that off; the place in the strip and the
+bottom inset stay). Use `placement.alignment` to align the content (for a
+`NavigationRail`: `groupAlignment` -1, 0, 1 for `start`, `center`, `end`).
+
+To turn it off, give a placement of your own: `insideInset: false` puts the
+navigation beside the strip (extent plus inset), `alignment: start` keeps it at
+the top without the bottom inset:
+
+```dart
+navigationPlacement: (info) {
+  final p = defaultNavigationPlacement(info);
+  return p.isSide
+      ? FoldableNavigationPlacement(p.edge) // beside the strip, at the top
+      : p;
+},
+```
 
 The `constraints` that the builders get are the extent (the inset is taken
-off), and the `padding` is the system inset the scaffold did **not** apply: the
-side of the rail is 0, the other sides are as the system reports them.
+off; the whole strip when inside it), and the `padding` is the system inset the
+scaffold did **not** apply on the side of the rail: that side is 0, the other
+sides are as the system reports them (the bottom included: with
+`alignment: end` the scaffold pads the bottom already, so do not apply it again).
 
 ### Text direction
 

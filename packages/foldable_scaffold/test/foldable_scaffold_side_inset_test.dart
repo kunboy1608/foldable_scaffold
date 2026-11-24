@@ -89,14 +89,14 @@ void main() {
   Rect rect(WidgetTester tester, Key key) => tester.getRect(find.byKey(key));
 
   group('a side navigation stays out of the system inset', () {
-    testWidgets('the real iPhone Duo case: inner landscape, padding right 84', (
+    testWidgets('the dev.8 layout: a rail beside the strip, not inside it', (
       tester,
     ) async {
       await pump(
         tester,
         padding: const FakeViewPadding(right: 84, bottom: 35),
         features: [_cutout(867, 0, 951, 124)],
-        verticalBar: FoldableNavigationEdge.end,
+        placement: const FoldableNavigationPlacement.end(),
         navigationRail: true,
       );
 
@@ -104,7 +104,7 @@ void main() {
       // The icon is in the extent, left of 951 - 84 = 867.
       final icon = rect(tester, content);
       expect(icon.right, lessThanOrEqualTo(867));
-      // The slot is still extent + inset, and so are the panes.
+      // The slot is extent + inset, and so are the panes.
       final slot = tester.getRect(
         find.byKey(const Key('primary_navigation_builder')),
       );

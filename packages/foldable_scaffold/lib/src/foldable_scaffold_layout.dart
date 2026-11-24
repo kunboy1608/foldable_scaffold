@@ -275,7 +275,12 @@ FrameGeometry computeFrameGeometry({
       (scaffoldWidth > breakpoints.wideRail
           ? maxWidthNavigation
           : minWidthNavigation);
-  final navigationWidth = navigationEdge.isSide ? extent + sidePadding : 0.0;
+  // Inside the strip the slot is the strip; otherwise the extent plus it.
+  final insideInset =
+      placement.insideInset && navigationEdge.isSide && sidePadding > 0;
+  final navigationWidth = !navigationEdge.isSide
+      ? 0.0
+      : (insideInset ? sidePadding : extent + sidePadding);
   // What the navigation really takes: nothing without a navigation to show.
   final railWidth = !hasNavigation ? 0.0 : navigationWidth;
   final paneAreaWidth = scaffoldWidth - railWidth;

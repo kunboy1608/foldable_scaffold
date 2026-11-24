@@ -265,7 +265,11 @@ void main() {
                 verticalBarEdge: edge,
               ),
             ),
-            FoldableNavigationPlacement(edge),
+            FoldableNavigationPlacement(
+              edge,
+              alignment: FoldableNavigationAlignment.end,
+              insideInset: true,
+            ),
             reason: '$edge at $width',
           );
         }
@@ -577,7 +581,15 @@ void main() {
         verticalBarEdge: FoldableNavigationEdge.end,
       );
 
-      expect(call.placement, const FoldableNavigationPlacement.end());
+      // The default placement for a vertical bar is inside the system strip
+      // (changed in dev.9); without a system inset the slot is the extent.
+      expect(
+        call.placement,
+        const FoldableNavigationPlacement.end(
+          alignment: FoldableNavigationAlignment.end,
+          insideInset: true,
+        ),
+      );
       expect(_rect(tester, _navKey), const Rect.fromLTRB(428, 0, 500, 300));
     });
 

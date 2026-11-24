@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 
 import 'package:foldable_scaffold/foldable_scaffold.dart';
@@ -282,6 +283,15 @@ class _ScaffoldExampleState extends State<ScaffoldExample> {
                     selectedIndex: _tab,
                     onDestinationSelected: select,
                     labelType: NavigationRailLabelType.all,
+                    // At the bottom of its edge when the platform wants it
+                    // (iPhone Duo), and never wider than the slot: inside the
+                    // system strip that is narrower than the rail's 72.
+                    groupAlignment: switch (placement.alignment) {
+                      FoldableNavigationAlignment.start => -1.0,
+                      FoldableNavigationAlignment.center => 0.0,
+                      FoldableNavigationAlignment.end => 1.0,
+                    },
+                    minWidth: math.min(72.0, constraints.maxWidth),
                     destinations: [
                       for (final (icon, label, _) in _mailboxes)
                         NavigationRailDestination(

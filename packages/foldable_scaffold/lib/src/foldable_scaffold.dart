@@ -293,6 +293,15 @@ class FoldableScaffold extends StatefulWidget {
   /// the scaffold did not apply: the padded side is 0, the others are the
   /// system's. The background of the navigation does not cover the inset.
   ///
+  /// With [FoldableNavigationPlacement.insideInset] (the default placement when
+  /// the platform wants vertical bars, as on iPhone Duo) and a system inset on
+  /// the side, the slot is exactly the inset wide, the navigation fills it
+  /// (`constraints.maxWidth` is the width of the strip, no side padding), and its
+  /// content lines up with the system icons. With
+  /// [FoldableNavigationPlacement.alignment] `end` the scaffold also keeps the
+  /// bottom inset (`padding.bottom`) off it; that bottom value is still in the
+  /// `padding` given to the builder, which must not apply it again.
+  ///
   /// The navigation is a different widget for each edge, so its state does not
   /// move with it from one edge to another: keep what matters (the selected
   /// tab) in your own state, or give the widget a `GlobalKey`.
@@ -401,8 +410,14 @@ class FoldableScaffold extends StatefulWidget {
   ///   [primaryNavigationBuilder] receive does not include it: the
   ///   navigation is already pushed out of the cutout.
   ///
-  /// The system inset on the side of a rail is applied whatever this is, also
-  /// with false: see [navigationBuilder].
+  /// A rail placed inside the system strip of its edge
+  /// ([FoldableNavigationPlacement.insideInset]) also avoids the cutouts in that
+  /// strip (the camera), moving down under them.
+  ///
+  /// The system inset on the side of a rail, the placement inside the strip and
+  /// the bottom inset of [FoldableNavigationPlacement.alignment] are applied
+  /// whatever this is, also with false (it only switches off the cutout
+  /// avoidance): see [navigationBuilder].
   ///
   /// Not handled: the content of the panes, a navigation below or above the
   /// panes, and toolbars inside the panes: use `MediaQuery.displayFeaturesOf`
@@ -899,6 +914,7 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
     required double width,
     required double scaffoldWidth,
     required EdgeInsets padding,
+    required bool insideInset,
   }) {
     if (_cutouts.isEmpty) return EdgeInsets.zero;
     final appBar = widget.extendBodyBehindAppBar
@@ -911,7 +927,18 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
     // The content of the rail, without the strip of system inset that the
     // slot pads: that strip is the padding's business, not the cutouts'.
     final isRight = edge == FoldableNavigationEdge.right;
-    final area = isRight
+    // Inside the strip, the rail is the strip, and the cutouts in it count:
+    // that strip is not padding for this rail.
+    final area = insideInset
+        ? (isRight
+              ? Rect.fromLTRB(
+                  scaffoldWidth - width,
+                  top,
+                  scaffoldWidth,
+                  _windowSize.height,
+                )
+              : Rect.fromLTRB(0, top, width, _windowSize.height))
+        : isRight
         ? Rect.fromLTRB(
             scaffoldWidth - width,
             top,
@@ -922,7 +949,9 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
     final inset = cutoutInsets(
       area: area,
       cutouts: _cutouts,
-      padding: padding,
+      padding: !insideInset
+          ? padding
+          : (isRight ? padding.copyWith(right: 0) : padding.copyWith(left: 0)),
       windowSize: _windowSize,
       axis: Axis.vertical,
     );
@@ -1306,17 +1335,26 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
         // status bar and the camera strip. The space the cutouts need at the
         // top and bottom is added around it too, not given to the builder.
         final isRight = edge == FoldableNavigationEdge.right;
-        final sidePadding = math.min(
-          isRight ? padding.right : padding.left,
-          animatedWidth,
-        );
+        final edgeInset = isRight ? padding.right : padding.left;
+        final insideInset = active && placement.insideInset && edgeInset > 0;
+        // Inside the strip the navigation fills the slot: no side padding.
+        final sidePadding = insideInset
+            ? 0.0
+            : math.min(edgeInset, animatedWidth);
         final cutoutPadding = _railCutoutInsets(
           context: context,
           edge: edge,
           width: animatedWidth,
           scaffoldWidth: frame.scaffoldWidth,
           padding: padding,
+          insideInset: insideInset,
         );
+        // A navigation at the bottom of its edge keeps off the home
+        // indicator; the cutouts below it may need more.
+        final bottomPadding =
+            active && placement.alignment == FoldableNavigationAlignment.end
+            ? math.max(cutoutPadding.bottom, padding.bottom)
+            : cutoutPadding.bottom;
         // What the scaffold did not apply: the other sides stay as they were.
         final builderPadding = isRight
             ? padding.copyWith(right: 0)
@@ -1328,7 +1366,7 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
               left: isRight ? 0 : sidePadding,
               right: isRight ? sidePadding : 0,
               top: cutoutPadding.top,
-              bottom: cutoutPadding.bottom,
+              bottom: bottomPadding,
             ),
             child: LayoutBuilder(
               key: keyed ? key : null,

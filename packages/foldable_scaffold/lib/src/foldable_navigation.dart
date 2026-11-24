@@ -53,6 +53,29 @@ enum FoldableNavigationEdge {
   }
 }
 
+/// Where a navigation sits along its edge.
+///
+/// For a navigation beside the panes (a rail) it is the vertical position:
+/// [start] is the top, [end] the bottom, [center] the middle. The scaffold
+/// uses it to keep the system inset at the bottom (the home indicator) off a
+/// navigation that reaches the bottom ([end]), and the builder reads it to
+/// align its content (`NavigationRail.groupAlignment` is -1, 0 and 1 for
+/// [start], [center] and [end]).
+///
+/// For a navigation above or below the panes it is the horizontal direction
+/// ([start] and [end] follow the text direction). The scaffold does nothing
+/// with it there: only the builder reads it.
+enum FoldableNavigationAlignment {
+  /// The top of a side navigation; the start of a top or bottom bar.
+  start,
+
+  /// The middle of the edge.
+  center,
+
+  /// The bottom of a side navigation; the end of a top or bottom bar.
+  end,
+}
+
 /// Where the navigation goes, and how thick it is.
 ///
 /// The scaffold asks for one with [FoldableScaffold.navigationPlacement], which
@@ -62,34 +85,90 @@ enum FoldableNavigationEdge {
 @immutable
 class FoldableNavigationPlacement {
   /// A navigation on [edge], [extent] thick.
-  const FoldableNavigationPlacement(this.edge, {this.extent})
-    : assert(extent == null || extent >= 0, 'The extent cannot be negative.');
+  const FoldableNavigationPlacement(
+    this.edge, {
+    this.extent,
+    this.alignment = FoldableNavigationAlignment.start,
+    this.insideInset = false,
+  }) : assert(extent == null || extent >= 0, 'The extent cannot be negative.');
 
   /// No navigation.
-  const FoldableNavigationPlacement.none() : this(FoldableNavigationEdge.none);
+  const FoldableNavigationPlacement.none({
+    FoldableNavigationAlignment alignment = FoldableNavigationAlignment.start,
+    bool insideInset = false,
+  }) : this(
+         FoldableNavigationEdge.none,
+         alignment: alignment,
+         insideInset: insideInset,
+       );
 
   /// Below the panes. A bottom navigation is as tall as the widget makes it.
-  const FoldableNavigationPlacement.bottom()
-    : this(FoldableNavigationEdge.bottom);
+  const FoldableNavigationPlacement.bottom({
+    FoldableNavigationAlignment alignment = FoldableNavigationAlignment.start,
+    bool insideInset = false,
+  }) : this(
+         FoldableNavigationEdge.bottom,
+         alignment: alignment,
+         insideInset: insideInset,
+       );
 
   /// Above the panes. A top navigation is as tall as the widget makes it.
-  const FoldableNavigationPlacement.top() : this(FoldableNavigationEdge.top);
+  const FoldableNavigationPlacement.top({
+    FoldableNavigationAlignment alignment = FoldableNavigationAlignment.start,
+    bool insideInset = false,
+  }) : this(
+         FoldableNavigationEdge.top,
+         alignment: alignment,
+         insideInset: insideInset,
+       );
 
   /// Beside the panes, on the start side, [extent] wide.
-  const FoldableNavigationPlacement.start({double? extent})
-    : this(FoldableNavigationEdge.start, extent: extent);
+  const FoldableNavigationPlacement.start({
+    double? extent,
+    FoldableNavigationAlignment alignment = FoldableNavigationAlignment.start,
+    bool insideInset = false,
+  }) : this(
+         FoldableNavigationEdge.start,
+         extent: extent,
+         alignment: alignment,
+         insideInset: insideInset,
+       );
 
   /// Beside the panes, on the end side, [extent] wide.
-  const FoldableNavigationPlacement.end({double? extent})
-    : this(FoldableNavigationEdge.end, extent: extent);
+  const FoldableNavigationPlacement.end({
+    double? extent,
+    FoldableNavigationAlignment alignment = FoldableNavigationAlignment.start,
+    bool insideInset = false,
+  }) : this(
+         FoldableNavigationEdge.end,
+         extent: extent,
+         alignment: alignment,
+         insideInset: insideInset,
+       );
 
   /// Beside the panes, on the physical left edge, [extent] wide.
-  const FoldableNavigationPlacement.left({double? extent})
-    : this(FoldableNavigationEdge.left, extent: extent);
+  const FoldableNavigationPlacement.left({
+    double? extent,
+    FoldableNavigationAlignment alignment = FoldableNavigationAlignment.start,
+    bool insideInset = false,
+  }) : this(
+         FoldableNavigationEdge.left,
+         extent: extent,
+         alignment: alignment,
+         insideInset: insideInset,
+       );
 
   /// Beside the panes, on the physical right edge, [extent] wide.
-  const FoldableNavigationPlacement.right({double? extent})
-    : this(FoldableNavigationEdge.right, extent: extent);
+  const FoldableNavigationPlacement.right({
+    double? extent,
+    FoldableNavigationAlignment alignment = FoldableNavigationAlignment.start,
+    bool insideInset = false,
+  }) : this(
+         FoldableNavigationEdge.right,
+         extent: extent,
+         alignment: alignment,
+         insideInset: insideInset,
+       );
 
   /// Where the navigation is.
   final FoldableNavigationEdge edge;
@@ -100,8 +179,42 @@ class FoldableNavigationPlacement {
   /// Null takes [FoldableScaffold.minWidthNavigation], or
   /// [FoldableScaffold.maxWidthNavigation] when the scaffold is wider than
   /// [FoldableBreakpoints.wideRail]. Ignored for a navigation above or below the
-  /// panes, which is as tall as its widget.
+  /// panes, which is as tall as its widget. Also ignored when [insideInset]
+  /// takes effect: the slot is then as wide as the system inset.
   final double? extent;
+
+  /// Where the navigation sits along its edge: see
+  /// [FoldableNavigationAlignment].
+  ///
+  /// For a side navigation, [FoldableNavigationAlignment.end] (the bottom) makes
+  /// the scaffold keep the bottom system inset (`MediaQuery.padding.bottom`, the
+  /// home indicator) off it, by padding the navigation at the bottom. The
+  /// `padding` given to the builder still has that bottom inset in it, so the
+  /// builder must not apply it a second time. [FoldableNavigationAlignment.start]
+  /// and [FoldableNavigationAlignment.center] add nothing. For a bar above or
+  /// below the panes it is the horizontal direction and only the builder reads it.
+  final FoldableNavigationAlignment alignment;
+
+  /// Whether a navigation beside the panes sits **in** the system inset strip of
+  /// its edge instead of next to it.
+  ///
+  /// On the inner display of iPhone Duo in landscape, the system keeps a strip
+  /// 84 wide on one side for the clock, the Wi-Fi icon and the camera. With this
+  /// true, and the system inset of that edge (`MediaQuery.padding.left` or
+  /// `.right`) greater than zero, the slot is exactly that wide (not
+  /// `extent + inset`), the navigation fills it with no side padding, and its
+  /// `constraints.maxWidth` is the strip's width, so its content lines up with
+  /// the system icons. [extent] is ignored. The cutouts inside the strip of this
+  /// edge (the camera) are then avoided, pushing the navigation down below
+  /// them (this needs [FoldableScaffold.avoidCutouts], which only switches off
+  /// that avoidance, not the placement in the strip or the bottom inset of
+  /// [alignment]).
+  ///
+  /// With a zero inset on that edge it falls back to a normal slot [extent]
+  /// wide. The `padding` given to the builder is 0 on that edge, and the system's
+  /// on the other sides, as for any side navigation. Ignored for a navigation
+  /// above or below the panes.
+  final bool insideInset;
 
   /// Whether the navigation is beside the panes.
   bool get isSide => edge.isSide;
@@ -113,15 +226,19 @@ class FoldableNavigationPlacement {
   bool operator ==(Object other) =>
       other is FoldableNavigationPlacement &&
       other.edge == edge &&
-      other.extent == extent;
+      other.extent == extent &&
+      other.alignment == alignment &&
+      other.insideInset == insideInset;
 
   @override
-  int get hashCode => Object.hash(edge, extent);
+  int get hashCode => Object.hash(edge, extent, alignment, insideInset);
 
   @override
   String toString() =>
       'FoldableNavigationPlacement(${edge.name}'
-      '${extent == null ? '' : ', extent: $extent'})';
+      '${extent == null ? '' : ', extent: $extent'}'
+      '${alignment == FoldableNavigationAlignment.start ? '' : ', alignment: ${alignment.name}'}'
+      '${insideInset ? ', insideInset: true' : ''})';
 }
 
 /// What a [FoldableNavigationPlacementResolver] has to decide on.
@@ -285,7 +402,14 @@ abstract final class FoldableNavigationPlacements {
   static FoldableNavigationPlacement _standard(FoldableLayoutInfo info) {
     final verticalBarEdge = info.verticalBarEdge;
     if (verticalBarEdge != null && verticalBarEdge.isSide) {
-      return FoldableNavigationPlacement(verticalBarEdge);
+      // The platform's vertical bars live in the system strip of that side,
+      // lined up with the status icons and at the bottom (Apple's iPhone Duo
+      // guidelines).
+      return FoldableNavigationPlacement(
+        verticalBarEdge,
+        alignment: FoldableNavigationAlignment.end,
+        insideInset: true,
+      );
     }
     return info.hasRailWidth
         ? const FoldableNavigationPlacement.start()
@@ -307,7 +431,8 @@ FoldableNavigationPlacement defaultNavigationPlacement(
 /// a side.
 ///
 /// [constraints] are what the navigation gets: for a side, its extent (the
-/// slot minus the system inset of its edge, which the scaffold pads) and the
+/// slot minus the system inset of its edge, which the scaffold pads; the whole
+/// slot, as wide as the inset, with [FoldableNavigationPlacement.insideInset]) and the
 /// height of the scaffold; for a bar, the width of the scaffold and no height
 /// limit. [padding] is the system inset around the scaffold that the scaffold
 /// has not applied to the navigation: for a side, that side is 0 and the others
