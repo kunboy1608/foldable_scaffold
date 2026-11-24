@@ -1,7 +1,7 @@
 # foldable_scaffold
 
 > [!WARNING]
-> **Experimental.** This is a prerelease (`0.1.0-dev.5`). The API will change
+> **Experimental.** This is a prerelease (`0.1.0-dev.6`). The API will change
 > without notice and the package is not ready for production use.
 
 A [Scaffold](https://pub.dev/documentation/material_ui/latest/material_ui/Scaffold-class.html)
@@ -14,7 +14,7 @@ but a `FoldableScaffold` works on its own.
 ## Install
 
 ```sh
-flutter pub add foldable_scaffold:^0.1.0-dev.5
+flutter pub add foldable_scaffold:^0.1.0-dev.6
 ```
 
 ## Usage
@@ -169,8 +169,10 @@ inner one (the inner display in portrait keeps the bars on the top and the
 bottom). It decides which side, which can follow the language or the hardware,
 and tells an iOS app with the `verticalBarEdge` trait in UIKit or the
 `toolbarVerticalEdge` environment value in SwiftUI, so the width alone cannot
-tell. Flutter does not expose that value yet: read it on the platform side and
-give it to the scaffold with `FoldableVerticalBarScope`.
+tell. Flutter does not expose that value yet. The easy way is
+[`FoldablePlatformScope`](#iphone-duo-the-platform-bridge), which reads it on
+iOS and provides it. To provide it yourself (from your own platform code, or
+to test), use `FoldableVerticalBarScope`:
 
 ```dart
 FoldableVerticalBarScope(
@@ -184,6 +186,91 @@ width: `start` and `end` follow the text direction, `left` and `right` do not.
 With no scope, or a null edge, nothing changes. On iPhone Duo, the system also
 moves the app bar and the toolbar to the side; the scaffold's app bar stays on
 top, so for that case give `appBarBuilder` your own layout.
+
+### iPhone Duo: the platform bridge
+
+Flutter does not put the hinge, the cameras or the side of the vertical bars of
+iPhone Duo in `MediaQuery`: that data exists only in UIKit (iOS 27.1 and later:
+`UIView.ReservedRegion` and `UITraitCollection.verticalBarEdge`). This package is
+also a Flutter plugin with an iOS part (and only an iOS part: every other
+platform has no native code and uses the package as plain Dart) that reads it,
+and `FoldablePlatformScope` hands it to your tree.
+
+```dart
+MaterialApp(
+  builder: (context, child) => FoldablePlatformScope(child: child!),
+  home: const MyHome(),
+)
+```
+
+Put it **below the `WidgetsApp`**, in `MaterialApp.builder` (or the `builder` of
+`CupertinoApp` or `WidgetsApp`): `WidgetsApp` makes its own `MediaQuery`, which
+would replace one made above it. If the builder also rewrites
+`MediaQuery.displayFeatures` (a fold simulator, like the example's), put that
+below the scope to override the platform, or above it to merge. On every
+platform but iOS (and on the web) the widget returns its child untouched and
+never uses the channel.
+
+On iOS, the scope:
+
+* adds to `MediaQuery.displayFeatures` the **active** reserved regions, merged
+  with the features Flutter already reported and without duplicates. A division
+  (the hinge) becomes a `DisplayFeatureType.fold` in
+  `DisplayFeatureState.postureHalfOpened`: a vertical one is a book, a
+  horizontal one a laptop, and `FoldableScaffold` side by side or stacks the
+  panes as it does for any other fold. An occlusion (outer or inner camera,
+  Dynamic Island) becomes a `DisplayFeatureType.cutout` with
+  `DisplayFeatureState.unknown`.
+* provides `FoldableVerticalBarScope`: `leading` is `FoldableNavigationEdge.start`,
+  `trailing` is `end`, `unspecified` is null.
+* gives the whole `FoldablePlatformState` to `FoldablePlatformScope.maybeOf`,
+  including the **inactive** regions (a division that is not active because the
+  device is fully open; the inner camera while it is off), with their frames.
+  Inactive regions are not display features, because they do not affect the
+  layout now; read them from the state to leave room for them.
+
+The numbers are in logical pixels (points are logical pixels on iOS) and in the
+coordinates of the Flutter view, which is the window when the view covers it.
+
+**Minimum iOS.** The plugin supports iOS 15 and later (the deployment target of the pod and of the Swift package), which is what the App Store requires.
+
+**Xcode.** The plugin names APIs that exist only in the iOS 27.1 SDK, so an
+iOS app that depends on `foldable_scaffold` has to be built with an Xcode that
+has that SDK (the one that can build for iPhone Duo). An older Xcode fails to
+compile the plugin, even for an app that does not care about iPhone Duo. On a
+device or simulator with an iOS older than 27.1 the code does not run
+(`#available(iOS 27.1, *)`): the plugin answers with no regions and a
+`verticalBarEdge` of `unspecified`, so `FoldablePlatformScope` changes nothing.
+
+**How changes are found.** The plugin does not swizzle anything and does not
+subclass `FlutterViewController`. While Dart listens it watches the bounds of
+the Flutter view and compares the state on a display link at 10 frames per
+second (paused in the background), and sends an event only when the data really
+changed. It stops when the last listener is gone. Dart also asks for the state
+whenever the window metrics change.
+
+**Known limits, and what has not been verified.**
+
+* The Swift code and the podspec have **not been compiled or run**: they were
+  written on Linux, from the Apple documentation. They need a check in Xcode
+  with the iOS 27.1 SDK.
+* The 10 fps display link is a guess. If the system re-evaluates the regions in
+  a way that only `updateConstraints` sees, there can be a delay of up to a
+  tenth of a second.
+* The plugin reads the view of the engine's `FlutterViewController`
+  (`FlutterPluginRegistrar.viewController`), the single-view API: a Flutter view
+  that does not cover its window (a view in a part of the screen, an
+  add-to-app host) reports regions in its own coordinates, which is what the
+  frames mean, but nothing was tested there. Several windows or scenes (the
+  multi-display features of iPhone Duo) are not handled specially.
+* The app bar and the toolbar that the system moves to the side are not
+  replaced: only the navigation is.
+* The numbers of the real device are still to be measured: see the table of
+  device profiles under [Folds and hinges](#folds-and-hinges).
+
+To read what the platform reports (in the simulator, for instance), the
+[example](example/lib/main.dart) has a button in its app bar that shows the
+data live, and prints it with `debugPrint` each time it changes.
 
 ### Text direction
 
@@ -511,7 +598,8 @@ be filled in from the Device Hub of Xcode) whose tests run once a profile has it
 numbers.
 
 The fold is in window coordinates. iOS (except dual-screen devices such as
-iPhone Duo, if they report it) and the web report no folds; there the width rules
+iPhone Duo, through [`FoldablePlatformScope`](#iphone-duo-the-platform-bridge))
+and the web report no folds; there the width rules
 above are all that decide.
 
 To try it without a foldable, run the [example](example/lib/main.dart): the

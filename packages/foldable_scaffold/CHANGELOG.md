@@ -1,3 +1,18 @@
+## 0.1.0-dev.6
+
+New:
+
+* `foldable_scaffold` is now also a Flutter plugin with an iOS part (iOS only: the other platforms have no native code and use it as plain Dart). It brings to Flutter what only UIKit knows on iPhone Duo (`UIView.ReservedRegion`, `UITraitCollection.verticalBarEdge`, iOS 27.1 and later): the fold, the cameras and the Dynamic Island as display features, and the side of the system's vertical bars.
+* `FoldablePlatformScope` wraps the app (in `MaterialApp.builder`, below the `WidgetsApp`) and, on iOS only, puts the active reserved regions in `MediaQuery.displayFeatures` (merged with the existing ones, without duplicates; a division is a `fold` in `postureHalfOpened`, an occlusion is a `cutout`) and provides `FoldableVerticalBarScope` (`leading` is `start`, `trailing` is `end`, `unspecified` is null). On every other platform it returns its child untouched and does not use the channel. `FoldablePlatformScope.maybeOf(context)` gives the whole state.
+* `FoldablePlatformState` (immutable, `==`/`hashCode`, `fromMap` that never throws and falls back to safe defaults, `displayFeatures`), `FoldableReservedRegion` (`frame`, `isActive`, `margins`), `FoldablePlatformSource` (the interface of where the data comes from) and `ChannelFoldablePlatformSource` (the real one: the method channel `foldable_scaffold/platform` with `getState`, the event channel `foldable_scaffold/platform/events`, protocol version 1).
+* Inactive regions are in the state but are not display features: a division that is not active (the device is fully open) is no fold, and a camera that is off covers nothing.
+* The iOS plugin supports iOS 15 and later (CocoaPods and Swift Package Manager).
+* Building the iOS plugin needs an Xcode with the iOS 27.1 SDK (the one that builds for iPhone Duo): it names APIs that older SDKs do not have, so an older Xcode fails to compile any iOS app that depends on this package. On an iOS older than 27.1 the calls are skipped (`#available`) and the plugin answers with no regions and an unspecified edge.
+* Changes are found without swizzling or subclassing the view controller: a watch on the bounds of the Flutter view and a light display link that compares the state (only while Dart listens), plus a `getState` call when the window metrics change.
+* The example wraps the app in the scope (the simulated folds keep working and override the platform's), has a "Platform data" button that shows the numbers live, and prints them with `debugPrint` when they change, to measure a device.
+
+Not verified: the Swift code and the podspec were written without Xcode and have **not been compiled or run**.
+
 ## 0.1.0-dev.5
 
 **Breaking changes:**

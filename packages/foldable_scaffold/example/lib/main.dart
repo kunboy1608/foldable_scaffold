@@ -3,6 +3,8 @@ import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 import 'package:foldable_scaffold/foldable_scaffold.dart';
 import 'package:material_ui/material_ui.dart';
 
+import 'platform_debug.dart';
+
 void main() => runApp(const ScaffoldExample());
 
 /// What the demo pretends the device has, in place of the real one.
@@ -181,145 +183,164 @@ class _ScaffoldExampleState extends State<ScaffoldExample> {
           ),
         ],
       ),
-      // The fake fold goes where the real one would come from.
-      builder: (context, child) {
-        final feature = _fold.featureFor(MediaQuery.sizeOf(context));
-        if (feature == null) return child!;
-        return MediaQuery(
-          data: MediaQuery.of(context).copyWith(displayFeatures: [feature]),
-          child: child!,
-        );
-      },
+      // The platform scope goes first: on iOS it gives the fold, the cameras and
+      // the side of the vertical bars of the device (iPhone Duo). The fake fold
+      // below it replaces them when a simulation is chosen, and "This device"
+      // leaves the real ones. On other platforms the scope does nothing.
+      builder: (context, child) => FoldablePlatformScope(
+        child: PlatformDebugLogger(
+          child: Builder(
+            builder: (context) {
+              final feature = _fold.featureFor(MediaQuery.sizeOf(context));
+              if (feature == null) return child!;
+              return MediaQuery(
+                data: MediaQuery.of(
+                  context,
+                ).copyWith(displayFeatures: [feature]),
+                child: child!,
+              );
+            },
+          ),
+        ),
+      ),
       home: FoldableMotion(
         scale: options.slowMotion ? _slowMotion : _normalMotion,
         // What a device with vertical bars would tell the app. On iOS it
-        // comes from the platform (verticalBarEdge); here it is a switch.
-        child: FoldableVerticalBarScope(
-          edge: options.verticalBar,
-          child: FoldableScaffold(
-            controller: _controller,
-            breakpoints: _breakpoints,
-            followFold: options.followFold,
-            focusOnPrimaryBody: options.focusOnPrimaryBody,
-            minBodySize: options.minBodySize,
-            dividerSize: options.dividerSize,
-            snapWidths: options.snap ? _snapWidths : const [],
-            appBar: AppBar(
-              title: Text(_mailboxes[_tab].$2),
-              // The end drawer button below replaces the implied one.
-              automaticallyImplyActions: false,
-              actions: [
-                _FoldMenu(
-                  fold: _fold,
-                  handheldRules: _handheldRules,
-                  onFold: (fold) => _update(() => _fold = fold),
-                  onHandheldRules: (value) =>
-                      _update(() => _handheldRules = value),
-                ),
-                IconButton(
-                  icon: const Icon(Icons.restart_alt),
-                  tooltip: 'Reset layout',
-                  onPressed: _controller.resetDivider,
-                ),
-                Builder(
-                  builder: (context) => IconButton(
-                    icon: const Icon(Icons.tune),
-                    tooltip: 'Layout options',
-                    onPressed: Scaffold.of(context).openEndDrawer,
+        // comes from the platform (verticalBarEdge); the switch in the options
+        // drawer overrides it, and "Default" leaves the platform's.
+        child: Builder(
+          builder: (context) => FoldableVerticalBarScope(
+            edge:
+                options.verticalBar ??
+                FoldableVerticalBarScope.maybeOf(context),
+            child: FoldableScaffold(
+              controller: _controller,
+              breakpoints: _breakpoints,
+              followFold: options.followFold,
+              focusOnPrimaryBody: options.focusOnPrimaryBody,
+              minBodySize: options.minBodySize,
+              dividerSize: options.dividerSize,
+              snapWidths: options.snap ? _snapWidths : const [],
+              appBar: AppBar(
+                title: Text(_mailboxes[_tab].$2),
+                // The end drawer button below replaces the implied one.
+                automaticallyImplyActions: false,
+                actions: [
+                  const PlatformDebugButton(),
+                  _FoldMenu(
+                    fold: _fold,
+                    handheldRules: _handheldRules,
+                    onFold: (fold) => _update(() => _fold = fold),
+                    onHandheldRules: (value) =>
+                        _update(() => _handheldRules = value),
                   ),
-                ),
-              ],
-            ),
-            drawer: _MailDrawer(
-              tab: _tab,
-              onTab: (index) => _update(() {
-                _tab = index;
-                _message = null;
-              }),
-            ),
-            endDrawer: Drawer(
-              child: _OptionsPanel(options: options, onChanged: _update),
-            ),
-            floatingActionButton: _composing
-                ? null
-                : FloatingActionButton.extended(
-                    onPressed: () => _update(() => _composing = true),
-                    icon: const Icon(Icons.edit),
-                    label: const Text('Compose'),
+                  IconButton(
+                    icon: const Icon(Icons.restart_alt),
+                    tooltip: 'Reset layout',
+                    onPressed: _controller.resetDivider,
                   ),
-            bottomSheet: _composing
-                ? _ComposeSheet(onDone: () => _update(() => _composing = false))
-                : null,
-            // One builder for every placement: a rail beside the panes, a bar
-            // below them. Try the vertical bar option in the end drawer.
-            navigationBuilder: (context, placement, constraints, padding) {
-              void select(int index) => _update(() {
-                _tab = index;
-                _message = null;
-              });
-              if (placement.isSide) {
-                return NavigationRail(
+                  Builder(
+                    builder: (context) => IconButton(
+                      icon: const Icon(Icons.tune),
+                      tooltip: 'Layout options',
+                      onPressed: Scaffold.of(context).openEndDrawer,
+                    ),
+                  ),
+                ],
+              ),
+              drawer: _MailDrawer(
+                tab: _tab,
+                onTab: (index) => _update(() {
+                  _tab = index;
+                  _message = null;
+                }),
+              ),
+              endDrawer: Drawer(
+                child: _OptionsPanel(options: options, onChanged: _update),
+              ),
+              floatingActionButton: _composing
+                  ? null
+                  : FloatingActionButton.extended(
+                      onPressed: () => _update(() => _composing = true),
+                      icon: const Icon(Icons.edit),
+                      label: const Text('Compose'),
+                    ),
+              bottomSheet: _composing
+                  ? _ComposeSheet(
+                      onDone: () => _update(() => _composing = false),
+                    )
+                  : null,
+              // One builder for every placement: a rail beside the panes, a bar
+              // below them. Try the vertical bar option in the end drawer.
+              navigationBuilder: (context, placement, constraints, padding) {
+                void select(int index) => _update(() {
+                  _tab = index;
+                  _message = null;
+                });
+                if (placement.isSide) {
+                  return NavigationRail(
+                    selectedIndex: _tab,
+                    onDestinationSelected: select,
+                    labelType: NavigationRailLabelType.all,
+                    destinations: [
+                      for (final (icon, label, _) in _mailboxes)
+                        NavigationRailDestination(
+                          icon: Icon(icon),
+                          label: Text(label),
+                        ),
+                    ],
+                  );
+                }
+                return NavigationBar(
                   selectedIndex: _tab,
                   onDestinationSelected: select,
-                  labelType: NavigationRailLabelType.all,
                   destinations: [
                     for (final (icon, label, _) in _mailboxes)
-                      NavigationRailDestination(
-                        icon: Icon(icon),
-                        label: Text(label),
-                      ),
+                      NavigationDestination(icon: Icon(icon), label: label),
                   ],
                 );
-              }
-              return NavigationBar(
-                selectedIndex: _tab,
-                onDestinationSelected: select,
-                destinations: [
-                  for (final (icon, label, _) in _mailboxes)
-                    NavigationDestination(icon: Icon(icon), label: label),
+              },
+              body: ListView(
+                children: [
+                  const _LayoutCard(),
+                  for (final message in _mailboxes[_tab].$3)
+                    ListTile(
+                      selected: message == _message,
+                      title: Text(message),
+                      onTap: () => _update(() => _message = message),
+                    ),
                 ],
-              );
-            },
-            body: ListView(
-              children: [
-                const _LayoutCard(),
-                for (final message in _mailboxes[_tab].$3)
-                  ListTile(
-                    selected: message == _message,
-                    title: Text(message),
-                    onTap: () => _update(() => _message = message),
+              ),
+              hasSecondaryBody: _message != null,
+              // The system back closes the message before it leaves the app.
+              onSecondBodyClose: (didPop, _) => _update(() => _message = null),
+              // A builder, for the pane width: the divider is dragged.
+              secondaryBodyBuilder: (context, constraints) {
+                final message = _message;
+                if (message == null) return null;
+                return Scaffold(
+                  appBar: AppBar(title: Text(message)),
+                  body: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Reading "$message".'),
+                        const SizedBox(height: 8),
+                        Text(
+                          'This pane is ${constraints.maxWidth.round()} wide.',
+                        ),
+                        const Spacer(),
+                        FilledButton.tonal(
+                          onPressed: () => _update(() => _message = null),
+                          child: const Text('Close the message'),
+                        ),
+                      ],
+                    ),
                   ),
-              ],
+                );
+              },
             ),
-            hasSecondaryBody: _message != null,
-            // The system back closes the message before it leaves the app.
-            onSecondBodyClose: (didPop, _) => _update(() => _message = null),
-            // A builder, for the pane width: the divider is dragged.
-            secondaryBodyBuilder: (context, constraints) {
-              final message = _message;
-              if (message == null) return null;
-              return Scaffold(
-                appBar: AppBar(title: Text(message)),
-                body: Padding(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Reading "$message".'),
-                      const SizedBox(height: 8),
-                      Text(
-                        'This pane is ${constraints.maxWidth.round()} wide.',
-                      ),
-                      const Spacer(),
-                      FilledButton.tonal(
-                        onPressed: () => _update(() => _message = null),
-                        child: const Text('Close the message'),
-                      ),
-                    ],
-                  ),
-                ),
-              );
-            },
           ),
         ),
       ),

@@ -148,4 +148,20 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('Mail'), findsOneWidget);
   }, variant: desktop);
+
+  testWidgets('the platform data dialog says the scope only works on iOS', (
+    tester,
+  ) async {
+    tester.view.physicalSize = const Size(1400, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const ScaffoldExample());
+    await tester.pumpAndSettle();
+
+    await tester.tap(find.byTooltip('Platform data'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('the scope only works on iOS'), findsOneWidget);
+    expect(find.textContaining('MediaQuery.displayFeatures'), findsOneWidget);
+  }, variant: desktop);
 }

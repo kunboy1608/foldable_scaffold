@@ -326,8 +326,9 @@ typedef FoldableNavigationBuilder =
 /// display on its outer display, and in some poses of the inner display. The
 /// system tells an iOS app which side: the `verticalBarEdge` trait in UIKit,
 /// the `toolbarVerticalEdge` environment value in SwiftUI. Flutter does not
-/// expose it, so an app (or a plugin) reads it on the platform side and
-/// provides it here:
+/// expose it: [FoldablePlatformScope] reads it on iOS and provides this scope.
+/// An app that knows it another way (its own platform code, a test) provides it
+/// here:
 ///
 /// ```dart
 /// FoldableVerticalBarScope(
