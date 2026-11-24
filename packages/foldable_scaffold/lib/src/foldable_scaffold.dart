@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 import 'dart:ui' show DisplayFeature;
 
 import 'package:flutter/foundation.dart';
@@ -77,6 +78,9 @@ import 'foldable_scaffold_theme.dart';
 ///
 /// The divider can snap to set widths when it is released ([snapWidths]).
 ///
+/// With [avoidCutouts] (the default) the app bar and a rail also stay out of
+/// the cameras and the Dynamic Island of a display (see [avoidCutouts]).
+///
 /// The divider is themed by the closest [FoldableScaffoldThemeData] that the
 /// [ThemeData] carries, overridden by [theme], and its handle can be replaced
 /// by [dividerBuilder]. It takes the keyboard focus, moves with the arrow keys
@@ -139,6 +143,7 @@ class FoldableScaffold extends StatefulWidget {
     this.focusOnPrimaryBody = false,
     this.breakpoints,
     this.followFold = true,
+    this.avoidCutouts = true,
     this.minWidthNavigation = 72.0,
     this.maxWidthNavigation = 192.0,
     this.minBodySize = 200.0,
@@ -359,6 +364,40 @@ class FoldableScaffold extends StatefulWidget {
   /// change of posture afterwards uses the last measure and shows the right
   /// layout at once. Devices without a fold are unaffected.
   final bool followFold;
+
+  /// Whether the app bar and a navigation beside the panes (a rail) stay clear
+  /// of the cutouts of the display: the cameras and the Dynamic Island, the
+  /// `DisplayFeatureType.cutout` features of `MediaQuery.displayFeatures`
+  /// (iPhone Duo reports them through [FoldablePlatformScope]; Android reports
+  /// the real ones). Defaults to true; false keeps the layout as it was.
+  ///
+  /// Where the system already keeps content out of the cutout (the safe area,
+  /// `MediaQuery.padding`, as on most phones) nothing is added: only a cutout
+  /// that the padding does not cover is avoided. iPhone Duo reports a zero
+  /// padding even with its cameras, so the scaffold does it:
+  ///
+  /// * the **app bar** gets the extra space on the side of the cutout as
+  ///   `MediaQuery.padding` (and `viewPadding`), which [AppBar] applies to its
+  ///   toolbar (leading, title and actions) with a `SafeArea`: the background
+  ///   (and `flexibleSpace`) still fills the whole width, the content is out of
+  ///   the camera. An app bar of your own has to respect the padding of the
+  ///   `MediaQuery` the same way (and an [AppBar] with `primary: false` does
+  ///   not);
+  /// * a **rail** (the navigation beside the panes) gets the space as padding
+  ///   at its top or bottom, so its content is out of the cutout (the
+  ///   background of the navigation does not fill that part). Its width does
+  ///   not change. The `padding` that [navigationBuilder] and
+  ///   [primaryNavigationBuilder] receive is still the system's: the
+  ///   navigation is already pushed out of the cutout.
+  ///
+  /// Not handled: the content of the panes, a navigation below or above the
+  /// panes, and toolbars inside the panes: use `MediaQuery.displayFeaturesOf`
+  /// for those.
+  ///
+  /// The cutouts are in window coordinates, so they apply only when the
+  /// scaffold is as wide and as tall as the window (like [followFold]); a
+  /// scaffold inside something smaller ignores them.
+  final bool avoidCutouts;
 
   /// Width of the primary navigation when it is shown sideways.
   final double minWidthNavigation;
@@ -584,6 +623,12 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
   /// the only case where a new measure rebuilds the scaffold.
   bool _needsPaneRect = false;
 
+  /// The cutouts to stay clear of, in window coordinates, and the window they
+  /// are in, as of the last build (empty when [FoldableScaffold.avoidCutouts]
+  /// is off or the scaffold does not cover the window).
+  List<Rect> _cutouts = const [];
+  Size _windowSize = Size.zero;
+
   /// Whether the last build followed a horizontal hinge before the pane area
   /// was measured once: the panes are laid out from an estimate and not shown
   /// until the measure confirms it.
@@ -792,12 +837,74 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
 
   /// The app bar, from [FoldableScaffold.appBarBuilder] or
   /// [FoldableScaffold.appBar].
-  PreferredSizeWidget? _appBar(BuildContext context, double scaffoldWidth) {
+  PreferredSizeWidget? _rawAppBar(BuildContext context, double scaffoldWidth) {
     return widget.appBarBuilder?.call(
           context,
           BoxConstraints(maxWidth: scaffoldWidth, maxHeight: kToolbarHeight),
         ) ??
         widget.appBar;
+  }
+
+  /// The app bar, moved out of the cutouts: wrapped in a [MediaQuery] whose
+  /// left and right padding include the space the cutouts need, which [AppBar]
+  /// applies to its toolbar only (its background still fills the width).
+  ///
+  /// The wrapper is there whenever [FoldableScaffold.avoidCutouts] is on, even
+  /// with nothing to avoid, so the app bar keeps its state when a pose changes.
+  PreferredSizeWidget? _appBar(BuildContext context, double scaffoldWidth) {
+    final appBar = _rawAppBar(context, scaffoldWidth);
+    if (appBar == null || !widget.avoidCutouts) return appBar;
+    final padding = MediaQuery.paddingOf(context);
+    final top = widget.primary ? padding.top : 0.0;
+    final inset = cutoutInsets(
+      area: Rect.fromLTRB(
+        0,
+        top,
+        scaffoldWidth,
+        top + AppBar.preferredHeightFor(context, appBar.preferredSize),
+      ),
+      cutouts: _cutouts,
+      padding: padding,
+      windowSize: _windowSize,
+      axis: Axis.horizontal,
+    );
+    return _CutoutAvoidingAppBar(appBar: appBar, inset: inset);
+  }
+
+  /// The space a rail on the physical [edge] needs at its top and bottom to
+  /// stay clear of the cutouts, for a slot [width] wide.
+  ///
+  /// The rail runs from under the app bar (from the top of the window with
+  /// [FoldableScaffold.extendBodyBehindAppBar] or without an app bar) to the
+  /// bottom of the window. With a rail there is no navigation above the panes,
+  /// so the app bar is all that is above it and its height is known without
+  /// measuring.
+  EdgeInsets _railCutoutInsets({
+    required BuildContext context,
+    required FoldableNavigationEdge edge,
+    required double width,
+    required double scaffoldWidth,
+    required EdgeInsets padding,
+  }) {
+    if (_cutouts.isEmpty) return EdgeInsets.zero;
+    final appBar = widget.extendBodyBehindAppBar
+        ? null
+        : _rawAppBar(context, scaffoldWidth);
+    final top = appBar == null
+        ? 0.0
+        : AppBar.preferredHeightFor(context, appBar.preferredSize) +
+              (widget.primary ? padding.top : 0.0);
+    final left = edge == FoldableNavigationEdge.right
+        ? scaffoldWidth - width
+        : 0.0;
+    final inset = cutoutInsets(
+      area: Rect.fromLTRB(left, top, left + width, _windowSize.height),
+      cutouts: _cutouts,
+      padding: padding,
+      windowSize: _windowSize,
+      axis: Axis.vertical,
+    );
+    return EdgeInsets.only(top: inset.top, bottom: inset.bottom);
   }
 
   /// The bottom navigation, from
@@ -927,7 +1034,7 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
     if (!_needsPaneRect) return null;
     if (measured != null) return measured;
 
-    final appBar = _appBar(context, scaffoldWidth);
+    final appBar = _rawAppBar(context, scaffoldWidth);
     final top = appBar == null
         ? 0.0
         : AppBar.preferredHeightFor(context, appBar.preferredSize) +
@@ -983,6 +1090,14 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
               ),
             );
         final scaffoldHeight = scaffoldConstraints.maxHeight;
+        _windowSize = windowSize;
+        _cutouts = resolveCutouts(
+          scaffoldWidth: scaffoldConstraints.maxWidth,
+          scaffoldHeight: scaffoldHeight,
+          windowSize: windowSize,
+          displayFeatures: displayFeatures,
+          avoid: widget.avoidCutouts,
+        );
         final paneAreaRect = _paneAreaRectFor(
           context: context,
           scaffoldWidth: scaffoldConstraints.maxWidth,
@@ -1164,12 +1279,23 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
           return SizedBox.shrink(key: keyed ? key : null);
         }
 
+        // The padding is the system's; the space the cutouts need is added
+        // around the navigation, not given to the builder.
         return SizedBox(
           width: animatedWidth,
-          child: LayoutBuilder(
-            key: keyed ? key : null,
-            builder: (context, constraints) =>
-                _navigationFor(context, placement, constraints, padding),
+          child: Padding(
+            padding: _railCutoutInsets(
+              context: context,
+              edge: edge,
+              width: animatedWidth,
+              scaffoldWidth: frame.scaffoldWidth,
+              padding: padding,
+            ),
+            child: LayoutBuilder(
+              key: keyed ? key : null,
+              builder: (context, constraints) =>
+                  _navigationFor(context, placement, constraints, padding),
+            ),
           ),
         );
       },
@@ -1793,5 +1919,37 @@ class _RenderPaneAreaProbe extends RenderProxyBox {
       _reported = current;
       onMeasured(current);
     });
+  }
+}
+
+/// An app bar with extra `MediaQuery` padding on its left and right, so its
+/// toolbar content stays out of a cutout while its background does not.
+class _CutoutAvoidingAppBar extends StatelessWidget
+    implements PreferredSizeWidget {
+  const _CutoutAvoidingAppBar({required this.appBar, required this.inset});
+
+  final PreferredSizeWidget appBar;
+
+  /// The extra space needed on the left and right.
+  final EdgeInsets inset;
+
+  // The same object, so a size that [AppBar] made keeps its meaning.
+  @override
+  Size get preferredSize => appBar.preferredSize;
+
+  @override
+  Widget build(BuildContext context) {
+    final media = MediaQuery.of(context);
+    EdgeInsets grow(EdgeInsets e) => e.copyWith(
+      left: math.max(e.left, inset.left),
+      right: math.max(e.right, inset.right),
+    );
+    return MediaQuery(
+      data: media.copyWith(
+        padding: grow(media.padding),
+        viewPadding: grow(media.viewPadding),
+      ),
+      child: appBar,
+    );
   }
 }

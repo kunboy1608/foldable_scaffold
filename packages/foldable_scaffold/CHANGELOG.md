@@ -1,3 +1,17 @@
+## 0.1.0-dev.7
+
+New:
+
+* `FoldableScaffold.avoidCutouts` (default true): the app bar and a navigation beside the panes (a rail) stay clear of the cameras and the Dynamic Island. iPhone Duo reports a zero `MediaQuery.padding` in every pose and gives the cameras only as `DisplayFeatureType.cutout` display features (through `FoldablePlatformScope`), so the rail and the actions of the app bar ended up under them.
+  * The app bar (`appBar` and `appBarBuilder`) is wrapped in a `MediaQuery` with the space the cutout needs added to the left or right padding, so `AppBar` moves its toolbar content and keeps its background at full width. An app bar of your own has to respect `MediaQuery.padding` as well.
+  * A rail gets the space as padding at the top (a cutout above it) or at the bottom (a cutout below it): its width does not change, and its background does not fill the part left clear. The `padding` given to `navigationBuilder` and `primaryNavigationBuilder` is still the system's.
+  * A cutout that lies entirely inside the system padding (Android) is ignored, so the space is not counted twice. Cutouts are in window coordinates, so they apply only to a scaffold as wide and as tall as the window; `avoidCutouts: false` keeps the old layout.
+  * Not handled: the content of the panes, a navigation below or above the panes, and toolbars inside the panes.
+
+The device profiles test checks, for each iPhone Duo pose, that an app bar action and the head of a rail are out of every cutout.
+
+Not verified: not run on a device.
+
 ## 0.1.0-dev.6
 
 New:
@@ -10,6 +24,8 @@ New:
 * Building the iOS plugin needs an Xcode with the iOS 27.1 SDK (the one that builds for iPhone Duo): it names APIs that older SDKs do not have, so an older Xcode fails to compile any iOS app that depends on this package. On an iOS older than 27.1 the calls are skipped (`#available`) and the plugin answers with no regions and an unspecified edge.
 * Changes are found without swizzling or subclassing the view controller: a watch on the bounds of the Flutter view and a light display link that compares the state (only while Dart listens), plus a `getState` call when the window metrics change.
 * The example wraps the app in the scope (the simulated folds keep working and override the platform's), has a "Platform data" button that shows the numbers live, and prints them with `debugPrint` when they change, to measure a device.
+
+The numbers of iPhone Duo (sizes, active regions and vertical bar edge for its poses) are in the device profiles test, which now runs against them.
 
 Not verified: the Swift code and the podspec were written without Xcode and have **not been compiled or run**.
 

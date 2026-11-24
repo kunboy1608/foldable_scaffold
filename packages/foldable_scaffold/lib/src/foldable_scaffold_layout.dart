@@ -1,4 +1,5 @@
-import 'dart:ui' show DisplayFeature;
+import 'dart:math' as math;
+import 'dart:ui' show DisplayFeature, DisplayFeatureType;
 
 import 'package:flutter/material.dart';
 
@@ -142,6 +143,90 @@ FoldableFold? resolveFold({
     windowSize,
     vertical: spansWidth,
     horizontal: spansHeight,
+  );
+}
+
+/// The bounds of the cutouts (cameras, a Dynamic Island) that apply to a
+/// scaffold of [scaffoldWidth] x [scaffoldHeight] in a window of [windowSize].
+///
+/// Cutouts are in window coordinates, so they only apply when the scaffold
+/// covers the window both ways (less than a pixel of difference, as for
+/// [resolveFold]); otherwise the result is empty. Empty too when [avoid] is
+/// false.
+List<Rect> resolveCutouts({
+  required double scaffoldWidth,
+  required double scaffoldHeight,
+  required Size windowSize,
+  required List<DisplayFeature> displayFeatures,
+  required bool avoid,
+}) {
+  if (!avoid) return const [];
+  final spansWidth = (scaffoldWidth - windowSize.width).abs() < 1;
+  final spansHeight = (scaffoldHeight - windowSize.height).abs() < 1;
+  if (!spansWidth || !spansHeight) return const [];
+  return [
+    for (final feature in displayFeatures)
+      if (feature.type == DisplayFeatureType.cutout) feature.bounds,
+  ];
+}
+
+/// The extra insets that [area] (in window coordinates) needs to stay clear of
+/// [cutouts], on top of the system insets [padding].
+///
+/// * [Axis.horizontal] (a bar across the top, such as an app bar): a cutout
+///   that overlaps [area] and is on the right of its center pushes the right
+///   edge in to the left side of the cutout, otherwise the left edge in to the
+///   right side of the cutout. Only `left` and `right` are set.
+/// * [Axis.vertical] (a rail along a side): a cutout above the center of
+///   [area] pushes the top down to the bottom of the cutout, otherwise the
+///   bottom up to the top of the cutout. Only `top` and `bottom` are set.
+///
+/// A cutout that lies entirely in the strip of the system [padding] (the
+/// system already keeps content out of it, as on Android) is ignored, so the
+/// space is not taken twice. Several cutouts give the largest inset on each
+/// edge. The result is never negative; an empty [area] or no overlap gives
+/// [EdgeInsets.zero].
+///
+/// Does not depend on [BuildContext] or a widget, so it can be tested without
+/// pumping one.
+EdgeInsets cutoutInsets({
+  required Rect area,
+  required List<Rect> cutouts,
+  required EdgeInsets padding,
+  required Size windowSize,
+  required Axis axis,
+}) {
+  if (area.isEmpty) return EdgeInsets.zero;
+  var left = 0.0;
+  var top = 0.0;
+  var right = 0.0;
+  var bottom = 0.0;
+  for (final c in cutouts) {
+    final insidePadding =
+        c.right <= padding.left ||
+        c.left >= windowSize.width - padding.right ||
+        c.bottom <= padding.top ||
+        c.top >= windowSize.height - padding.bottom;
+    if (insidePadding || !c.overlaps(area)) continue;
+    if (axis == Axis.horizontal) {
+      if (c.center.dx > area.center.dx) {
+        right = math.max(right, area.right - c.left);
+      } else {
+        left = math.max(left, c.right - area.left);
+      }
+    } else {
+      if (c.center.dy < area.center.dy) {
+        top = math.max(top, c.bottom - area.top);
+      } else {
+        bottom = math.max(bottom, area.bottom - c.top);
+      }
+    }
+  }
+  return EdgeInsets.fromLTRB(
+    math.max(left, 0),
+    math.max(top, 0),
+    math.max(right, 0),
+    math.max(bottom, 0),
   );
 }
 

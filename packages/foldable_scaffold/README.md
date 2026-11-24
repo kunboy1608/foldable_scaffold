@@ -1,7 +1,7 @@
 # foldable_scaffold
 
 > [!WARNING]
-> **Experimental.** This is a prerelease (`0.1.0-dev.6`). The API will change
+> **Experimental.** This is a prerelease (`0.1.0-dev.7`). The API will change
 > without notice and the package is not ready for production use.
 
 A [Scaffold](https://pub.dev/documentation/material_ui/latest/material_ui/Scaffold-class.html)
@@ -14,7 +14,7 @@ but a `FoldableScaffold` works on its own.
 ## Install
 
 ```sh
-flutter pub add foldable_scaffold:^0.1.0-dev.6
+flutter pub add foldable_scaffold:^0.1.0-dev.7
 ```
 
 ## Usage
@@ -264,13 +264,42 @@ whenever the window metrics change.
   frames mean, but nothing was tested there. Several windows or scenes (the
   multi-display features of iPhone Duo) are not handled specially.
 * The app bar and the toolbar that the system moves to the side are not
-  replaced: only the navigation is.
+  replaced: only the navigation is. The cameras are avoided by the app bar and
+  the rail ([Cameras and cutouts](#cameras-and-cutouts)), not by the panes.
 * The numbers of the real device are still to be measured: see the table of
   device profiles under [Folds and hinges](#folds-and-hinges).
 
 To read what the platform reports (in the simulator, for instance), the
 [example](example/lib/main.dart) has a button in its app bar that shows the
 data live, and prints it with `debugPrint` each time it changes.
+
+### Cameras and cutouts
+
+On iPhone Duo the system reports no safe area for the cameras and the Dynamic
+Island (`MediaQuery.padding` is zero in every pose), so a rail or the actions of
+an app bar would end up under them. The scaffold avoids them by itself, from the
+`DisplayFeatureType.cutout` features of `MediaQuery.displayFeatures` (the ones
+[`FoldablePlatformScope`](#iphone-duo-the-platform-bridge) provides on iPhone
+Duo, or the real ones an Android device reports):
+
+* **The app bar**: its toolbar (leading, title, actions) is moved away from the
+  cutout on the side where it is, and its background still fills the whole
+  width. This relies on the `MediaQuery.padding` that `AppBar` applies to its
+  toolbar; an app bar of your own has to do the same (and an `AppBar` with
+  `primary: false` does not).
+* **A rail** (the navigation beside the panes): its content is pushed down from
+  a cutout above it, or up from one below it. The rail keeps its width, and its
+  background does not fill the part that is left clear. The `padding` that
+  `navigationBuilder` and `primaryNavigationBuilder` get is still the system's.
+
+Nothing is added where the system already covers the cutout in
+`MediaQuery.padding` (most Android phones), so it is not counted twice. The
+cutouts are in window coordinates, so they only apply to a scaffold as wide and
+as tall as the window, like a fold. Pass `avoidCutouts: false` to turn it off.
+
+Not handled yet: the content of the panes, a navigation below or above the
+panes, and toolbars inside the panes. Use `MediaQuery.displayFeaturesOf` for
+those.
 
 ### Text direction
 
@@ -302,12 +331,15 @@ multi-window, keeps one pane too.
 | Galaxy Z Fold8, folded | about 411 x 960 | one |
 | Galaxy Z Fold8, open | about 635 x 841 | two |
 | Galaxy Z Fold8 Ultra, open | about 740 x 822 | two |
-| iPhone Duo, open (sizes are not official) | about 640 x 904 | two |
+| iPhone Duo, outer display (closed) | 466 x 678, or 678 x 466 rotated | one (the navigation on the side) |
+| iPhone Duo, inner display, open | 951 x 669, or 669 x 951 rotated | two |
 | Tablet | 800 x 1280 | two |
 | Desktop window | 1200 and wider | two |
 
-The sizes of the foldables are worked out from their published pixel counts and
-densities: check them on your device by printing `MediaQuery.sizeOf(context)`.
+The sizes of the Galaxy Z Fold devices are worked out from their published pixel
+counts and densities: check them on your device by printing
+`MediaQuery.sizeOf(context)`. The sizes of iPhone Duo were read on the device
+(the "Platform data" button of the example).
 
 Override the default with `breakpoints`:
 
@@ -593,9 +625,10 @@ stack: the usual rules apply then.
 
 The numbers of real devices, to test the layout against, go in
 [`test/foldable_scaffold_device_profiles_test.dart`](test/foldable_scaffold_device_profiles_test.dart):
-a table of sizes and display features (iPhone Duo's displays and poses, still to
-be filled in from the Device Hub of Xcode) whose tests run once a profile has its
-numbers.
+a table of sizes, display features and vertical bar edges read on iPhone Duo
+(its two displays, rotated, and partially folded like a book and like a laptop),
+which the layout tests run against. To add a pose, read it with the "Platform
+data" button of the example and add its constants to the table.
 
 The fold is in window coordinates. iOS (except dual-screen devices such as
 iPhone Duo, through [`FoldablePlatformScope`](#iphone-duo-the-platform-bridge))

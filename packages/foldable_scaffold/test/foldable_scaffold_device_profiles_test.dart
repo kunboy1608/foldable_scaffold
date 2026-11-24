@@ -1,11 +1,14 @@
 // Tests of FoldableScaffold against the numbers of real devices.
 //
-// The numbers are NOT here yet. They come from the simulator of the device
-// (Device Hub of Xcode), and must not be guessed: every size and display
-// feature below is `null` until someone fills it in. A profile with a null
-// value is skipped, with the reason; once it is filled in, its tests run by
-// themselves. To fill one in, edit the constants of the table below and
-// nothing else.
+// The numbers below were read on an iPhone Duo with the "Platform data" button
+// of the example (FoldablePlatformScope), one block per pose (see "report
+// iPhone Duo.rtf" in this folder): the size of the Flutter view, the display
+// features the scope gives to MediaQuery (the active regions only: a division is
+// a fold, an occlusion is a cutout) and the side of the vertical bars
+// (`verticalBarEdge`). They must not be guessed: a profile whose size or
+// features are `null` is skipped, with the reason, and runs by itself once it is
+// filled in. To add a pose, add its constants to the table below and nothing
+// else.
 //
 // What a filled profile checks:
 //
@@ -17,7 +20,8 @@
 //  * around a separating fold (a hinge, or a half-open fold) the body and the
 //    secondary body are on each side of it: side by side for a vertical fold,
 //    stacked for a horizontal one, whenever each side is at least minBodySize.
-import 'dart:ui' show DisplayFeature;
+import 'dart:ui'
+    show DisplayFeature, DisplayFeatureState, DisplayFeatureType, Rect;
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:foldable_scaffold/foldable_scaffold.dart';
@@ -53,53 +57,112 @@ class DeviceProfile {
 }
 
 // ---------------------------------------------------------------------------
-// THE TABLE. Fill in the constants; leave the rest alone.
+// THE TABLE. Add a pose by adding its constants and one DeviceProfile.
 //
-// Where a value is to be read: the size is the size of the view in the
-// simulator (logical pixels), the features are the hinge/fold of the pose
-// (`DisplayFeature(bounds: Rect.fromLTRB(...), type: ..., state: ...)`, in
-// logical pixels of the window), and the vertical bar edge is what the system
-// reports for the pose (`FoldableNavigationEdge.left`, `.right`, `.start`, `.end`,
-// or null for none).
+// The size is the size of the view (logical pixels), the features are the
+// active regions as FoldablePlatformScope gives them to MediaQuery (logical
+// pixels of the window; the frames already include the margins around the
+// fold and the cameras), and the vertical bar edge is what the system reports
+// for the pose (`FoldableNavigationEdge.start` / `.end` for leading /
+// trailing, null for none).
 // ---------------------------------------------------------------------------
 
-// iPhone Duo, outer display.
-const Size? _duoOuterSize = null; // TODO(user): điền từ Device Hub của Xcode
-const List<DisplayFeature>? _duoOuterFeatures =
-    null; // TODO(user): điền từ Device Hub của Xcode
-const FoldableNavigationEdge? _duoOuterVerticalBar =
-    null; // TODO(user): điền từ Device Hub của Xcode
+/// A camera or the Dynamic Island: an active occlusion.
+DisplayFeature _cutout(double left, double top, double right, double bottom) {
+  return DisplayFeature(
+    bounds: Rect.fromLTRB(left, top, right, bottom),
+    type: DisplayFeatureType.cutout,
+    state: DisplayFeatureState.unknown,
+  );
+}
 
-// iPhone Duo, inner display, portrait, fully open.
-const Size? _duoInnerPortraitSize =
-    null; // TODO(user): điền từ Device Hub của Xcode
-const List<DisplayFeature>? _duoInnerPortraitFeatures =
-    null; // TODO(user): điền từ Device Hub của Xcode
-const FoldableNavigationEdge? _duoInnerPortraitVerticalBar =
-    null; // TODO(user): điền từ Device Hub của Xcode
+/// The fold of a device that is partly open: an active division.
+DisplayFeature _fold(double left, double top, double right, double bottom) {
+  return DisplayFeature(
+    bounds: Rect.fromLTRB(left, top, right, bottom),
+    type: DisplayFeatureType.fold,
+    state: DisplayFeatureState.postureHalfOpened,
+  );
+}
+
+// iPhone Duo, outer display (closed), portrait. Camera at the top right.
+const Size? _duoOuterPortraitSize = Size(466, 678);
+final List<DisplayFeature>? _duoOuterPortraitFeatures = [
+  _cutout(399.67, 29.33, 436.67, 66.33),
+  _cutout(382, 0, 466, 174),
+];
+const FoldableNavigationEdge? _duoOuterPortraitVerticalBar =
+    FoldableNavigationEdge.end;
+
+// iPhone Duo, outer display, rotated: camera on the right side.
+const Size? _duoOuterLandscapeEndSize = Size(678, 466);
+final List<DisplayFeature>? _duoOuterLandscapeEndFeatures = [
+  _cutout(611.67, 399.67, 648.67, 436.67),
+  _cutout(594, 384, 678, 466),
+];
+const FoldableNavigationEdge? _duoOuterLandscapeEndVerticalBar =
+    FoldableNavigationEdge.end;
+
+// iPhone Duo, outer display, rotated the other way: camera on the left side.
+const Size? _duoOuterLandscapeStartSize = Size(678, 466);
+final List<DisplayFeature>? _duoOuterLandscapeStartFeatures = [
+  _cutout(29.33, 29.33, 66.33, 66.33),
+  _cutout(0, 0, 84, 82),
+];
+const FoldableNavigationEdge? _duoOuterLandscapeStartVerticalBar =
+    FoldableNavigationEdge.start;
+
+// iPhone Duo, inner display, portrait, fully open: the division is inactive,
+// so the only feature is the camera. No vertical bar.
+const Size? _duoInnerPortraitSize = Size(669, 951);
+final List<DisplayFeature>? _duoInnerPortraitFeatures = [
+  _cutout(525, 0, 669, 82),
+];
+const FoldableNavigationEdge? _duoInnerPortraitVerticalBar = null;
 
 // iPhone Duo, inner display, landscape, fully open.
-const Size? _duoInnerLandscapeSize =
-    null; // TODO(user): điền từ Device Hub của Xcode
-const List<DisplayFeature>? _duoInnerLandscapeFeatures =
-    null; // TODO(user): điền từ Device Hub của Xcode
+const Size? _duoInnerLandscapeSize = Size(951, 669);
+final List<DisplayFeature>? _duoInnerLandscapeFeatures = [
+  _cutout(867, 0, 951, 124),
+];
 const FoldableNavigationEdge? _duoInnerLandscapeVerticalBar =
-    null; // TODO(user): điền từ Device Hub của Xcode
+    FoldableNavigationEdge.end;
 
-// iPhone Duo, inner display, partially folded: a horizontal hinge.
-const Size? _duoInnerHalfFoldedSize =
-    null; // TODO(user): điền từ Device Hub của Xcode
-const List<DisplayFeature>? _duoInnerHalfFoldedFeatures =
-    null; // TODO(user): điền từ Device Hub của Xcode
-const FoldableNavigationEdge? _duoInnerHalfFoldedVerticalBar =
-    null; // TODO(user): điền từ Device Hub của Xcode
+// iPhone Duo, inner display, partially folded like a book: a vertical fold.
+const Size? _duoInnerBookSize = Size(951, 669);
+final List<DisplayFeature>? _duoInnerBookFeatures = [
+  _fold(455.5, 0, 495.5, 669),
+  _cutout(867, 0, 951, 124),
+];
+const FoldableNavigationEdge? _duoInnerBookVerticalBar =
+    FoldableNavigationEdge.end;
 
-const deviceProfiles = <DeviceProfile>[
+// iPhone Duo, inner display, partially folded like a laptop: a horizontal fold.
+const Size? _duoInnerLaptopSize = Size(669, 951);
+final List<DisplayFeature>? _duoInnerLaptopFeatures = [
+  _fold(0, 455.5, 669, 495.5),
+  _cutout(525, 0, 669, 82),
+];
+const FoldableNavigationEdge? _duoInnerLaptopVerticalBar = null;
+
+final deviceProfiles = <DeviceProfile>[
   DeviceProfile(
-    name: 'iPhone Duo outer display',
-    windowSize: _duoOuterSize,
-    features: _duoOuterFeatures,
-    verticalBarEdge: _duoOuterVerticalBar,
+    name: 'iPhone Duo outer display, portrait',
+    windowSize: _duoOuterPortraitSize,
+    features: _duoOuterPortraitFeatures,
+    verticalBarEdge: _duoOuterPortraitVerticalBar,
+  ),
+  DeviceProfile(
+    name: 'iPhone Duo outer display, landscape, camera on the right',
+    windowSize: _duoOuterLandscapeEndSize,
+    features: _duoOuterLandscapeEndFeatures,
+    verticalBarEdge: _duoOuterLandscapeEndVerticalBar,
+  ),
+  DeviceProfile(
+    name: 'iPhone Duo outer display, landscape, camera on the left',
+    windowSize: _duoOuterLandscapeStartSize,
+    features: _duoOuterLandscapeStartFeatures,
+    verticalBarEdge: _duoOuterLandscapeStartVerticalBar,
   ),
   DeviceProfile(
     name: 'iPhone Duo inner display, portrait, fully open',
@@ -114,10 +177,18 @@ const deviceProfiles = <DeviceProfile>[
     verticalBarEdge: _duoInnerLandscapeVerticalBar,
   ),
   DeviceProfile(
-    name: 'iPhone Duo inner display, partially folded (horizontal hinge)',
-    windowSize: _duoInnerHalfFoldedSize,
-    features: _duoInnerHalfFoldedFeatures,
-    verticalBarEdge: _duoInnerHalfFoldedVerticalBar,
+    name:
+        'iPhone Duo inner display, partially folded like a book (vertical fold)',
+    windowSize: _duoInnerBookSize,
+    features: _duoInnerBookFeatures,
+    verticalBarEdge: _duoInnerBookVerticalBar,
+  ),
+  DeviceProfile(
+    name:
+        'iPhone Duo inner display, partially folded like a laptop (horizontal fold)',
+    windowSize: _duoInnerLaptopSize,
+    features: _duoInnerLaptopFeatures,
+    verticalBarEdge: _duoInnerLaptopVerticalBar,
   ),
 ];
 
@@ -126,6 +197,8 @@ const deviceProfiles = <DeviceProfile>[
 // ---------------------------------------------------------------------------
 
 const _minBodySize = 200.0;
+const _actionKey = Key('app_bar_action');
+const _railHeadKey = Key('rail_head');
 const _bottomBarHeight = 80.0;
 
 Finder get _body => find.byKey(const Key('body_builder'), skipOffstage: false);
@@ -135,7 +208,11 @@ Finder get _secondary =>
 /// Pumps the scaffold the way an app would on [profile]: an app bar, a
 /// navigation (a bar of [_bottomBarHeight] below, or a rail on a side), a body
 /// and a secondary body, on the platform of the device.
-Future<void> _pumpProfile(WidgetTester tester, DeviceProfile profile) async {
+Future<void> _pumpProfile(
+  WidgetTester tester,
+  DeviceProfile profile, {
+  bool withAction = false,
+}) async {
   tester.view.physicalSize = profile.windowSize!;
   tester.view.devicePixelRatio = 1;
   tester.view.displayFeatures = profile.features!;
@@ -148,10 +225,32 @@ Future<void> _pumpProfile(WidgetTester tester, DeviceProfile profile) async {
         edge: profile.verticalBarEdge,
         child: FoldableScaffold(
           minBodySize: _minBodySize,
-          appBar: AppBar(title: const Text('title')),
+          appBar: AppBar(
+            title: const Text('title'),
+            actions: withAction
+                ? [
+                    IconButton(
+                      key: _actionKey,
+                      onPressed: () {},
+                      icon: const Icon(Icons.add),
+                    ),
+                  ]
+                : null,
+          ),
           navigationBuilder: (context, placement, constraints, padding) =>
               placement.isSide
-              ? SizedBox.expand(child: Text('nav ${placement.edge.name}'))
+              ? withAction
+                    ? Column(
+                        children: [
+                          SizedBox(
+                            key: _railHeadKey,
+                            width: 40,
+                            height: 40,
+                            child: Text('nav ${placement.edge.name}'),
+                          ),
+                        ],
+                      )
+                    : SizedBox.expand(child: Text('nav ${placement.edge.name}'))
               : SizedBox(
                   height: _bottomBarHeight,
                   child: Text('nav ${placement.edge.name}'),
@@ -214,6 +313,38 @@ void main() {
               expect(nav.left, greaterThanOrEqualTo(panes.right - 0.01));
           }
         });
+
+        testWidgets(
+          'keeps the app bar action and the head of a rail out of the '
+          'cutouts',
+          (tester) async {
+            await _pumpProfile(tester, profile, withAction: true);
+
+            expect(tester.takeException(), isNull);
+            final cutouts = [
+              for (final feature in profile.features!)
+                if (feature.type == DisplayFeatureType.cutout) feature.bounds,
+            ];
+            final action = tester.getRect(find.byKey(_actionKey));
+            for (final cutout in cutouts) {
+              expect(
+                action.overlaps(cutout),
+                isFalse,
+                reason: 'the action $action is under the cutout $cutout',
+              );
+            }
+            if (_expectedNavigationEdge(profile) != 'bottom') {
+              final head = tester.getRect(find.byKey(_railHeadKey));
+              for (final cutout in cutouts) {
+                expect(
+                  head.overlaps(cutout),
+                  isFalse,
+                  reason: 'the rail content $head is under the cutout $cutout',
+                );
+              }
+            }
+          },
+        );
 
         testWidgets('puts the two panes on each side of a separating fold', (
           tester,

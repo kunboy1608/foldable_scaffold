@@ -8,7 +8,7 @@
 
 Pod::Spec.new do |s|
   s.name             = 'foldable_scaffold'
-  s.version          = '0.1.0-dev.6'
+  s.version          = '0.1.0-dev.7'
   s.summary          = 'Reads the fold and the vertical bars of iPhone Duo for foldable_scaffold.'
   s.description      = <<-DESC
 The iOS side of foldable_scaffold: sends the reserved regions of the Flutter view

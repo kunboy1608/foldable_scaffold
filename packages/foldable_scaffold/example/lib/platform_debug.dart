@@ -54,6 +54,13 @@ String describePlatformData(BuildContext context) {
     return lines.join('\n');
   }
   lines
+    ..add(
+      'platform displayFeatures (all, as the scope gives them; a dialog or a '
+      'sub-screen only keeps the features of the half it is in, so '
+      'MediaQuery.displayFeatures above may have fewer):',
+    )
+    ..addAll(_features(platform.displayFeatures));
+  lines
     ..add('platform state: protocol version ${platform.version}')
     ..add('  view size: ${_size(platform.viewSize)}')
     ..add('  verticalBarEdge: ${platform.verticalBarEdge?.name ?? 'null'}')
