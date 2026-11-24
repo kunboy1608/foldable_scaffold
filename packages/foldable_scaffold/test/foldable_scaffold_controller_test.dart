@@ -1,3 +1,4 @@
+import 'dart:io' show File;
 import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
 
 import 'package:flutter_test/flutter_test.dart';
@@ -301,5 +302,84 @@ void main() {
 
       expect(_secondaryWidth(tester), closeTo(700, 0.01));
     });
+  });
+
+  group('notifications', () {
+    testWidgets('come for the first layout and each real change only', (
+      tester,
+    ) async {
+      final controller = FoldableScaffoldController();
+      addTearDown(controller.dispose);
+      var notified = 0;
+      controller.addListener(() => notified++);
+
+      await _pump(tester, controller: controller);
+      expect(notified, 1);
+
+      // Nothing moves: pumping again tells nobody.
+      await tester.pump();
+      await tester.pump(const Duration(seconds: 1));
+      expect(notified, 1);
+
+      // Dragging changes isDraggingDivider and the width.
+      final gesture = await tester.startGesture(tester.getCenter(_divider));
+      await tester.pump();
+      expect(controller.isDraggingDivider, isTrue);
+      expect(notified, 2);
+      await gesture.moveBy(const Offset(-40, 0));
+      await tester.pump();
+      expect(notified, 3);
+      await gesture.up();
+      await tester.pumpAndSettle();
+      expect(controller.isDraggingDivider, isFalse);
+      final afterDrag = notified;
+      expect(afterDrag, greaterThan(3));
+
+      await tester.pump();
+      await tester.pumpAndSettle();
+      expect(notified, afterDrag);
+    });
+
+    testWidgets('a controller that replaces another is brought up to date', (
+      tester,
+    ) async {
+      final first = FoldableScaffoldController();
+      final second = FoldableScaffoldController();
+      addTearDown(first.dispose);
+      addTearDown(second.dispose);
+
+      Widget app(FoldableScaffoldController controller) => MaterialApp(
+        theme: ThemeData(platform: TargetPlatform.linux),
+        home: FoldableScaffold(
+          controller: controller,
+          body: const Text('body'),
+          secondaryBody: const Text('secondary'),
+        ),
+      );
+
+      tester.view.physicalSize = const Size(1400, 600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(app(first));
+      await tester.pumpAndSettle();
+      await tester.pumpWidget(app(second));
+      await tester.pumpAndSettle();
+
+      expect(second.isSplit, isTrue);
+      expect(second.secondaryWidth, closeTo(700, 0.01));
+      second.setSecondaryWidth(500);
+      await tester.pumpAndSettle();
+      expect(second.secondaryWidth, closeTo(500, 0.01));
+    });
+  });
+
+  test('attach, detach and update are @internal', () {
+    final source = File(
+      'lib/src/foldable_scaffold_controller.dart',
+    ).readAsStringSync();
+    for (final member in ['attach(', 'detach(', 'update({']) {
+      expect(source, contains('@internal\n  void $member'));
+    }
   });
 }

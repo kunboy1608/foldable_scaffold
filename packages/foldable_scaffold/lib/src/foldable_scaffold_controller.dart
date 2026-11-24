@@ -1,3 +1,4 @@
+import 'package:meta/meta.dart' show internal;
 import 'package:material_ui/material_ui.dart';
 
 /// Talks to the divider of a [FoldableScaffold] from outside of it.
@@ -53,6 +54,7 @@ class FoldableScaffoldController extends ChangeNotifier {
   double? _secondaryWidth;
   bool _isSplit = false;
   bool _isDraggingDivider = false;
+  Axis? _axis;
   FoldableScaffoldControllerDelegate? _delegate;
 
   /// The width the secondary pane has right now, in logical pixels, or null
@@ -60,12 +62,26 @@ class FoldableScaffoldController extends ChangeNotifier {
   /// panes.
   ///
   /// The width is the one the layout is heading for; it does not change on
-  /// every frame of the pane animation.
+  /// every frame of the pane animation. When the panes are stacked around a
+  /// horizontal hinge ([isStacked]) it is the width of the pane area: the
+  /// secondary pane is as wide as the area, and its height is what the hinge
+  /// decides.
   double? get secondaryWidth => _secondaryWidth;
 
-  /// Whether the scaffold is showing the body and the secondary body side by
-  /// side.
+  /// Whether the scaffold is showing the body and the secondary body together:
+  /// side by side, or stacked around a horizontal hinge ([isStacked]).
   bool get isSplit => _isSplit;
+
+  /// The axis the two panes are laid out along: [Axis.horizontal] side by side,
+  /// [Axis.vertical] stacked (the body above the secondary body, around a
+  /// horizontal hinge or half-open fold). Null while the scaffold is not
+  /// showing two panes.
+  Axis? get axis => _axis;
+
+  /// Whether the two panes are stacked, the body above the secondary body. The
+  /// divider is then the hinge: [setSecondaryWidth] does nothing, as around a
+  /// vertical hinge.
+  bool get isStacked => _axis == Axis.vertical;
 
   /// Whether the user is dragging the divider.
   bool get isDraggingDivider => _isDraggingDivider;
@@ -79,8 +95,9 @@ class FoldableScaffoldController extends ChangeNotifier {
   /// it does when the divider is released. The divider now counts as placed
   /// by the user, so a fold no longer moves it back to the crease.
   ///
-  /// Does nothing while the scaffold is not showing two panes: those are not
-  /// sized by the divider.
+  /// Does nothing while the scaffold is not showing two panes, or while they are
+  /// around a hinge (vertical or horizontal): those are not sized by the
+  /// divider.
   void setSecondaryWidth(double width, {bool snap = false}) {
     _delegate?.setSecondaryWidth(width, snap: snap);
   }
@@ -91,30 +108,37 @@ class FoldableScaffoldController extends ChangeNotifier {
 
   /// Called by the scaffold when it is built; the delegate is the scaffold
   /// state, which does the layout work.
+  @internal
   void attach(FoldableScaffoldControllerDelegate delegate) {
     _delegate = delegate;
   }
 
   /// Called by the scaffold when it goes away, or when it is given another
   /// controller.
+  @internal
   void detach(FoldableScaffoldControllerDelegate delegate) {
     if (identical(_delegate, delegate)) _delegate = null;
   }
 
   /// Called by the scaffold after a layout, to publish what changed. Listeners
   /// hear about it only when something really changed.
+  @internal
   void update({
     required double? secondaryWidth,
     required bool isSplit,
     required bool isDragging,
+    Axis? axis,
   }) {
+    final newAxis = isSplit ? (axis ?? Axis.horizontal) : null;
     final changed =
         _secondaryWidth != secondaryWidth ||
         _isSplit != isSplit ||
-        _isDraggingDivider != isDragging;
+        _isDraggingDivider != isDragging ||
+        _axis != newAxis;
     _secondaryWidth = secondaryWidth;
     _isSplit = isSplit;
     _isDraggingDivider = isDragging;
+    _axis = newAxis;
     if (changed) notifyListeners();
   }
 }

@@ -540,20 +540,20 @@ void main() {
       );
     });
 
-    testWidgets('the inner screen of an iPhone Fold shows two panes', (
+    testWidgets('the inner screen of an iPhone Duo shows two panes', (
       tester,
     ) async {
       // About 640 x 904 pt, from the leaked 1920 x 2713 px at 3x.
       await expectPanes(
         tester,
-        device: 'iPhone Fold',
+        device: 'iPhone Duo',
         platform: TargetPlatform.iOS,
         portrait: const Size(640, 904),
         split: true,
       );
       await expectPanes(
         tester,
-        device: 'iPhone Fold, smaller leak',
+        device: 'iPhone Duo, smaller leak',
         platform: TargetPlatform.iOS,
         portrait: const Size(626, 890),
         split: true,
@@ -943,7 +943,8 @@ void main() {
     testWidgets('folds that do not split the width are ignored', (
       tester,
     ) async {
-      // A horizontal fold (laptop posture) and a camera cutout.
+      // A flat horizontal fold (a crease the content may cross, which only a
+      // separating one stacks the panes around) and a camera cutout.
       await _pumpScaffold(
         tester,
         const Size(1000, 700),
@@ -952,7 +953,7 @@ void main() {
           DisplayFeature(
             bounds: const Rect.fromLTRB(0, 340, 1000, 360),
             type: DisplayFeatureType.fold,
-            state: DisplayFeatureState.postureHalfOpened,
+            state: DisplayFeatureState.postureFlat,
           ),
           DisplayFeature(
             bounds: const Rect.fromLTRB(480, 0, 520, 40),

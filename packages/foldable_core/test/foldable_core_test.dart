@@ -53,6 +53,33 @@ void main() {
     expect(layout?.primaryVisible, isTrue);
     expect(layout?.secondaryVisible, isFalse);
     expect(canSplit, isTrue);
+    // Panes side by side unless said otherwise: the old constructor call.
+    expect(layout?.axis, Axis.horizontal);
+  });
+
+  testWidgets('FoldablePaneLayout.axis notifies when it changes', (
+    tester,
+  ) async {
+    final axes = <Axis?>[];
+    // A const reader only rebuilds when the inherited widget notifies it.
+    final reader = Builder(
+      builder: (context) {
+        axes.add(FoldablePaneLayout.maybeOf(context)?.axis);
+        return const SizedBox();
+      },
+    );
+    Widget build(Axis axis) => FoldablePaneLayout(
+      primaryVisible: true,
+      secondaryVisible: true,
+      axis: axis,
+      child: reader,
+    );
+
+    await tester.pumpWidget(build(Axis.horizontal));
+    await tester.pumpWidget(build(Axis.horizontal));
+    await tester.pumpWidget(build(Axis.vertical));
+
+    expect(axes, [Axis.horizontal, Axis.vertical]);
   });
 
   testWidgets('FoldablePaneTransitionScope follows its notifier', (

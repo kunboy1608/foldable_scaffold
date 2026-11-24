@@ -18,7 +18,15 @@ enum SimulatedFold {
   flat('Fold, flat'),
 
   /// The crease of a foldable that is half open, like a book.
-  halfOpen('Fold, half open');
+  halfOpen('Fold, half open'),
+
+  /// A hinge across the screen, like a dual-screen device held in portrait:
+  /// the body is on the upper screen, the secondary body on the lower one.
+  hingeHorizontal('Hinge, horizontal (two screens stacked)'),
+
+  /// The crease of a foldable that is half open across the screen, like a
+  /// laptop or a tabletop.
+  halfOpenHorizontal('Fold, half open, horizontal');
 
   const SimulatedFold(this.label);
 
@@ -28,6 +36,7 @@ enum SimulatedFold {
   /// keep the real ones.
   DisplayFeature? featureFor(Size size) {
     final middle = size.width / 2;
+    final center = size.height / 2;
     return switch (this) {
       SimulatedFold.device => null,
       SimulatedFold.hinge => DisplayFeature(
@@ -42,6 +51,16 @@ enum SimulatedFold {
       ),
       SimulatedFold.halfOpen => DisplayFeature(
         bounds: Rect.fromLTRB(middle, 0, middle, size.height),
+        type: DisplayFeatureType.fold,
+        state: DisplayFeatureState.postureHalfOpened,
+      ),
+      SimulatedFold.hingeHorizontal => DisplayFeature(
+        bounds: Rect.fromLTRB(0, center - 20, size.width, center + 20),
+        type: DisplayFeatureType.hinge,
+        state: DisplayFeatureState.postureFlat,
+      ),
+      SimulatedFold.halfOpenHorizontal => DisplayFeature(
+        bounds: Rect.fromLTRB(0, center, size.width, center),
         type: DisplayFeatureType.fold,
         state: DisplayFeatureState.postureHalfOpened,
       ),
@@ -61,6 +80,10 @@ enum SimulatedFold {
 /// * **Hinge** and **half open fold**: one pane on each side, whatever the
 ///   width, and the divider cannot be dragged.
 /// * **Flat fold**: the divider starts on the crease and can still be dragged.
+/// * **Horizontal hinge** and **horizontal half open fold**: the panes are
+///   stacked, the body above the hinge and the secondary body below it (each
+///   needs 200 tall). A flat horizontal fold would change nothing, so it is not
+///   offered.
 ///
 /// The tune button opens the layout options in the end drawer, to try every
 /// setting of the scaffold live: snap widths, breakpoints,
@@ -99,6 +122,10 @@ class _Options {
   double dividerSize = 24;
   bool slowMotion = false;
 
+  /// The side where the platform wants its vertical bars, like iPhone Duo on
+  /// its outer display. Null: the default placement of the platform.
+  FoldableNavigationEdge? verticalBar;
+
   void reset() {
     snap = true;
     focusOnPrimaryBody = false;
@@ -107,6 +134,7 @@ class _Options {
     minBodySize = 200;
     dividerSize = 24;
     slowMotion = false;
+    verticalBar = null;
   }
 }
 
@@ -164,121 +192,135 @@ class _ScaffoldExampleState extends State<ScaffoldExample> {
       },
       home: FoldableMotion(
         scale: options.slowMotion ? _slowMotion : _normalMotion,
-        child: FoldableScaffold(
-          controller: _controller,
-          breakpoints: _breakpoints,
-          followFold: options.followFold,
-          focusOnPrimaryBody: options.focusOnPrimaryBody,
-          minBodySize: options.minBodySize,
-          dividerSize: options.dividerSize,
-          snapWidths: options.snap ? _snapWidths : const [],
-          appBar: AppBar(
-            title: Text(_mailboxes[_tab].$2),
-            // The end drawer button below replaces the implied one.
-            automaticallyImplyActions: false,
-            actions: [
-              _FoldMenu(
-                fold: _fold,
-                handheldRules: _handheldRules,
-                onFold: (fold) => _update(() => _fold = fold),
-                onHandheldRules: (value) =>
-                    _update(() => _handheldRules = value),
-              ),
-              IconButton(
-                icon: const Icon(Icons.restart_alt),
-                tooltip: 'Reset layout',
-                onPressed: _controller.resetDivider,
-              ),
-              Builder(
-                builder: (context) => IconButton(
-                  icon: const Icon(Icons.tune),
-                  tooltip: 'Layout options',
-                  onPressed: Scaffold.of(context).openEndDrawer,
+        // What a device with vertical bars would tell the app. On iOS it
+        // comes from the platform (verticalBarEdge); here it is a switch.
+        child: FoldableVerticalBarScope(
+          edge: options.verticalBar,
+          child: FoldableScaffold(
+            controller: _controller,
+            breakpoints: _breakpoints,
+            followFold: options.followFold,
+            focusOnPrimaryBody: options.focusOnPrimaryBody,
+            minBodySize: options.minBodySize,
+            dividerSize: options.dividerSize,
+            snapWidths: options.snap ? _snapWidths : const [],
+            appBar: AppBar(
+              title: Text(_mailboxes[_tab].$2),
+              // The end drawer button below replaces the implied one.
+              automaticallyImplyActions: false,
+              actions: [
+                _FoldMenu(
+                  fold: _fold,
+                  handheldRules: _handheldRules,
+                  onFold: (fold) => _update(() => _fold = fold),
+                  onHandheldRules: (value) =>
+                      _update(() => _handheldRules = value),
                 ),
-              ),
-            ],
-          ),
-          drawer: _MailDrawer(
-            tab: _tab,
-            onTab: (index) => _update(() {
-              _tab = index;
-              _message = null;
-            }),
-          ),
-          endDrawer: Drawer(
-            child: _OptionsPanel(options: options, onChanged: _update),
-          ),
-          floatingActionButton: _composing
-              ? null
-              : FloatingActionButton.extended(
-                  onPressed: () => _update(() => _composing = true),
-                  icon: const Icon(Icons.edit),
-                  label: const Text('Compose'),
+                IconButton(
+                  icon: const Icon(Icons.restart_alt),
+                  tooltip: 'Reset layout',
+                  onPressed: _controller.resetDivider,
                 ),
-          bottomSheet: _composing
-              ? _ComposeSheet(onDone: () => _update(() => _composing = false))
-              : null,
-          primaryNavigation: NavigationRail(
-            selectedIndex: _tab,
-            onDestinationSelected: (index) => _update(() {
-              _tab = index;
-              _message = null;
-            }),
-            labelType: NavigationRailLabelType.all,
-            destinations: [
-              for (final (icon, label, _) in _mailboxes)
-                NavigationRailDestination(icon: Icon(icon), label: Text(label)),
-            ],
-          ),
-          bottomNavigationBar: NavigationBar(
-            selectedIndex: _tab,
-            onDestinationSelected: (index) => _update(() {
-              _tab = index;
-              _message = null;
-            }),
-            destinations: [
-              for (final (icon, label, _) in _mailboxes)
-                NavigationDestination(icon: Icon(icon), label: label),
-            ],
-          ),
-          body: ListView(
-            children: [
-              const _LayoutCard(),
-              for (final message in _mailboxes[_tab].$3)
-                ListTile(
-                  selected: message == _message,
-                  title: Text(message),
-                  onTap: () => _update(() => _message = message),
+                Builder(
+                  builder: (context) => IconButton(
+                    icon: const Icon(Icons.tune),
+                    tooltip: 'Layout options',
+                    onPressed: Scaffold.of(context).openEndDrawer,
+                  ),
                 ),
-            ],
-          ),
-          hasSecondaryBody: _message != null,
-          // The system back closes the message before it leaves the app.
-          onSecondBodyClose: (didPop, _) => _update(() => _message = null),
-          // A builder, for the pane width: the divider is dragged.
-          secondaryBodyBuilder: (context, constraints) {
-            final message = _message;
-            if (message == null) return null;
-            return Scaffold(
-              appBar: AppBar(title: Text(message)),
-              body: Padding(
-                padding: const EdgeInsets.all(16),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text('Reading "$message".'),
-                    const SizedBox(height: 8),
-                    Text('This pane is ${constraints.maxWidth.round()} wide.'),
-                    const Spacer(),
-                    FilledButton.tonal(
-                      onPressed: () => _update(() => _message = null),
-                      child: const Text('Close the message'),
-                    ),
+              ],
+            ),
+            drawer: _MailDrawer(
+              tab: _tab,
+              onTab: (index) => _update(() {
+                _tab = index;
+                _message = null;
+              }),
+            ),
+            endDrawer: Drawer(
+              child: _OptionsPanel(options: options, onChanged: _update),
+            ),
+            floatingActionButton: _composing
+                ? null
+                : FloatingActionButton.extended(
+                    onPressed: () => _update(() => _composing = true),
+                    icon: const Icon(Icons.edit),
+                    label: const Text('Compose'),
+                  ),
+            bottomSheet: _composing
+                ? _ComposeSheet(onDone: () => _update(() => _composing = false))
+                : null,
+            // One builder for every placement: a rail beside the panes, a bar
+            // below them. Try the vertical bar option in the end drawer.
+            navigationBuilder: (context, placement, constraints, padding) {
+              void select(int index) => _update(() {
+                _tab = index;
+                _message = null;
+              });
+              if (placement.isSide) {
+                return NavigationRail(
+                  selectedIndex: _tab,
+                  onDestinationSelected: select,
+                  labelType: NavigationRailLabelType.all,
+                  destinations: [
+                    for (final (icon, label, _) in _mailboxes)
+                      NavigationRailDestination(
+                        icon: Icon(icon),
+                        label: Text(label),
+                      ),
                   ],
+                );
+              }
+              return NavigationBar(
+                selectedIndex: _tab,
+                onDestinationSelected: select,
+                destinations: [
+                  for (final (icon, label, _) in _mailboxes)
+                    NavigationDestination(icon: Icon(icon), label: label),
+                ],
+              );
+            },
+            body: ListView(
+              children: [
+                const _LayoutCard(),
+                for (final message in _mailboxes[_tab].$3)
+                  ListTile(
+                    selected: message == _message,
+                    title: Text(message),
+                    onTap: () => _update(() => _message = message),
+                  ),
+              ],
+            ),
+            hasSecondaryBody: _message != null,
+            // The system back closes the message before it leaves the app.
+            onSecondBodyClose: (didPop, _) => _update(() => _message = null),
+            // A builder, for the pane width: the divider is dragged.
+            secondaryBodyBuilder: (context, constraints) {
+              final message = _message;
+              if (message == null) return null;
+              return Scaffold(
+                appBar: AppBar(title: Text(message)),
+                body: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Reading "$message".'),
+                      const SizedBox(height: 8),
+                      Text(
+                        'This pane is ${constraints.maxWidth.round()} wide.',
+                      ),
+                      const Spacer(),
+                      FilledButton.tonal(
+                        onPressed: () => _update(() => _message = null),
+                        child: const Text('Close the message'),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            );
-          },
+              );
+            },
+          ),
         ),
       ),
     );
@@ -416,6 +458,25 @@ class _OptionsPanel extends StatelessWidget {
             value: options.dividerSize,
             onChanged: (value) => onChanged(() => options.dividerSize = value),
           ),
+          Text('Vertical bar (iPhone Duo)', style: textTheme.labelLarge),
+          const SizedBox(height: 8),
+          SegmentedButton<FoldableNavigationEdge?>(
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: null, label: Text('Default')),
+              ButtonSegment(
+                value: FoldableNavigationEdge.start,
+                label: Text('Start'),
+              ),
+              ButtonSegment(
+                value: FoldableNavigationEdge.end,
+                label: Text('End'),
+              ),
+            ],
+            selected: {options.verticalBar},
+            onSelectionChanged: (value) =>
+                onChanged(() => options.verticalBar = value.first),
+          ),
           SwitchListTile(
             contentPadding: EdgeInsets.zero,
             title: const Text('Slow motion'),
@@ -488,12 +549,17 @@ class _LayoutCard extends StatelessWidget {
     final layout = FoldablePaneLayout.maybeOf(context);
     final canSplit = FoldableScaffoldScope.maybeOf(context)?.canSplit ?? false;
     final panes = switch ((layout?.primaryVisible, layout?.secondaryVisible)) {
+      (true, true) when layout?.axis == Axis.vertical => 'two panes, stacked',
       (true, true) => 'two panes',
       (_, _) => 'one pane',
     };
     final String foldText;
     if (fold == null) {
       foldText = 'no fold';
+    } else if (fold.isSeparating && fold.isHorizontal) {
+      foldText =
+          'separating fold at ${fold.center.round()} (horizontal): body '
+          'above, secondary body below';
     } else if (fold.isSeparating) {
       foldText =
           'separating fold at ${fold.center.round()}: one pane on each side';

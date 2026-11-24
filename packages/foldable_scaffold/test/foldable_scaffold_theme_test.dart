@@ -330,4 +330,75 @@ void main() {
       );
     });
   });
+
+  group('the theme of the app', () {
+    final appTheme = ThemeData(
+      platform: TargetPlatform.linux,
+      dividerColor: const Color(0xFF123456),
+      scaffoldBackgroundColor: const Color(0xFFABCDEF),
+      colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepOrange),
+    );
+
+    Future<void> pumpApp(WidgetTester tester) async {
+      tester.view.physicalSize = const Size(1400, 600);
+      tester.view.devicePixelRatio = 1;
+      addTearDown(tester.view.reset);
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: appTheme,
+          home: const FoldableScaffold(
+            body: Text('body'),
+            secondaryBody: Text('secondary'),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+    }
+
+    testWidgets('colors the handle at rest and the slot', (tester) async {
+      await pumpApp(tester);
+
+      expect(_decorationOf(tester).color, const Color(0xFF123456));
+      final background = tester.widget<Container>(
+        find.descendant(of: _divider, matching: find.byType(Container)).first,
+      );
+      expect(background.color, const Color(0xFFABCDEF));
+    });
+
+    testWidgets('colors the handle with the primary color when active', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      final primary = appTheme.colorScheme.primary;
+      expect(primary, isNot(const Color(0xFF123456)));
+
+      // Hovered.
+      final mouse = await tester.createGesture(kind: PointerDeviceKind.mouse);
+      addTearDown(mouse.removePointer);
+      await mouse.addPointer(location: tester.getCenter(_handle));
+      await tester.pumpAndSettle();
+      expect(_decorationOf(tester).color, primary);
+      await mouse.moveTo(Offset.zero);
+      await tester.pumpAndSettle();
+      expect(_decorationOf(tester).color, const Color(0xFF123456));
+
+      // Dragged.
+      final drag = await tester.startGesture(tester.getCenter(_handle));
+      await drag.moveBy(const Offset(-40, 0));
+      await tester.pumpAndSettle();
+      expect(_decorationOf(tester).color, primary);
+      await drag.up();
+      await tester.pumpAndSettle();
+      final focus = tester.widget<Focus>(
+        find.byWidgetPredicate(
+          (widget) =>
+              widget is Focus &&
+              widget.focusNode?.debugLabel == 'FoldableScaffold divider',
+        ),
+      );
+      focus.focusNode!.requestFocus();
+      await tester.pumpAndSettle();
+      expect(_decorationOf(tester).color, primary);
+    });
+  });
 }

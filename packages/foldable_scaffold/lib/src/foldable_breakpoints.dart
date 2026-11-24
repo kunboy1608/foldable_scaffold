@@ -33,7 +33,7 @@ class FoldableBreakpoints {
   /// is [split] wide **and** the shortest side of the window is at least
   /// [splitMinShortestSide]. That is the `sw600dp` rule of Android, and it
   /// separates what folds open into a small tablet (the inner screen of a
-  /// Galaxy Z Fold, an unfolded iPhone Fold) from a phone: a phone is at most
+  /// Galaxy Z Fold, an unfolded iPhone Duo) from a phone: a phone is at most
   /// about 480 on its short side, in either orientation, so it keeps one pane.
   const FoldableBreakpoints.handheld({
     this.rail = 600,

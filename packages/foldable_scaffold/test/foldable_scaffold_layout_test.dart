@@ -4,6 +4,7 @@ import 'dart:ui'
 import 'package:flutter/widgets.dart' show EdgeInsets, TextDirection;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:foldable_scaffold/src/foldable_breakpoints.dart';
+import 'package:foldable_scaffold/src/foldable_navigation.dart';
 import 'package:foldable_scaffold/src/foldable_scaffold_layout.dart';
 
 DisplayFeature hinge(double left, double right, double height) {
@@ -42,6 +43,7 @@ FrameGeometry frameOf(
   bool hasPrimaryNavigation = false,
   bool hasSecondaryBody = true,
   Size? windowSize,
+  FoldableNavigationPlacement? placement,
 }) {
   return computeFrameGeometry(
     scaffoldWidth: size.width,
@@ -53,9 +55,14 @@ FrameGeometry frameOf(
     followFold: followFold,
     minBodySize: minBodySize,
     dividerSize: dividerSize,
+    placement:
+        placement ??
+        (size.width >= breakpoints.rail
+            ? const FoldableNavigationPlacement.start()
+            : const FoldableNavigationPlacement.bottom()),
     minWidthNavigation: minWidthNavigation,
     maxWidthNavigation: maxWidthNavigation,
-    hasPrimaryNavigation: hasPrimaryNavigation,
+    hasNavigation: hasPrimaryNavigation,
     hasSecondaryBody: hasSecondaryBody,
   );
 }
@@ -82,13 +89,13 @@ PaneLayout panesOf({
       ? minBodySize
       : splitWidth / 2;
   return computePaneLayout(
-    totalWidth: totalWidth,
-    scaffoldWidth: scaffoldWidth ?? totalWidth,
+    totalExtent: totalWidth,
+    scaffoldExtent: scaffoldWidth ?? totalWidth,
     ratioSecondaryBody: ratioSecondaryBody,
     canSplitPanel: canSplitPanel,
     splitsAtFold: splitsAtFold,
-    foldLeft: foldLeft,
-    foldRight: foldRight,
+    foldStart: foldLeft,
+    foldEnd: foldRight,
     isRtl: isRtl,
     minBodySize: minBodySize,
     dividerSize: dividerSize,
@@ -242,9 +249,9 @@ void main() {
   group('computePaneLayout: two panes', () {
     test('splits the pane area around the divider at the ratio', () {
       final layout = panesOf(totalWidth: 1200);
-      expect(layout.geometry.primaryWidth, closeTo(576, 0.01));
-      expect(layout.geometry.dividerWidth, closeTo(24, 0.01));
-      expect(layout.geometry.secondaryWidth, closeTo(600, 0.01));
+      expect(layout.geometry.primaryExtent, closeTo(576, 0.01));
+      expect(layout.geometry.dividerExtent, closeTo(24, 0.01));
+      expect(layout.geometry.secondaryExtent, closeTo(600, 0.01));
       expect(layout.isSinglePane, isFalse);
       expect(layout.primaryVisible, isTrue);
       expect(layout.secondaryVisible, isTrue);
@@ -253,9 +260,9 @@ void main() {
     test('the ratio is relative to the scaffold width, not the pane area', () {
       // 1400 scaffold wide, 192 of rail: the panes share 1208.
       final layout = panesOf(totalWidth: 1208, scaffoldWidth: 1400);
-      expect(layout.geometry.secondaryWidth, closeTo(700, 0.01));
-      expect(layout.geometry.primaryWidth, closeTo(484, 0.01));
-      expect(layout.geometry.dividerWidth, closeTo(24, 0.01));
+      expect(layout.geometry.secondaryExtent, closeTo(700, 0.01));
+      expect(layout.geometry.primaryExtent, closeTo(484, 0.01));
+      expect(layout.geometry.dividerExtent, closeTo(24, 0.01));
     });
 
     test('a flat fold starts the divider on the crease in LTR', () {
@@ -264,9 +271,9 @@ void main() {
         scaffoldWidth: 1400,
         ratioSecondaryBody: 488 / 1400,
       );
-      expect(layout.geometry.primaryWidth, closeTo(888, 0.01));
-      expect(layout.geometry.dividerWidth, closeTo(24, 0.01));
-      expect(layout.geometry.secondaryWidth, closeTo(488, 0.01));
+      expect(layout.geometry.primaryExtent, closeTo(888, 0.01));
+      expect(layout.geometry.dividerExtent, closeTo(24, 0.01));
+      expect(layout.geometry.secondaryExtent, closeTo(488, 0.01));
     });
 
     test('a flat fold starts the divider on the crease in RTL', () {
@@ -276,9 +283,9 @@ void main() {
         ratioSecondaryBody: 888 / 1400,
         isRtl: true,
       );
-      expect(layout.geometry.primaryWidth, closeTo(488, 0.01));
-      expect(layout.geometry.dividerWidth, closeTo(24, 0.01));
-      expect(layout.geometry.secondaryWidth, closeTo(888, 0.01));
+      expect(layout.geometry.primaryExtent, closeTo(488, 0.01));
+      expect(layout.geometry.dividerExtent, closeTo(24, 0.01));
+      expect(layout.geometry.secondaryExtent, closeTo(888, 0.01));
     });
 
     test('a separating fold gives each side its own width', () {
@@ -288,9 +295,9 @@ void main() {
         foldLeft: 480,
         foldRight: 520,
       );
-      expect(ltr.geometry.primaryWidth, closeTo(480, 0.01));
-      expect(ltr.geometry.dividerWidth, closeTo(40, 0.01));
-      expect(ltr.geometry.secondaryWidth, closeTo(480, 0.01));
+      expect(ltr.geometry.primaryExtent, closeTo(480, 0.01));
+      expect(ltr.geometry.dividerExtent, closeTo(40, 0.01));
+      expect(ltr.geometry.secondaryExtent, closeTo(480, 0.01));
 
       // In RTL the body is on the right, the secondary body on the left.
       final rtl = panesOf(
@@ -300,9 +307,9 @@ void main() {
         foldRight: 460,
         isRtl: true,
       );
-      expect(rtl.geometry.primaryWidth, closeTo(540, 0.01));
-      expect(rtl.geometry.dividerWidth, closeTo(60, 0.01));
-      expect(rtl.geometry.secondaryWidth, closeTo(400, 0.01));
+      expect(rtl.geometry.primaryExtent, closeTo(540, 0.01));
+      expect(rtl.geometry.dividerExtent, closeTo(60, 0.01));
+      expect(rtl.geometry.secondaryExtent, closeTo(400, 0.01));
     });
   });
 
@@ -310,9 +317,9 @@ void main() {
     test('a pane under minBodySize gives its room to the other', () {
       // Two panes of 800 do not fit in 1400, so the body gives way.
       final layout = panesOf(totalWidth: 1400, minBodySize: 800);
-      expect(layout.geometry.primaryWidth, 0);
-      expect(layout.geometry.dividerWidth, 0);
-      expect(layout.geometry.secondaryWidth, closeTo(1400, 0.01));
+      expect(layout.geometry.primaryExtent, 0);
+      expect(layout.geometry.dividerExtent, 0);
+      expect(layout.geometry.secondaryExtent, closeTo(1400, 0.01));
       expect(layout.isSinglePane, isTrue);
       expect(layout.primaryVisible, isFalse);
       expect(layout.secondaryVisible, isTrue);
@@ -327,9 +334,9 @@ void main() {
         ratioSecondaryBody: 0.5,
         isHoveringDivider: true,
       );
-      expect(layout.geometry.primaryWidth, closeTo(138, 0.01));
-      expect(layout.geometry.dividerWidth, closeTo(24, 0.01));
-      expect(layout.geometry.secondaryWidth, closeTo(138, 0.01));
+      expect(layout.geometry.primaryExtent, closeTo(138, 0.01));
+      expect(layout.geometry.dividerExtent, closeTo(24, 0.01));
+      expect(layout.geometry.secondaryExtent, closeTo(138, 0.01));
       expect(layout.primaryVisible, isTrue);
       expect(layout.secondaryVisible, isTrue);
       expect(layout.isSinglePane, isFalse);
@@ -342,9 +349,9 @@ void main() {
         scaffoldWidth: 300,
         ratioSecondaryBody: 0.5,
       );
-      expect(layout.geometry.primaryWidth, 0);
-      expect(layout.geometry.dividerWidth, 0);
-      expect(layout.geometry.secondaryWidth, closeTo(300, 0.01));
+      expect(layout.geometry.primaryExtent, 0);
+      expect(layout.geometry.dividerExtent, 0);
+      expect(layout.geometry.secondaryExtent, closeTo(300, 0.01));
       expect(layout.isSinglePane, isTrue);
       expect(layout.primaryVisible, isFalse);
       expect(layout.secondaryVisible, isTrue);
@@ -354,9 +361,9 @@ void main() {
   group('computePaneLayout: one pane', () {
     test('shows the secondary body alone below the split width', () {
       final layout = panesOf(totalWidth: 800, canSplitPanel: false);
-      expect(layout.geometry.primaryWidth, 0);
-      expect(layout.geometry.dividerWidth, 0);
-      expect(layout.geometry.secondaryWidth, closeTo(800, 0.01));
+      expect(layout.geometry.primaryExtent, 0);
+      expect(layout.geometry.dividerExtent, 0);
+      expect(layout.geometry.secondaryExtent, closeTo(800, 0.01));
       expect(layout.isSinglePane, isTrue);
       expect(layout.primaryVisible, isFalse);
       expect(layout.secondaryVisible, isTrue);
@@ -368,9 +375,9 @@ void main() {
         canSplitPanel: false,
         focusOnPrimaryBody: true,
       );
-      expect(layout.geometry.primaryWidth, closeTo(800, 0.01));
-      expect(layout.geometry.dividerWidth, 0);
-      expect(layout.geometry.secondaryWidth, 0);
+      expect(layout.geometry.primaryExtent, closeTo(800, 0.01));
+      expect(layout.geometry.dividerExtent, 0);
+      expect(layout.geometry.secondaryExtent, 0);
       expect(layout.isSinglePane, isTrue);
       expect(layout.primaryVisible, isTrue);
       expect(layout.secondaryVisible, isFalse);
@@ -382,8 +389,8 @@ void main() {
         canSplitPanel: false,
         hasSecondaryBody: false,
       );
-      expect(layout.geometry.primaryWidth, closeTo(800, 0.01));
-      expect(layout.geometry.secondaryWidth, 0);
+      expect(layout.geometry.primaryExtent, closeTo(800, 0.01));
+      expect(layout.geometry.secondaryExtent, 0);
       expect(layout.primaryVisible, isTrue);
       expect(layout.secondaryVisible, isFalse);
     });

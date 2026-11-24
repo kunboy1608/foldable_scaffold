@@ -1,7 +1,7 @@
 # foldable_scaffold
 
 > [!WARNING]
-> **Experimental.** This is a prerelease (`0.1.0-dev.4`). The API will change
+> **Experimental.** This is a prerelease (`0.1.0-dev.5`). The API will change
 > without notice and the package is not ready for production use.
 
 A [Scaffold](https://pub.dev/documentation/material_ui/latest/material_ui/Scaffold-class.html)
@@ -14,7 +14,7 @@ but a `FoldableScaffold` works on its own.
 ## Install
 
 ```sh
-flutter pub add foldable_scaffold:^0.1.0-dev.4
+flutter pub add foldable_scaffold:^0.1.0-dev.5
 ```
 
 ## Usage
@@ -104,14 +104,86 @@ and iOS (also in a mobile browser) are *handheld*, everything else is *desktop*.
 | Scaffold width | Handheld | Desktop |
 | --- | --- | --- |
 | < 600 | one pane, `bottomNavigationBar` | one pane, `bottomNavigationBar` |
-| 600 and above | `primaryNavigation` on the left | `primaryNavigation` on the left |
-| two panes | from 600, if the window is at least 600 on its **short** side | from 1200 |
-
-| Scaffold width | Handheld | Desktop |
-| --- | --- | --- |
-| < 600 | one pane, `bottomNavigationBar` | one pane, `bottomNavigationBar` |
 | 600 and above | `primaryNavigation` on the start side | `primaryNavigation` on the start side |
 | two panes | from 600, if the window is at least 600 on its **short** side | from 1200 |
+
+### Where the navigation goes
+
+The navigation can be below the panes, above them, or beside them, on either
+side. Where it goes is decided by a function, the *placement resolver*, so each
+platform and each device can have its own rule. By default, that is
+`defaultNavigationPlacement`, which is the table above: a bar below the panes
+under 600, a rail on the start side from 600. It is exported, so a custom
+resolver can start from it and change only the cases it cares about:
+
+```dart
+FoldableScaffold(
+  navigationPlacement: (info) => info.scaffoldHeight < 400
+      ? const FoldableNavigationPlacement.end() // short and wide: on the side
+      : defaultNavigationPlacement(info),
+  navigationBuilder: (context, placement, constraints, padding) =>
+      placement.isSide
+      ? NavigationRail(/* ... */)
+      : NavigationBar(/* ... */),
+  // ...
+)
+```
+
+`FoldableLayoutInfo` has what a resolver can use: the size of the scaffold and
+of the window, the platform, the text direction, the system insets, the
+breakpoints, the fold, whether there is a secondary body, and the side where the
+platform wants vertical bars. A resolver must not depend on the navigation
+itself (its size or content): the room it leaves is what the panes share.
+
+| `FoldableNavigationPlacement` | Where |
+| --- | --- |
+| `.bottom()` | below the panes, in `Scaffold.bottomNavigationBar`: the floating action button, `extendBody` and the insets work as usual |
+| `.top()` | above the panes, under the app bar |
+| `.start({extent})`, `.end({extent})` | beside the panes, on the start or end side of the text direction |
+| `.left({extent})`, `.right({extent})` | beside the panes, on the physical left or right edge, whatever the text direction |
+| `.none()` | no navigation |
+
+`extent` is how wide a side navigation is, without the system inset on its side
+(which the scaffold adds). Without it, it is `minWidthNavigation` (72), or
+`maxWidthNavigation` (192) above 1000.
+
+`navigationBuilder` makes the navigation for whichever placement the resolver
+chose, so one widget can be a `NavigationBar` or a `NavigationRail`. The slots
+`primaryNavigation` and `bottomNavigationBar` stay for the usual case:
+`primaryNavigation` is shown when the placement is a side, and
+`bottomNavigationBar` when it is the bottom or the top. A `navigationBuilder`
+and these slots cannot be passed together. The navigation is a different widget
+on each edge, so its state does not move with it: keep the selected tab in your
+own state.
+
+`foldable_scaffold` has a resolver for each platform
+(`FoldableNavigationPlacements.handheld` for Android and iOS, `.desktop` for the
+others, `.forPlatform(platform)`). Today they agree, but a platform can now
+differ without touching the others.
+
+#### iPhone Duo
+
+On iPhone Duo, the system puts navigation bars, toolbars and tab bars on the
+side of the display: always on the outer display, and in some poses of the
+inner one (the inner display in portrait keeps the bars on the top and the
+bottom). It decides which side, which can follow the language or the hardware,
+and tells an iOS app with the `verticalBarEdge` trait in UIKit or the
+`toolbarVerticalEdge` environment value in SwiftUI, so the width alone cannot
+tell. Flutter does not expose that value yet: read it on the platform side and
+give it to the scaffold with `FoldableVerticalBarScope`.
+
+```dart
+FoldableVerticalBarScope(
+  edge: edgeFromThePlatform, // null when the system wants no vertical bar
+  child: MaterialApp(/* ... */),
+)
+```
+
+The default placement then puts the navigation on that side, whatever the
+width: `start` and `end` follow the text direction, `left` and `right` do not.
+With no scope, or a null edge, nothing changes. On iPhone Duo, the system also
+moves the app bar and the toolbar to the side; the scaffold's app bar stays on
+top, so for that case give `appBarBuilder` your own layout.
 
 ### Text direction
 
@@ -143,7 +215,7 @@ multi-window, keeps one pane too.
 | Galaxy Z Fold8, folded | about 411 x 960 | one |
 | Galaxy Z Fold8, open | about 635 x 841 | two |
 | Galaxy Z Fold8 Ultra, open | about 740 x 822 | two |
-| iPhone Fold, open (not released, sizes are leaks) | about 640 x 904 | two |
+| iPhone Duo, open (sizes are not official) | about 640 x 904 | two |
 | Tablet | 800 x 1280 | two |
 | Desktop window | 1200 and wider | two |
 
@@ -359,20 +431,57 @@ forwarded either, because `Scaffold`'s default for it is private.
 
 ## Folds and hinges
 
-On Android, a device with a vertical fold or hinge (a Galaxy Z Fold, a Pixel
-Fold, a dual-screen device) reports it in `MediaQuery.displayFeatures`. The
-scaffold reads it, as `FoldableFold`, and places the panes around it:
+A device with a fold or hinge (a Galaxy Z Fold, a Pixel Fold, a dual-screen
+device such as iPhone Duo) reports it in `MediaQuery.displayFeatures`. The
+scaffold reads it, as `FoldableFold`, and places the panes around it. A fold
+has a direction (`FoldableFold.axis`): a **vertical** one runs from the top to
+the bottom of the window and has a pane on its left and on its right (the book
+posture, or a dual-screen device in landscape); a **horizontal** one runs across
+the window and has a pane above it and one below it (the tabletop posture, or a
+dual-screen device in portrait).
 
 | The device reports | What the scaffold does |
 | --- | --- |
-| A **hinge** (two screens) | body on one screen, secondary body on the other, whatever the width. The hinge area stays empty and is not a handle. |
-| A **half-open fold** (book posture) | the same: one pane on each side of the fold. |
-| A **flat fold** (fully open) | the content crosses the crease. Two panes still follow `breakpoints`, and the divider *starts* on the crease. The user can drag it away. |
+| A **vertical hinge** (two screens side by side) | body on one screen, secondary body on the other (left and right, mirrored in RTL), whatever the width. The hinge area stays empty and is not a handle. |
+| A **vertical half-open fold** (book posture) | the same: one pane on each side of the fold. |
+| A **horizontal hinge** (two screens, one above the other) | the panes are stacked: **body above, secondary body below**, whatever the width and the text direction. The hinge area stays empty and is not a handle. |
+| A **horizontal half-open fold** (tabletop or laptop posture) | the same: body above the fold, secondary body below it. |
+| A **flat vertical fold** (fully open) | the content crosses the crease. Two panes still follow `breakpoints`, and the divider *starts* on the crease. The user can drag it away. |
+| A **flat horizontal fold** (fully open) | ignored, like a cutout: the width decides the layout as if there were no fold. |
 | Nothing (a phone, a tablet, desktop, web) | nothing changes. |
 
-Folding or unfolding the device moves the divider back to the crease. A fold
-needs room: each side must be at least `minBodySize` wide, or the usual rules
-apply. Horizontal folds (laptop or tabletop posture) and cutouts are ignored.
+Only a fold that *separates* the screen (a hinge, or a half-open fold) changes
+the layout around a horizontal fold. The rules:
+
+* **Room.** Stacking needs a secondary body to show (`hasSecondaryBody`) and
+  both halves at least `minBodySize` **tall**: `minBodySize` is the minimum
+  height as well as the minimum width. A vertical fold needs it wide. Without
+  room the usual rules apply.
+* **Under the app bar and the navigation.** The fold is in window coordinates,
+  but the panes start below the app bar, the navigation above them and the system
+  inset, and end above the navigation below them, whose sizes are up to your
+  widgets. The scaffold measures where the pane area really is after layout and
+  subtracts it, so the hinge is where it is on the device whatever you put
+  around the panes. The scaffold must cover the height of the window for this
+  (and the width of it for a vertical fold): a scaffold inside something
+  smaller ignores the fold of that direction.
+* **More than one fold.** The first fold of `displayFeatures` that applies wins,
+  except that a flat vertical fold gives way to a separating horizontal one
+  (`FoldableFold.fromFeatures`).
+* **Drag and controller.** Around any hinge the divider is the hinge: it is not
+  a handle, takes no focus and has no semantics, `setSecondaryWidth` and
+  `resetDivider` do nothing. While the panes are stacked,
+  `FoldableScaffoldController.isSplit` is true, `isStacked` is true and `axis`
+  is `Axis.vertical`; `secondaryWidth` is the width of the pane area.
+  `FoldablePaneLayout.axis` tells the widgets in the panes the same.
+* **Animation.** Moving a pane between side by side and stacked does not
+  animate (a width does not turn into a height): the panes are in their new place
+  at once. Moving the hinge within the stacked layout animates as usual.
+* **Insets.** Stacked, the pane above has no bottom inset in its `MediaQuery`
+  and the one below has no top inset: neither has the other side's.
+
+Folding or unfolding a vertical fold moves the divider back to the crease. Cutouts
+are ignored.
 
 ```dart
 FoldableScaffold(
@@ -384,16 +493,30 @@ FoldableScaffold(
 final fold = FoldableFold.maybeOf(context);
 if (fold != null && fold.isSeparating) {
   // Keep text and buttons off the hinge area: fold.bounds.
+  // fold.isHorizontal: the panes are above and below it.
 }
 ```
 
-The fold is in window coordinates, so it only applies to a scaffold as wide as
-the window. iOS and the web report no folds; there the width rules above are all
-that decide.
+One frame can be seen differently on the first launch: with a horizontal hinge
+there is no measure of the pane area yet, so the scaffold lays the panes out from
+an estimate and does not paint them for that first frame, then shows them in the
+right place. Later changes of posture show the right layout at once. Opening the
+keyboard (which shrinks the pane area) can leave the lower half too short to
+stack: the usual rules apply then.
+
+The numbers of real devices, to test the layout against, go in
+[`test/foldable_scaffold_device_profiles_test.dart`](test/foldable_scaffold_device_profiles_test.dart):
+a table of sizes and display features (iPhone Duo's displays and poses, still to
+be filled in from the Device Hub of Xcode) whose tests run once a profile has its
+numbers.
+
+The fold is in window coordinates. iOS (except dual-screen devices such as
+iPhone Duo, if they report it) and the web report no folds; there the width rules
+above are all that decide.
 
 To try it without a foldable, run the [example](example/lib/main.dart): the
-fold button in its app bar pretends the device has a hinge or a fold. In your
-own app, `foldable_dev_tools` has the same switch.
+fold button in its app bar pretends the device has a hinge or a fold, vertical
+or horizontal. In your own app, `foldable_dev_tools` has the same switch.
 
 ## Exposing the layout to the panes
 

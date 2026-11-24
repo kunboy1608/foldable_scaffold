@@ -5,6 +5,7 @@ export 'package:foldable_core/foldable_core.dart';
 
 export 'src/foldable_breakpoints.dart';
 export 'src/foldable_fold.dart';
+export 'src/foldable_navigation.dart';
 export 'src/foldable_scaffold.dart';
 export 'src/foldable_scaffold_controller.dart' show FoldableScaffoldController;
 export 'src/foldable_scaffold_divider.dart'

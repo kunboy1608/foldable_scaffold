@@ -1,3 +1,33 @@
+## 0.1.0-dev.5
+
+**Breaking changes:**
+
+* `FrameGeometry`, `computeFrameGeometry` and the navigation slots now work from a placement. `hasPrimaryNavigation` became `hasNavigation` and a `placement` is required (internal API, not exported).
+
+New:
+
+* The navigation can go below the panes, above them, or beside them on either side, and a function decides it. `FoldableScaffold.navigationPlacement` takes a `FoldableNavigationPlacementResolver` that gets a `FoldableLayoutInfo` (sizes of the scaffold and the window, platform, text direction, insets, breakpoints, fold, secondary body, and the vertical bar edge) and returns a `FoldableNavigationPlacement`: `.bottom()`, `.top()`, `.start({extent})`, `.end({extent})`, `.left({extent})`, `.right({extent})` or `.none()`. `start`/`end` follow the text direction, `left`/`right` are physical.
+* `defaultNavigationPlacement(info)`, exported, is what the scaffold uses without a resolver: a bottom bar under `FoldableBreakpoints.rail`, a rail on the start side from there, the same as before. `FoldableNavigationPlacements.handheld`, `.desktop` and `.forPlatform` are the rules by platform (they agree for now). A custom resolver can fall back to it.
+* `FoldableScaffold.navigationBuilder` builds the navigation for whichever placement was chosen (a bar or a rail), with the placement, the constraints and the system insets. It replaces `primaryNavigation` and `bottomNavigationBar` when passed, and passing both is an error. Those slots still work: `primaryNavigation` for a side, `bottomNavigationBar` for the bottom or the top.
+* `FoldableVerticalBarScope`, for iPhone Duo: the system puts its bars on the side of the display on the outer display and in some poses of the inner one, and tells the app which side (`verticalBarEdge` in UIKit, `toolbarVerticalEdge` in SwiftUI). Flutter does not expose it, so the app reads it and gives it to the scope; the default placement then goes there whatever the width.
+* A navigation beside the panes can be on the right: the pane area and the fold are laid out from the physical edge, the system inset is taken from the side the navigation is on, and the panes keep their state when the navigation moves.
+* The example has a "Vertical bar (iPhone Duo)" option in the end drawer, and uses a single `navigationBuilder`.
+
+**Horizontal folds and hinges:**
+
+* A **separating horizontal fold** (a hinge, or a half-open fold: the tabletop posture, or a dual-screen device in portrait such as iPhone Duo) stacks the panes: the body above the fold, the secondary body below it, whatever the width and the text direction (RTL only mirrors the horizontal order). The fold area between them is the divider: empty, not a handle, no focus, no semantics. Stacking needs a secondary body and both halves at least `minBodySize` *tall* (`minBodySize` is the minimum height as well as the minimum width), otherwise the usual rules apply. While stacked, `FoldableScaffoldScope.canSplit` is true whatever the width. A **flat horizontal fold is ignored**, like a cutout; vertical folds behave exactly as before.
+* The fold is in window coordinates, but the panes start below the app bar, the navigation above them and the system inset, and end above the navigation below them, whose sizes belong to your widgets. The scaffold measures where the pane area is after layout (a small render object, reported after the frame and only when the value changes: no rebuild loop) and subtracts it. A horizontal fold needs the scaffold to be as tall as the window, as a vertical one needs it to be as wide. The first frame of the app, before there is a measure, lays the panes out from an estimate and does not paint them; the next frame shows them in the right place. Changes of posture later use the last measure and are right at once; a new measure never animates the panes.
+* With several folds, the first of `displayFeatures` that applies wins; a flat vertical fold gives way to a separating horizontal one.
+* `FoldableFold` has an `axis` (`Axis.vertical` by default, so the constructor and `maybeOf` are unchanged), `isVertical`, `isHorizontal` and `paneAxis`; `center` is the position across the fold. `FoldableFold.fromFeatures` finds horizontal folds too (separating ones only) and takes `vertical`/`horizontal` flags. `FoldableLayoutInfo.fold` can therefore be horizontal.
+* `FoldableScaffoldController` has `axis` (`Axis.horizontal` side by side, `Axis.vertical` stacked, null with one pane) and `isStacked`. Stacked, `isSplit` is true, `setSecondaryWidth` and `resetDivider` do nothing (as around a vertical hinge) and `secondaryWidth` is the width of the pane area.
+* `FoldablePaneLayout` (in `foldable_core`) has an `axis`, `Axis.horizontal` by default, so existing code is unaffected.
+* Stacked panes keep their state when the posture changes. The pane above has no bottom inset in its `MediaQuery`, the one below no top inset. A pane with no extent along the axis is hidden (no focus, no semantics, no pointer, muted tickers) as before, now along either axis.
+* The geometry works along an axis: `PaneGeometry` has `primaryExtent`, `dividerExtent`, `secondaryExtent` and an `axis`, `computePaneLayout` takes `axis`, `totalExtent`, `foldStart` and `foldEnd`, and one delegate lays the panes out along either (internal API, not exported; the old `*Width` and `foldLeft`/`foldRight` names are gone, the tests of the old behaviour were renamed and pass otherwise unchanged). Between side by side and stacked the panes are in their new place at once, as extents along different axes cannot be interpolated; on one axis they animate as before.
+* The example has "Hinge, horizontal (two screens stacked)" and "Fold, half open, horizontal" in the fold menu.
+* `test/foldable_scaffold_device_profiles_test.dart` is a table of device profiles (iPhone Duo outer display, inner display portrait and landscape, partially folded) whose numbers are still to be filled in from the Device Hub of Xcode; their tests are skipped until then.
+
+Known limits: opening the keyboard shrinks the pane area, and can leave the lower half under `minBodySize` and unstack the panes; a navigation whose height animates moves the hinge inside the pane area and re-lays the panes out for the length of the animation.
+
 ## 0.1.0-dev.4
 
 New:
@@ -11,6 +41,9 @@ New:
 
 Internal:
 
+* `FoldableScaffoldController.attach`, `detach` and `update` are `@internal` (from `package:meta`, a new dependency): they are for the scaffold, not part of the API of an app.
+* The divider metrics are no longer stored while building: they are computed with the layout and published with the controller state after the frame. The controller is told only when `secondaryWidth`, `isSplit`, `isDraggingDivider` or the divider range changed, so a frame that changes none of them queues no callback.
+* Fixed an unresolved dartdoc reference on `followFold`.
 * The keyboard math and the semantics percentage are pure functions in `src/foldable_scaffold_layout.dart` (`computeKeyboardSecondarySize`, `computeSecondaryPanePercent`), testable without pumping a widget.
 * The divider moved to `src/foldable_scaffold_divider.dart`, with the theme in `src/foldable_scaffold_theme.dart` and the controller in `src/foldable_scaffold_controller.dart`. No behavior, layout or pixel change without the new arguments: the 115 tests of 0.1.0-dev.3 pass unchanged.
 

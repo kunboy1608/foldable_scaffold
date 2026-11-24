@@ -29,6 +29,35 @@ void main() {
     expect(find.text('two panes'), findsOneWidget);
   }, variant: desktop);
 
+  testWidgets('a simulated horizontal hinge stacks the panes', (tester) async {
+    // A desktop window this wide shows one pane.
+    tester.view.physicalSize = const Size(1000, 700);
+    tester.view.devicePixelRatio = 1;
+    addTearDown(tester.view.reset);
+
+    await tester.pumpWidget(const ScaffoldExample());
+    await tester.pumpAndSettle();
+    expect(find.text('one pane'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Pretend the device has a fold'));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.text('Hinge, horizontal (two screens stacked)'),
+      warnIfMissed: false,
+    );
+    await tester.pumpAndSettle();
+
+    expect(find.textContaining('separating fold at 350'), findsOneWidget);
+    expect(find.text('two panes, stacked'), findsOneWidget);
+    // The body is above the secondary body.
+    expect(
+      tester.getRect(find.byKey(const Key('body_builder'))).bottom,
+      lessThanOrEqualTo(
+        tester.getRect(find.byKey(const Key('secondary_body_builder'))).top,
+      ),
+    );
+  }, variant: desktop);
+
   testWidgets('a flat fold needs the phone and tablet rules to split', (
     tester,
   ) async {
