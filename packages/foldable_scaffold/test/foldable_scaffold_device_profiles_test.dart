@@ -34,6 +34,7 @@ class DeviceProfile {
     required this.windowSize,
     required this.features,
     required this.verticalBarEdge,
+    this.padding = EdgeInsets.zero,
   });
 
   /// What the profile is, for the name of the tests.
@@ -51,6 +52,11 @@ class DeviceProfile {
   /// (`verticalBarEdge` in UIKit), or null when it asks for none. Only
   /// meaningful for a profile that is filled in.
   final FoldableNavigationEdge? verticalBarEdge;
+
+  /// `MediaQuery.padding` of the pose (the system insets), in logical pixels:
+  /// the "view padding (raw ...)" line of the "Platform data" button. Zero
+  /// until it is read on the device.
+  final EdgeInsets padding;
 
   /// Whether the numbers of the profile have been filled in.
   bool get isFilled => windowSize != null && features != null;
@@ -151,30 +157,35 @@ final deviceProfiles = <DeviceProfile>[
     windowSize: _duoOuterPortraitSize,
     features: _duoOuterPortraitFeatures,
     verticalBarEdge: _duoOuterPortraitVerticalBar,
+    // TODO(user): điền padding từ dòng \"view padding\" của nút Platform data
   ),
   DeviceProfile(
     name: 'iPhone Duo outer display, landscape, camera on the right',
     windowSize: _duoOuterLandscapeEndSize,
     features: _duoOuterLandscapeEndFeatures,
     verticalBarEdge: _duoOuterLandscapeEndVerticalBar,
+    // TODO(user): điền padding từ dòng \"view padding\" của nút Platform data
   ),
   DeviceProfile(
     name: 'iPhone Duo outer display, landscape, camera on the left',
     windowSize: _duoOuterLandscapeStartSize,
     features: _duoOuterLandscapeStartFeatures,
     verticalBarEdge: _duoOuterLandscapeStartVerticalBar,
+    // TODO(user): điền padding từ dòng \"view padding\" của nút Platform data
   ),
   DeviceProfile(
     name: 'iPhone Duo inner display, portrait, fully open',
     windowSize: _duoInnerPortraitSize,
     features: _duoInnerPortraitFeatures,
     verticalBarEdge: _duoInnerPortraitVerticalBar,
+    // TODO(user): điền padding từ dòng \"view padding\" của nút Platform data
   ),
   DeviceProfile(
     name: 'iPhone Duo inner display, landscape, fully open',
     windowSize: _duoInnerLandscapeSize,
     features: _duoInnerLandscapeFeatures,
     verticalBarEdge: _duoInnerLandscapeVerticalBar,
+    // TODO(user): điền padding từ dòng \"view padding\" của nút Platform data
   ),
   DeviceProfile(
     name:
@@ -182,6 +193,7 @@ final deviceProfiles = <DeviceProfile>[
     windowSize: _duoInnerBookSize,
     features: _duoInnerBookFeatures,
     verticalBarEdge: _duoInnerBookVerticalBar,
+    // TODO(user): điền padding từ dòng \"view padding\" của nút Platform data
   ),
   DeviceProfile(
     name:
@@ -189,6 +201,7 @@ final deviceProfiles = <DeviceProfile>[
     windowSize: _duoInnerLaptopSize,
     features: _duoInnerLaptopFeatures,
     verticalBarEdge: _duoInnerLaptopVerticalBar,
+    // TODO(user): điền padding từ dòng \"view padding\" của nút Platform data
   ),
 ];
 
@@ -215,6 +228,12 @@ Future<void> _pumpProfile(
 }) async {
   tester.view.physicalSize = profile.windowSize!;
   tester.view.devicePixelRatio = 1;
+  tester.view.padding = FakeViewPadding(
+    left: profile.padding.left,
+    top: profile.padding.top,
+    right: profile.padding.right,
+    bottom: profile.padding.bottom,
+  );
   tester.view.displayFeatures = profile.features!;
   addTearDown(tester.view.reset);
 
@@ -345,6 +364,33 @@ void main() {
             }
           },
         );
+
+        testWidgets('keeps the head of a side navigation out of the system '
+            'padding', (tester) async {
+          await _pumpProfile(tester, profile);
+
+          final edge = _expectedNavigationEdge(profile);
+          if (edge == 'bottom') return;
+          final window = profile.windowSize!;
+          final strip = edge == 'start' || edge == 'left'
+              ? Rect.fromLTRB(0, 0, profile.padding.left, window.height)
+              : Rect.fromLTRB(
+                  window.width - profile.padding.right,
+                  0,
+                  window.width,
+                  window.height,
+                );
+          final head = tester.getRect(find.text('nav $edge'));
+          expect(
+            head.overlaps(strip),
+            isFalse,
+            reason: 'the navigation content $head is in the inset $strip',
+          );
+          for (final feature in profile.features!) {
+            if (feature.type != DisplayFeatureType.cutout) continue;
+            expect(head.overlaps(feature.bounds), isFalse);
+          }
+        });
 
         testWidgets('puts the two panes on each side of a separating fold', (
           tester,

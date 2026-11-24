@@ -1,3 +1,21 @@
+## 0.1.0-dev.8
+
+Fixed:
+
+* The content of a navigation beside the panes (a rail) was under the system inset of its edge. The slot is as wide as the extent plus that inset (`padding.left` or `padding.right`), but the navigation was given the whole slot, so a `NavigationRail` centred its icons across it and they landed in the status bar or camera strip (seen on a real iPhone Duo inner display in landscape: `padding.right` is 84, and the Inbox icon of the rail was under the status bar). Android with a notch on the side of the rail was affected too. The scaffold now pads the navigation on the side of the inset, so its content is in the extent only. The slot width, `navigationWidth` and the panes do not change. This applies whatever `avoidCutouts` is.
+
+Changed (behaviour, breaking in the pre-release):
+
+* The `constraints` that `navigationBuilder` and `primaryNavigationBuilder` get for a side navigation are now the extent (the inset of the edge is taken off).
+* The `padding` they get now means "the system inset the scaffold has not applied to the navigation": the side of the rail (left or right) is 0, the other sides are unchanged. A navigation that used `padding.left`/`padding.right` on its own side to keep off the system bars must not do it any more, or it is counted twice. The top, bottom and bar navigations are unchanged.
+* The area of a rail used to look for cutouts is the extent only, without the inset strip.
+
+Example: the Platform data dialog shows `view padding (raw, before the dialog's SafeArea)` (the dialog's `SafeArea` was eating the real padding and the report showed zero) and labels `MediaQuery.padding` as the value inside the dialog.
+
+The device profiles test has a `padding` per profile (zero for now, to fill in from the new line) and checks the head of a side navigation is out of the system inset.
+
+Not verified: not run on a device.
+
 ## 0.1.0-dev.7
 
 New:

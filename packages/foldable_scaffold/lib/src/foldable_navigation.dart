@@ -306,11 +306,13 @@ FoldableNavigationPlacement defaultNavigationPlacement(
 /// [FoldableNavigationEdge.bottom] or [FoldableNavigationEdge.top], a rail for
 /// a side.
 ///
-/// [constraints] are what the navigation gets: for a side, its width (the
-/// extent plus [padding] on its side) and the height of the scaffold; for a bar,
-/// the width of the scaffold and no height limit. [padding] is the system inset
-/// around the scaffold, to keep the content off the camera and the rounded
-/// corners. Returning null shows nothing.
+/// [constraints] are what the navigation gets: for a side, its extent (the
+/// slot minus the system inset of its edge, which the scaffold pads) and the
+/// height of the scaffold; for a bar, the width of the scaffold and no height
+/// limit. [padding] is the system inset around the scaffold that the scaffold
+/// has not applied to the navigation: for a side, that side is 0 and the others
+/// are the system's; for a bar, all of it. Use it to keep the content off the
+/// camera and the rounded corners. Returning null shows nothing.
 typedef FoldableNavigationBuilder =
     Widget? Function(
       BuildContext context,

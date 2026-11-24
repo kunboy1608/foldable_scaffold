@@ -256,8 +256,12 @@ class FoldableScaffold extends StatefulWidget {
   /// Either this or [primaryNavigationBuilder], not both.
   final Widget? primaryNavigation;
 
-  /// Builds [primaryNavigation] with the navigation constraints and the
-  /// scaffold padding.
+  /// Builds [primaryNavigation] with the navigation constraints and the system
+  /// inset the scaffold has not applied to it.
+  ///
+  /// The `constraints` are the extent of the navigation: the slot minus the
+  /// system inset of its edge, which the scaffold pads. The `padding` has that
+  /// side (left or right) at 0 and the other sides as the system reports them.
   final PrimaryNavigationBuilder? primaryNavigationBuilder;
 
   /// The bottom navigation, shown when [navigationPlacement] puts the
@@ -281,6 +285,13 @@ class FoldableScaffold extends StatefulWidget {
   /// passing both is an error. Those two slots remain for the usual case:
   /// [primaryNavigation] is shown when the placement is a side,
   /// [bottomNavigationBar] when it is the bottom or the top.
+  ///
+  /// For a navigation beside the panes the slot is the extent plus the system
+  /// inset of its edge, and the scaffold pads the navigation on that side
+  /// (also with `avoidCutouts` false), so its content is out of the inset. The
+  /// `constraints` are the extent only, and the `padding` is the system inset
+  /// the scaffold did not apply: the padded side is 0, the others are the
+  /// system's. The background of the navigation does not cover the inset.
   ///
   /// The navigation is a different widget for each edge, so its state does not
   /// move with it from one edge to another: keep what matters (the selected
@@ -387,8 +398,11 @@ class FoldableScaffold extends StatefulWidget {
   ///   at its top or bottom, so its content is out of the cutout (the
   ///   background of the navigation does not fill that part). Its width does
   ///   not change. The `padding` that [navigationBuilder] and
-  ///   [primaryNavigationBuilder] receive is still the system's: the
+  ///   [primaryNavigationBuilder] receive does not include it: the
   ///   navigation is already pushed out of the cutout.
+  ///
+  /// The system inset on the side of a rail is applied whatever this is, also
+  /// with false: see [navigationBuilder].
   ///
   /// Not handled: the content of the panes, a navigation below or above the
   /// panes, and toolbars inside the panes: use `MediaQuery.displayFeaturesOf`
@@ -894,11 +908,19 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
         ? 0.0
         : AppBar.preferredHeightFor(context, appBar.preferredSize) +
               (widget.primary ? padding.top : 0.0);
-    final left = edge == FoldableNavigationEdge.right
-        ? scaffoldWidth - width
-        : 0.0;
+    // The content of the rail, without the strip of system inset that the
+    // slot pads: that strip is the padding's business, not the cutouts'.
+    final isRight = edge == FoldableNavigationEdge.right;
+    final area = isRight
+        ? Rect.fromLTRB(
+            scaffoldWidth - width,
+            top,
+            scaffoldWidth - padding.right,
+            _windowSize.height,
+          )
+        : Rect.fromLTRB(padding.left, top, width, _windowSize.height);
     final inset = cutoutInsets(
-      area: Rect.fromLTRB(left, top, left + width, _windowSize.height),
+      area: area,
       cutouts: _cutouts,
       padding: padding,
       windowSize: _windowSize,
@@ -1279,22 +1301,43 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
           return SizedBox.shrink(key: keyed ? key : null);
         }
 
-        // The padding is the system's; the space the cutouts need is added
-        // around the navigation, not given to the builder.
+        // The slot is the extent plus the system inset of its edge; the
+        // navigation gets the extent only, so its content stays out of the
+        // status bar and the camera strip. The space the cutouts need at the
+        // top and bottom is added around it too, not given to the builder.
+        final isRight = edge == FoldableNavigationEdge.right;
+        final sidePadding = math.min(
+          isRight ? padding.right : padding.left,
+          animatedWidth,
+        );
+        final cutoutPadding = _railCutoutInsets(
+          context: context,
+          edge: edge,
+          width: animatedWidth,
+          scaffoldWidth: frame.scaffoldWidth,
+          padding: padding,
+        );
+        // What the scaffold did not apply: the other sides stay as they were.
+        final builderPadding = isRight
+            ? padding.copyWith(right: 0)
+            : padding.copyWith(left: 0);
         return SizedBox(
           width: animatedWidth,
           child: Padding(
-            padding: _railCutoutInsets(
-              context: context,
-              edge: edge,
-              width: animatedWidth,
-              scaffoldWidth: frame.scaffoldWidth,
-              padding: padding,
+            padding: EdgeInsets.only(
+              left: isRight ? 0 : sidePadding,
+              right: isRight ? sidePadding : 0,
+              top: cutoutPadding.top,
+              bottom: cutoutPadding.bottom,
             ),
             child: LayoutBuilder(
               key: keyed ? key : null,
-              builder: (context, constraints) =>
-                  _navigationFor(context, placement, constraints, padding),
+              builder: (context, constraints) => _navigationFor(
+                context,
+                placement,
+                constraints,
+                builderPadding,
+              ),
             ),
           ),
         );
@@ -1801,6 +1844,9 @@ typedef BoxConstraintsNullableWidgetBuilder =
     Widget? Function(BuildContext context, BoxConstraints constraints);
 
 /// Builds the navigation shown at the start of the scaffold row.
+///
+/// The constraints are the extent (without the system inset of the edge, which
+/// the scaffold pads) and the padding is the system inset not applied yet.
 typedef PrimaryNavigationBuilder =
     Widget Function(
       BuildContext context,

@@ -43,7 +43,10 @@ String describePlatformData(BuildContext context) {
   final lines = <String>[
     'platform: ${defaultTargetPlatform.name}${kIsWeb ? ' (web)' : ''}',
     'MediaQuery.size: ${_size(media.size)}',
-    'MediaQuery.padding: ${media.padding}',
+    'view padding (raw, before the dialog\'s SafeArea): '
+        '${MediaQueryData.fromView(View.of(context)).padding}',
+    'MediaQuery.padding (inside the dialog, after its SafeArea): '
+        '${media.padding}',
     'MediaQuery.displayFeatures:',
     ..._features(media.displayFeatures),
     'FoldableVerticalBarScope.edge: '

@@ -1179,8 +1179,10 @@ void main() {
       );
 
       final rail = tester.getRect(find.byKey(const Key('rail_builder')));
-      expect(rail.width, closeTo(116, 0.01)); // 72 + the right inset
-      expect(rail.right, closeTo(900, 0.01));
+      // The rail is the extent: the slot is 72 + the right inset (116) and the
+      // inset strip is left clear (the keyed widget used to fill the slot).
+      expect(rail.width, closeTo(72, 0.01));
+      expect(rail.right, closeTo(856, 0.01));
       // The rail took the start side inset, the pane area ends where it starts.
       final body = tester.getRect(
         find.byKey(const Key('body_builder'), skipOffstage: false),

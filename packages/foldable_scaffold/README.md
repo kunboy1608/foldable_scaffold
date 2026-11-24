@@ -1,7 +1,7 @@
 # foldable_scaffold
 
 > [!WARNING]
-> **Experimental.** This is a prerelease (`0.1.0-dev.7`). The API will change
+> **Experimental.** This is a prerelease (`0.1.0-dev.8`). The API will change
 > without notice and the package is not ready for production use.
 
 A [Scaffold](https://pub.dev/documentation/material_ui/latest/material_ui/Scaffold-class.html)
@@ -14,7 +14,7 @@ but a `FoldableScaffold` works on its own.
 ## Install
 
 ```sh
-flutter pub add foldable_scaffold:^0.1.0-dev.7
+flutter pub add foldable_scaffold:^0.1.0-dev.8
 ```
 
 ## Usage
@@ -289,8 +289,7 @@ Duo, or the real ones an Android device reports):
   `primary: false` does not).
 * **A rail** (the navigation beside the panes): its content is pushed down from
   a cutout above it, or up from one below it. The rail keeps its width, and its
-  background does not fill the part that is left clear. The `padding` that
-  `navigationBuilder` and `primaryNavigationBuilder` get is still the system's.
+  background does not fill the part that is left clear.
 
 Nothing is added where the system already covers the cutout in
 `MediaQuery.padding` (most Android phones), so it is not counted twice. The
@@ -300,6 +299,21 @@ as tall as the window, like a fold. Pass `avoidCutouts: false` to turn it off.
 Not handled yet: the content of the panes, a navigation below or above the
 panes, and toolbars inside the panes. Use `MediaQuery.displayFeaturesOf` for
 those.
+
+### System insets beside the navigation
+
+A navigation beside the panes (a rail) takes its extent plus the system inset of
+its edge (the status bar strip or camera strip of a phone held sideways, a notch
+on Android, the vertical camera strip of iPhone Duo). The scaffold puts the
+navigation in the extent only and keeps the inset clear: the content of the rail
+(a `NavigationRail` centres its icons in the width it gets) is never under the
+system bars. The background of the navigation does not cover the inset strip;
+paint it behind the scaffold if you want it there. This is done whatever
+`avoidCutouts` is.
+
+The `constraints` that the builders get are the extent (the inset is taken
+off), and the `padding` is the system inset the scaffold did **not** apply: the
+side of the rail is 0, the other sides are as the system reports them.
 
 ### Text direction
 

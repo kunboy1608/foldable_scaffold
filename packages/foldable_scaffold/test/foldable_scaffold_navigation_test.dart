@@ -478,8 +478,13 @@ void main() {
         placement: (_) => const FoldableNavigationPlacement.right(),
       );
 
-      expect(_rect(tester, _navKey).width, 92);
-      expect(call.padding?.right, 20);
+      // The slot is 72 + 20; the navigation gets the 72 (changed in dev.8: the
+      // keyed widget used to be the whole slot, 92 wide).
+      expect(_rect(tester, _navKey).width, 72);
+      expect(_rect(tester, _navKey).right, 900 - 20);
+      expect(_rect(tester, const Key('body_builder')).right, 900 - 92);
+      // And the padding is what the scaffold did not apply (was right: 20).
+      expect(call.padding?.right, 0);
       final bodyContext = tester.element(find.text('body'));
       expect(MediaQuery.paddingOf(bodyContext).right, 0);
     });
