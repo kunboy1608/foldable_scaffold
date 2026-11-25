@@ -61,8 +61,16 @@ class RedirectResolver {
   static List<FoldableRoute> chainOf(FoldableRoute route) {
     final chain = <FoldableRoute>[];
     for (FoldableRoute? r = route; r != null; r = r.parent) {
-      if (chain.contains(r)) {
-        throw StateError('Cycle in the parent chain of $route at $r');
+      // A real cycle means revisiting the very same instance. Two *different*
+      // instances that happen to be equal (same fullPath and params, e.g. a
+      // shell and its branch root both at `/`) are not a cycle.
+      if (chain.any((e) => identical(e, r))) {
+        // Do not interpolate the routes: a cyclic parent chain makes
+        // `toString` -> `fullPath` loop forever.
+        throw StateError(
+          'Cycle in the parent chain of ${route.runtimeType} at '
+          '${r.runtimeType}',
+        );
       }
       chain.add(r);
     }

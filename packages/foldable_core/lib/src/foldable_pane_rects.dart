@@ -53,6 +53,84 @@ class FoldablePaneRects {
   /// Whether the primary pane is shown right now.
   bool get primaryVisible => primary != null;
 
+  /// Computes a side-by-side layout for [size].
+  ///
+  /// [secondaryExtent] is the width of the secondary pane. Alternatively,
+  /// [secondaryFraction] expresses that width as a fraction of the available
+  /// width after [dividerExtent]. The primary pane is on the leading side in
+  /// [textDirection], and the secondary pane is on the trailing side.
+  static FoldablePaneRects sideBySide(
+    Size size, {
+    double? secondaryExtent,
+    double? secondaryFraction,
+    double dividerExtent = 0,
+    TextDirection textDirection = TextDirection.ltr,
+  }) {
+    final width = _resolveSecondaryExtent(
+      availableExtent: size.width - dividerExtent,
+      extent: secondaryExtent,
+      fraction: secondaryFraction,
+    );
+    final primaryWidth = size.width - dividerExtent - width;
+    final primary = textDirection == TextDirection.ltr
+        ? Rect.fromLTWH(0, 0, primaryWidth, size.height)
+        : Rect.fromLTWH(width + dividerExtent, 0, primaryWidth, size.height);
+    final secondary = textDirection == TextDirection.ltr
+        ? Rect.fromLTWH(primaryWidth + dividerExtent, 0, width, size.height)
+        : Rect.fromLTWH(0, 0, width, size.height);
+    return FoldablePaneRects(
+      primary: primary,
+      secondary: secondary,
+      axis: Axis.horizontal,
+    );
+  }
+
+  /// Computes a stacked layout for [size].
+  ///
+  /// [secondaryExtent] is the height of the secondary pane. Alternatively,
+  /// [secondaryFraction] expresses that height as a fraction of the available
+  /// height after [dividerExtent]. The primary pane is above the secondary
+  /// pane. [textDirection] is accepted for API symmetry and has no effect.
+  static FoldablePaneRects stacked(
+    Size size, {
+    double? secondaryExtent,
+    double? secondaryFraction,
+    double dividerExtent = 0,
+    TextDirection textDirection = TextDirection.ltr,
+  }) {
+    final height = _resolveSecondaryExtent(
+      availableExtent: size.height - dividerExtent,
+      extent: secondaryExtent,
+      fraction: secondaryFraction,
+    );
+    final primaryHeight = size.height - dividerExtent - height;
+    return FoldablePaneRects(
+      primary: Rect.fromLTWH(0, 0, size.width, primaryHeight),
+      secondary: Rect.fromLTWH(
+        0,
+        primaryHeight + dividerExtent,
+        size.width,
+        height,
+      ),
+      axis: Axis.vertical,
+    );
+  }
+
+  static double _resolveSecondaryExtent({
+    required double availableExtent,
+    required double? extent,
+    required double? fraction,
+  }) {
+    assert(availableExtent >= 0, 'Available pane extent must be non-negative');
+    assert(
+      (extent == null) != (fraction == null),
+      'Specify exactly one of secondaryExtent or secondaryFraction',
+    );
+    assert(extent == null || extent >= 0 && extent <= availableExtent);
+    assert(fraction == null || fraction >= 0 && fraction <= 1);
+    return extent ?? availableExtent * fraction!;
+  }
+
   @override
   bool operator ==(Object other) =>
       other is FoldablePaneRects &&

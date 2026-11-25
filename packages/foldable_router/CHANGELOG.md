@@ -1,3 +1,29 @@
+## 0.3.0-dev.1
+
+* **Rects as data.** The router no longer measures placeholder frames. It reads
+  the pane rectangles the layout publishes through `FoldablePaneRectsScope`
+  (`foldable_core`) and places each page directly in its rectangle. A layout
+  that computes the rects itself works too; without a scope the router keeps
+  the one-pane behaviour. **Breaking:** `FoldableShellRoute.buildPanes`,
+  `FoldablePanes`, `FoldableNavigator` and `PaneFrame` are gone; a shell now
+  exposes its pages through `FoldableShellState.child` (host them with
+  `FoldableScaffold.paneContent`, or in any layout that publishes the scope).
+* **Split transition.** While the rects say the layout is a split
+  (`FoldablePaneRects.isSplit`) a page uses a light fade with a hint of slide
+  instead of the full-screen slide, and its `Hero`s are off (`HeroMode`). One
+  pane, or no rects scope, keeps the platform transition. Both honour the
+  `FoldableMotion` duration.
+* **`FoldableShellState.closeSecondary`**: pops the top page of the current
+  branch (empties the secondary pane), for `FoldableScaffold.onSecondBodyClose`.
+  `stackLength` / `hasSecondary` are unchanged and drive `hasSecondaryBody`.
+* **Fix:** `RedirectResolver.chainOf` no longer reports a false cycle when a
+  shell and its branch root resolve to the same path (`/`): a cycle is now
+  "the same instance appears twice", not "two equal instances". The error
+  message no longer interpolates the routes (which looped on a real cycle).
+* Added `example/lib/with_scaffold.dart`: a runnable shell hosted in a
+  `FoldableScaffold` (rail/bottom bar, `paneContent`, `closeSecondary`), with
+  widget tests.
+
 ## 0.0.1
 
 * **Breaking:** `FoldableRoute.path` is replaced by `segment`: the part of the

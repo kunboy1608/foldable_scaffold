@@ -10,10 +10,50 @@ class MainShell extends StatelessWidget {
 
   final FoldableShellState shell;
 
+  // Widths at or above which the Users tab (branch 1) shows list + detail.
+  static const double _splitWidth = 840;
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: shell.child,
+      body: LayoutBuilder(
+        builder: (BuildContext context, BoxConstraints constraints) {
+          final Size size = constraints.biggest;
+          // The Users tab (branch 1) shows two panes when it is wide enough:
+          // the list on the left, the opened user on the right. Other tabs,
+          // and narrow windows, keep the classic one-pane stack.
+          final bool split =
+              shell.currentIndex == 1 && size.width >= _splitWidth;
+          final FoldablePaneRects rects = split
+              ? FoldablePaneRects.sideBySide(
+                  size,
+                  secondaryFraction: 0.6,
+                  dividerExtent: 1,
+                )
+              : FoldablePaneRects(
+                  primary: Offset.zero & size,
+                  secondary: null,
+                  axis: Axis.horizontal,
+                );
+          return FoldablePaneRectsScope(
+            rects: rects,
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                shell.child,
+                if (split && !shell.hasSecondary)
+                  Positioned.fromRect(
+                    rect: rects.secondary!,
+                    child: const Center(
+                      key: Key('no-user-selected'),
+                      child: Text('Chọn một người dùng'),
+                    ),
+                  ),
+              ],
+            ),
+          );
+        },
+      ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: shell.currentIndex,
         onDestinationSelected: shell.goBranch,

@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:foldable_router/foldable_router.dart';
 
+import 'rects_test_harness.dart';
+
 // ---------------------------------------------------------------------------
 // Does the router break `Form`, `GlobalKey<FormState>` and `TextFormField`?
 //
@@ -144,7 +146,11 @@ class FormShell extends FoldableShellRoute {
 
   @override
   Widget buildShell(BuildContext context, FoldableShellState shell) => Scaffold(
-    body: shell.child,
+    body: RectsTestHarness(
+      enabled: twoPane,
+      dividerExtent: 16,
+      child: shell.child,
+    ),
     bottomNavigationBar: NavigationBar(
       selectedIndex: shell.currentIndex,
       onDestinationSelected: shell.goBranch,
@@ -154,22 +160,6 @@ class FormShell extends FoldableShellRoute {
       ],
     ),
   );
-
-  @override
-  Widget? buildPanes(BuildContext context, FoldablePanes panes) {
-    if (!twoPane) return null;
-    return Row(
-      children: <Widget>[
-        Expanded(child: panes.primary),
-        const VerticalDivider(width: 16),
-        Expanded(
-          child: panes.hasSecondary
-              ? panes.secondary
-              : const Center(child: Text('nothing selected')),
-        ),
-      ],
-    );
-  }
 }
 
 class ItemsRoute extends FoldableShellChildRoute {

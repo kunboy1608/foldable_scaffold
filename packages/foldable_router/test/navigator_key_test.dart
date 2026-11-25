@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:foldable_router/foldable_router.dart';
 
+import 'rects_test_harness.dart';
+
 class HomeRoute extends FoldableFlatRoute {
   const HomeRoute();
   @override
@@ -54,7 +56,7 @@ class Shell extends FoldableShellRoute {
 
   @override
   Widget buildShell(BuildContext context, FoldableShellState shell) => Scaffold(
-    body: shell.child,
+    body: RectsTestHarness(enabled: true, dividerExtent: 0, child: shell.child),
     bottomNavigationBar: NavigationBar(
       selectedIndex: shell.currentIndex,
       onDestinationSelected: shell.goBranch,
@@ -63,16 +65,6 @@ class Shell extends FoldableShellRoute {
         NavigationDestination(icon: Icon(Icons.settings), label: 'Other'),
       ],
     ),
-  );
-
-  @override
-  Widget? buildPanes(BuildContext context, FoldablePanes panes) => Row(
-    children: <Widget>[
-      Expanded(child: panes.primary),
-      Expanded(
-        child: panes.hasSecondary ? panes.secondary : const SizedBox.shrink(),
-      ),
-    ],
   );
 }
 

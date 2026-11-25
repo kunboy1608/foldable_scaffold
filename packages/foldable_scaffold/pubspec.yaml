@@ -3,7 +3,7 @@ resolution: workspace
 description: >-
   Experimental. Two-pane Scaffold for foldables, tablets and desktop: resizable divider,
   animated panes. An optional iOS plugin reads the fold of iPhone Duo.
-version: 0.1.0-dev.10
+version: 0.1.0-dev.12
 repository: https://github.com/kunboy1608/foldable_scaffold/tree/main/packages/foldable_scaffold
 
 environment:

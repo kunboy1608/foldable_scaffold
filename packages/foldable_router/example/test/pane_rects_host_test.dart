@@ -77,8 +77,7 @@ class Shell extends FoldableShellRoute {
         paneAnimationDuration: const Duration(milliseconds: 250),
         appBar: AppBar(title: const Text('shell')),
         navigationBuilder: (_, _, _, _) => const SizedBox.shrink(),
-        body: const SizedBox.shrink(key: Key('primary-pane')),
-        secondaryBody: const SizedBox.shrink(key: Key('secondary-pane')),
+        // paneContent covers the panes itself: no placeholder bodies.
         hasSecondaryBody: shell.hasSecondary,
         paneContent: (_, rects) {
           _hostBuilds++;
@@ -209,14 +208,31 @@ Future<FoldableRouter> _pump(
   return router;
 }
 
+/// The rectangles the scaffold published around the pane content this frame.
+FoldablePaneRects? _hostRects(WidgetTester tester) {
+  final scope = tester.firstElement(find.byType(FoldablePaneRectsScope));
+  return (scope.widget as FoldablePaneRectsScope).rects;
+}
+
 void _expectRects(WidgetTester tester) {
+  final rects = _hostRects(tester);
+  expect(rects, isNotNull);
+  final primary = rects!.primary!;
+  final secondary = rects.secondary;
+  // The rects are in pane-area coordinates; the page rects are global. Put the
+  // pane-area origin back from the primary page, then compare rectangles.
+  final origin =
+      tester.getRect(find.byKey(const Key('page-root'))).topLeft -
+      primary.topLeft;
+  Rect at(Rect r) =>
+      Rect.fromLTWH(origin.dx + r.left, origin.dy + r.top, r.width, r.height);
+  expect(tester.getRect(find.byKey(const Key('page-root'))), at(primary));
+  final detail = find.byKey(const Key('page-detail'));
+  // A lone visible page occupies the primary pane; in a split, detail is on
+  // the secondary pane.
   expect(
-    tester.getRect(find.byKey(const Key('page-root'))),
-    tester.getRect(find.byKey(const Key('primary-pane'))),
-  );
-  expect(
-    tester.getRect(find.byKey(const Key('page-detail'))),
-    tester.getRect(find.byKey(const Key('secondary-pane'))),
+    tester.getRect(detail),
+    secondary != null ? at(secondary) : at(primary),
   );
 }
 

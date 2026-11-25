@@ -55,6 +55,73 @@ void main() {
     });
   });
 
+  group('FoldablePaneRects.sideBySide', () {
+    const size = Size(600, 400);
+
+    test('splits by secondaryExtent, divider in between (LTR)', () {
+      final rects = FoldablePaneRects.sideBySide(
+        size,
+        secondaryExtent: 200,
+        dividerExtent: 4,
+      );
+      expect(rects.axis, Axis.horizontal);
+      expect(rects.primary, const Rect.fromLTWH(0, 0, 396, 400));
+      expect(rects.secondary, const Rect.fromLTWH(400, 0, 200, 400));
+      expect(rects.isSplit, isTrue);
+    });
+
+    test('splits by secondaryFraction', () {
+      final rects = FoldablePaneRects.sideBySide(size, secondaryFraction: 0.25);
+      expect(rects.secondary!.width, 150);
+      expect(rects.primary!.width, 450);
+    });
+
+    test('fraction applies to the width left after the divider', () {
+      final rects = FoldablePaneRects.sideBySide(
+        size,
+        secondaryFraction: 0.5,
+        dividerExtent: 8,
+      );
+      expect(rects.primary!.width, 296);
+      expect(rects.secondary!.width, 296);
+      expect(rects.secondary!.left, 304);
+    });
+
+    test('RTL puts the primary pane on the right', () {
+      final rects = FoldablePaneRects.sideBySide(
+        size,
+        secondaryExtent: 200,
+        dividerExtent: 4,
+        textDirection: TextDirection.rtl,
+      );
+      expect(rects.secondary, const Rect.fromLTWH(0, 0, 200, 400));
+      expect(rects.primary, const Rect.fromLTWH(204, 0, 396, 400));
+    });
+  });
+
+  group('FoldablePaneRects.stacked', () {
+    const size = Size(400, 800);
+
+    test('stacks primary above secondary with the divider between', () {
+      final rects = FoldablePaneRects.stacked(
+        size,
+        secondaryExtent: 300,
+        dividerExtent: 6,
+      );
+      expect(rects.axis, Axis.vertical);
+      expect(rects.primary, const Rect.fromLTWH(0, 0, 400, 494));
+      expect(rects.secondary, const Rect.fromLTWH(0, 500, 400, 300));
+      expect(rects.isSplit, isTrue);
+    });
+
+    test('stacks by secondaryFraction', () {
+      final rects = FoldablePaneRects.stacked(size, secondaryFraction: 0.5);
+      expect(rects.primary!.height, 400);
+      expect(rects.secondary!.height, 400);
+      expect(rects.secondary!.top, 400);
+    });
+  });
+
   group('FoldablePaneRectsScope', () {
     const first = FoldablePaneRects(
       primary: Rect.fromLTWH(0, 0, 10, 10),

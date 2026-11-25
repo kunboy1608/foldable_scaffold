@@ -1,5 +1,13 @@
 ## 0.2.0-dev.1
 
+* Added `FoldablePaneRects`: two pane rectangles (`primary`, `secondary`, `axis`)
+  exposed as pure data, with the `FoldablePaneRects.sideBySide` /
+  `FoldablePaneRects.stacked` helpers to compute them for a size. A nullable
+  pane means "not shown right now"; `isSplit` is true when both are present.
+  Usable on its own, with or without the scaffold or the router.
+* Added `FoldablePaneRectsScope`: publishes the rects down the tree (`maybeOf`,
+  `read`, `rectsOf`). This is the "rects as data" bridge the router reads to
+  place pages without measuring anything.
 * Added `FoldablePaneLayout.read` for non-subscribing layout lookups.
 * Corrected `FoldablePaneLayout.maybeOf` documentation to clarify that it
   subscribes to layout changes.

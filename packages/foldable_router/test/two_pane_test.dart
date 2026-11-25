@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:foldable_router/foldable_router.dart';
 
 import 'pixel_utils.dart';
+import 'rects_test_harness.dart';
 
 // ---------------------------------------------------------------------------
 // Test app: a shell with two branches; two panes driven by [paneConfig].
@@ -28,7 +29,18 @@ class TwoPaneShell extends FoldableShellRoute {
 
   @override
   Widget buildShell(BuildContext context, FoldableShellState shell) => Scaffold(
-    body: shell.child,
+    body: RectsTestHarness(
+      enabled: paneConfig.twoPane,
+      dividerExtent: 24,
+      secondaryFraction: 0.6,
+      emptySecondary: shell.hasSecondary
+          ? null
+          : const Center(
+              key: Key('secondary-choose'),
+              child: Text('choose a user'),
+            ),
+      child: shell.child,
+    ),
     bottomNavigationBar: NavigationBar(
       selectedIndex: shell.currentIndex,
       onDestinationSelected: shell.goBranch,
@@ -38,33 +50,6 @@ class TwoPaneShell extends FoldableShellRoute {
       ],
     ),
   );
-
-  @override
-  Widget? buildPanes(BuildContext context, FoldablePanes panes) {
-    if (!paneConfig.twoPane) return null;
-    final Widget secondary = panes.hasSecondary
-        ? KeyedSubtree(
-            key: const Key('secondary-frame'),
-            child: panes.secondary,
-          )
-        : const Center(
-            key: Key('secondary-choose'),
-            child: Text('choose a user'),
-          );
-    return Row(
-      children: <Widget>[
-        Expanded(
-          flex: 2,
-          child: KeyedSubtree(
-            key: const Key('primary-frame'),
-            child: panes.primary,
-          ),
-        ),
-        const VerticalDivider(width: 24),
-        Expanded(flex: 3, child: secondary),
-      ],
-    );
-  }
 }
 
 class UsersRoute extends FoldableShellChildRoute {

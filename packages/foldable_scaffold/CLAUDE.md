@@ -1,12 +1,12 @@
 # foldable_scaffold: tài liệu bàn giao
 
-File này để một phiên Claude mới (hoặc người mới) tiếp tục công việc mà không cần lịch sử chat. Cập nhật nó mỗi khi có thay đổi lớn. Trạng thái ghi nhận: `0.1.0-dev.10` (pha 2: scaffold theo `foldable_core` 0.2.0-dev.1).
+File này để một phiên Claude mới (hoặc người mới) tiếp tục công việc mà không cần lịch sử chat. Cập nhật nó mỗi khi có thay đổi lớn. Trạng thái ghi nhận: `0.1.0-dev.12` (scaffold có `paneContent` rects-driven, độc lập với router; router đã là "rects as data", đọc `FoldablePaneRectsScope`).
 
 ## 1. Mục tiêu
 
 Làm `foldable_scaffold` thành một Scaffold hai pane "chuẩn" như `Scaffold` của Flutter, và hỗ trợ **iPhone Duo** (màn hình gập hai màn của Apple, HIG: https://developer.apple.com/design/human-interface-guidelines/designing-for-iphone-duo). Package còn pre-release nên **được phép đổi API phá vỡ** mà không cần báo trước.
 
-Workspace (melos): `packages/foldable_scaffold` (package này), `foldable_core`, `foldable_router`, `foldable_dev_tools`. **`foldable_dev_tools` hỏng từ trước, bỏ qua.** Test của `foldable_router/example` fail từ trước ("Cycle in the parent chain"), không liên quan.
+Workspace (melos): `packages/foldable_scaffold` (package này), `foldable_core`, `foldable_router`, `foldable_dev_tools`. **`foldable_dev_tools` hỏng từ trước, bỏ qua.** `foldable_router/example` đã xanh (bug "Cycle in the parent chain" là false-positive trong `RedirectResolver.chainOf`, đã sửa dùng `identical`).
 
 ## 2. Quy ước làm việc với người dùng
 
@@ -31,7 +31,9 @@ $F/flutter test                           # package; cũng example/, ../foldable
 $F/dart doc --dry-run; rm -rf doc         # phải 0 warning; xoá doc/ do lệnh tạo ra
 ```
 
-Mốc pha 2: package **443** test (trước 435), example **8** test, tất cả pass. Thêm `foldable_scaffold_pane_scope_test`, `foldable_scaffold_transition_scope_test`.
+Mốc pha 2: package **447** test, example **8** test (xác nhận lại khi chạy cổng cuối), tất cả pass. Thêm `foldable_scaffold_pane_scope_test`, `foldable_scaffold_transition_scope_test`.
+
+Mốc bàn giao router (rects as data): `foldable_router` **202** test (gồm `cycle_detection_test`, `panes_as_data_test` thay cho `pane_layout_test`/`pane_pixels_test` đã xoá), `foldable_router/example` **31** test (gồm `with_scaffold_test`), `foldable_core` **35** test.
 
 Ràng buộc kiến trúc: `foldable_scaffold` và `foldable_router` **không** phụ thuộc nhau; cả hai chỉ phụ thuộc `foldable_core`; core chỉ phụ thuộc `flutter`. Không import router từ scaffold.
 
@@ -39,8 +41,8 @@ Ràng buộc kiến trúc: `foldable_scaffold` và `foldable_router` **không** 
 
 | File | Vai trò |
 |---|---|
-| `foldable_scaffold.dart` | Widget và State chính: slot kiểu Scaffold, `navigationBuilder`, `_buildSideNavigation`/`_buildTopNavigation`/`_buildBottomNavigationBar`, `_railCutoutInsets`, `_CutoutAvoidingAppBar`, ẩn pane, controller, state restoration. Publish `FoldablePaneLayout` (canSplit / visibility / axis) quanh cả hai pane; mỗi pane bọc `FoldablePaneScope`. Delegate layout private: `_PaneLayoutDelegate`. `_isTransitioning` ưu tiên `paneTransition`, rồi `FoldablePaneTransitionScope`. |
-| `foldable_scaffold_layout.dart` | Hàm thuần: `computeFrameGeometry`, `computePaneLayout`, `computeSnapTarget`, `resolveFold`, `resolveCutouts`, `cutoutInsets`. `FrameGeometry`, `PaneGeometry` (có `axis`), `PaneSlot`. Dễ test nhất. |
+| `foldable_scaffold.dart` | Widget và State chính: slot kiểu Scaffold, `navigationBuilder`, `_buildSideNavigation`/`_buildTopNavigation`/`_buildBottomNavigationBar`, `_railCutoutInsets`, `_CutoutAvoidingAppBar`, ẩn pane, controller, state restoration. Publish `FoldablePaneLayout` (canSplit / visibility / axis) quanh cả hai pane; mỗi pane bọc `FoldablePaneScope`. Delegate layout private: `_PaneLayoutDelegate`. `_isTransitioning` ưu tiên `paneTransition`, rồi `FoldablePaneTransitionScope`. **`paneContent`**: slot phủ toàn vùng pane (trên body/secondaryBody, dưới divider), nhận `FoldablePaneRects` của frame hiện tại và publish `FoldablePaneRectsScope`; assert debug khi đi cùng body/secondaryBody có nội dung. `_hasSecondaryBody = hasSecondaryBody ?? (có secondaryBody/secondaryBodyBuilder)`, nên `paneContent` + `hasSecondaryBody: true` tạo split mà không cần body giả. Router đọc scope này và đặt trang trực tiếp vào rect; scaffold không import router. |
+| `foldable_scaffold_layout.dart` | Hàm thuần: `computeFrameGeometry`, `computePaneLayout`, `computeSnapTarget`, `resolveFold`, `resolveCutouts`, `cutoutInsets`, `computePaneRects` (dựng `FoldablePaneRects` khớp `_PaneLayoutDelegate`: scale, RTL, stacked). `FrameGeometry`, `PaneGeometry` (có `axis`), `PaneSlot`. Dễ test nhất. |
 | `foldable_navigation.dart` | `FoldableNavigationEdge`, `FoldableNavigationPlacement(edge, {extent, alignment, insideInset})`, `FoldableNavigationAlignment`, `FoldableLayoutInfo`, resolver, `FoldableNavigationPlacements.handheld/desktop/forPlatform`, `defaultNavigationPlacement`, `FoldableNavigationBuilder`, `FoldableVerticalBarScope`. |
 | `foldable_fold.dart` | `FoldableFold` (axis, hinge dọc/ngang). |
 | `foldable_platform_{state,source,scope}.dart` | Cầu nối Dart cho iOS: `FoldablePlatformScope` đưa vùng reserved + `verticalBarEdge` vào `MediaQuery.displayFeatures` và `FoldableVerticalBarScope`. Ngoài iOS trả child nguyên vẹn. |

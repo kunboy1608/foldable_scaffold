@@ -181,8 +181,17 @@ class FoldableScaffold extends StatefulWidget {
     this.restorationId,
     this.drawerBarrierDismissible = true,
   }) : assert(
-         body != null || bodyBuilder != null,
-         'A FoldableScaffold needs a body or a bodyBuilder.',
+         body != null || bodyBuilder != null || paneContent != null,
+         'A FoldableScaffold needs a body, a bodyBuilder, or paneContent.',
+       ),
+       assert(
+         paneContent == null ||
+             (body == null &&
+                 bodyBuilder == null &&
+                 secondaryBody == null &&
+                 secondaryBodyBuilder == null),
+         'Pass paneContent instead of body or secondaryBody content, not '
+         'with them: it draws the panes itself.',
        ),
        assert(
          body == null || bodyBuilder == null,
@@ -1069,8 +1078,8 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
   /// without it, passing a secondary body is enough. The builder is not called
   /// to find out.
   bool get _hasSecondaryBody =>
-      (widget.secondaryBody != null || widget.secondaryBodyBuilder != null) &&
-      (widget.hasSecondaryBody ?? true);
+      widget.hasSecondaryBody ??
+      (widget.secondaryBody != null || widget.secondaryBodyBuilder != null);
 
   /// Where the pane area is in the window, when a horizontal separating fold
   /// needs it to put the panes around the fold; null otherwise.

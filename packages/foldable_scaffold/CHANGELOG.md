@@ -1,3 +1,31 @@
+## 0.1.0-dev.12
+
+* Docs: added a "Dùng cùng nhau" section showing a `FoldableShellRoute` hosted
+  in a `FoldableScaffold` (`paneContent`, `hasSecondaryBody: shell.hasSecondary`,
+  `onSecondBodyClose: shell.closeSecondary`, `navigationBuilder`), with a link
+  to the runnable `foldable_router` example.
+
+## 0.1.0-dev.11
+
+Added:
+
+* `FoldableScaffold.paneContent`, a router-independent overlay slot that receives
+  the animated `FoldablePaneRects` for this layout frame and is painted above
+  the body panes but below the divider. `FoldablePaneRectsScope` publishes the
+  same rectangles to descendants. The scaffold can now be used with
+  `paneContent` alone, without placeholder bodies.
+
+Changed:
+
+* `hasSecondaryBody` now explicitly controls whether a secondary pane exists,
+  even when neither `secondaryBody` nor `secondaryBodyBuilder` is supplied.
+  Without an explicit value, presence of either secondary-body slot retains
+  the previous default behaviour.
+* Debug assertions reject combining `paneContent` with body or secondary-body
+  content, avoiding two competing sources for pane pixels.
+
+Not verified: not run on a device.
+
 ## 0.1.0-dev.10
 
 **Breaking changes:**

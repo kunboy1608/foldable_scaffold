@@ -1,10 +1,10 @@
 import 'dart:async';
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show PredictiveBackEvent;
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
-import 'package:foldable_core/foldable_core.dart'
-    show FoldablePaneRects, FoldablePaneRectsScope;
+import 'package:foldable_core/foldable_core.dart';
 
 import 'foldable_panes.dart';
 import 'foldable_route.dart';
@@ -14,7 +14,7 @@ import 'redirect_resolver.dart';
 
 /// One page in the stack. Entries have their own identity so the same route
 /// can be on the stack more than once.
-class _Entry implements PaneEntryRef {
+class _Entry implements PaneEntryRef, FoldablePaneOwner {
   _Entry(this.id, this.route);
 
   final int id;
@@ -67,9 +67,9 @@ class _EntryPage extends FoldableContentPage<Object?> {
   }) : super(
          key: entry.key,
          name: entry.route.uri.toString(),
-         child: PaneScope(
-           entry: entry,
-           notifier: entry.pane,
+         child: FoldablePaneScope(
+           pane: entry.pane.value,
+           owner: entry,
            child: gestureGate == null
                ? PopScope(
                    canPop: canPopGesture,
@@ -138,7 +138,7 @@ class _Shell {
       ),
       heroControllers = List.generate(branches.length, (_) => HeroController()),
       topRoutes = List.generate(branches.length, (_) => _TopRouteTracker()),
-      panes = List.generate(branches.length, (i) => PaneMetrics(i)),
+      transitions = FoldablePaneTransitions(),
       gestureGates = List.generate(
         branches.length,
         (_) => ValueNotifier<bool>(false),
@@ -158,8 +158,14 @@ class _Shell {
   /// [branches]. They survive as long as this shell is on screen.
   final List<GlobalKey<_BranchNavigatorState>> branchNavigators;
 
-  /// The page layout metrics of each branch, index-aligned with [branches].
-  final List<PaneMetrics> panes;
+  /// The transition signal shared by the pages of this shell.
+  final FoldablePaneTransitions transitions;
+
+  /// The page layout state of each branch, index-aligned with [branches].
+  late final List<PaneMetrics> panes = List<PaneMetrics>.generate(
+    branches.length,
+    (int i) => PaneMetrics(i, transitions),
+  );
 
   /// Ancestors of the shell (its parent chain), bottom first: the pages of
   /// the root navigator that sit below the shell page.
@@ -226,6 +232,7 @@ class _Shell {
     for (final metrics in panes) {
       metrics.dispose();
     }
+    transitions.dispose();
   }
 
   bool _disposed = false;
@@ -279,6 +286,58 @@ class _BranchPageRoute<T> extends PageRoute<T> with FoldablePageRouteMixin<T> {
   final bool maintainState = true;
 
   PaneMetrics get _metrics => page.metrics;
+
+  /// Whether this route currently counts one running page transition in the
+  /// shell signal.
+  bool _transitionActive = false;
+
+  /// Reports the start and the end of the page transition to the shell, so a
+  /// `FoldableScaffold` snaps the pane switch instead of animating a resize
+  /// on top of the slide. Overlapping transitions are counted, so the signal
+  /// never flickers to false between two of them.
+  void _signalTransition(bool begin) => scheduleMicrotask(() {
+    if (begin) {
+      _metrics.transitions.begin();
+    } else {
+      _metrics.transitions.end();
+    }
+  });
+
+  void _onAnimationStatus(AnimationStatus status) {
+    final bool running =
+        status == AnimationStatus.forward || status == AnimationStatus.reverse;
+    if (running && !_transitionActive) {
+      _transitionActive = true;
+      _signalTransition(true);
+    } else if (!running && _transitionActive) {
+      _transitionActive = false;
+      _signalTransition(false);
+    }
+  }
+
+  @override
+  TickerFuture didPush() {
+    animation?.addStatusListener(_onAnimationStatus);
+    return super.didPush();
+  }
+
+  @override
+  bool didPop(T? result) {
+    animation?.removeStatusListener(_onAnimationStatus);
+    return super.didPop(result);
+  }
+
+  @override
+  void dispose() {
+    animation?.removeStatusListener(_onAnimationStatus);
+    if (_transitionActive) {
+      _transitionActive = false;
+      // Deferred: route disposal can run while the navigator builds, and
+      // end() rebuilds the scope — `setState during build` would crash.
+      scheduleMicrotask(_metrics.transitions.end);
+    }
+    super.dispose();
+  }
 
   /// In a one-pane tab this is `true`, like [MaterialPageRoute]: the page
   /// below is not painted once the top page settled, and it is painted (with
@@ -347,18 +406,32 @@ class _BranchPageRoute<T> extends PageRoute<T> with FoldablePageRouteMixin<T> {
       child: child,
       builder: (BuildContext context, Widget? child) {
         final bool twoPane = _metrics.twoPane.value;
-        final Widget transitioned = pageTransitionsResolver(context)
-            .buildTransitions<T>(
-              this,
-              context,
-              animation,
-              twoPane ? kAlwaysDismissedAnimation : secondaryAnimation,
-              child!,
-            );
+        final FoldablePaneRects? rects = FoldablePaneRectsScope.maybeOf(
+          context,
+        )?.rects;
+        // In a split (`FoldablePaneRects.isSplit` read from the core rects
+        // scope, not from `foldable_scaffold`) use a light fade + a hint of
+        // slide, so a page changing slot does not slide across the whole
+        // screen. With one pane, or with no rects scope at all, keep the
+        // platform slide.
+        final bool split = rects?.isSplit ?? twoPane;
+        final Widget transitioned = split
+            ? _SplitPageTransition(
+                route: this,
+                animation: animation,
+                child: child!,
+              )
+            : pageTransitionsResolver(context).buildTransitions<T>(
+                this,
+                context,
+                animation,
+                twoPane ? kAlwaysDismissedAnimation : secondaryAnimation,
+                child!,
+              );
         return PaneSlot(
           metrics: _metrics,
           entry: page.entry,
-          clip: twoPane,
+          clip: split,
           child: transitioned,
         );
       },
@@ -393,6 +466,103 @@ class _BranchPageRoute<T> extends PageRoute<T> with FoldablePageRouteMixin<T> {
       if (current.first.opaque != target) current.first.opaque = target;
     });
     WidgetsBinding.instance.ensureVisualUpdate();
+  }
+}
+
+/// A light page transition for a split layout: a fade plus a hint of vertical
+/// slide, instead of a full-screen slide. Used when the pane rects scope says
+/// the layout is a split; the duration is the route's, so `FoldableMotion`
+/// still scales it.
+///
+/// It also registers as a [WidgetsBindingObserver] so the Android predictive
+/// back gesture keeps working on the route while it is in a split.
+class _SplitPageTransition extends StatefulWidget {
+  const _SplitPageTransition({
+    required this.route,
+    required this.animation,
+    required this.child,
+  });
+
+  /// Key the tests use to tell this transition from the platform slide.
+  static const Key testKey = ValueKey<String>('foldable-split-transition');
+
+  final PageRoute<dynamic> route;
+  final Animation<double> animation;
+  final Widget child;
+
+  @override
+  State<_SplitPageTransition> createState() => _SplitPageTransitionState();
+}
+
+class _SplitPageTransitionState extends State<_SplitPageTransition>
+    with WidgetsBindingObserver {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  bool handleStartBackGesture(PredictiveBackEvent backEvent) {
+    // Mirror PredictiveBackGestureDetector._isEnabled: only the current route
+    // that allows a pop gesture may drive the predictive back gesture.
+    if (!widget.route.isCurrent || !widget.route.popGestureEnabled) {
+      return false;
+    }
+    widget.route.handleStartBackGesture(progress: 1 - backEvent.progress);
+    return true;
+  }
+
+  @override
+  void handleUpdateBackGestureProgress(PredictiveBackEvent backEvent) {
+    if (!widget.route.isCurrent) {
+      return;
+    }
+    widget.route.handleUpdateBackGestureProgress(
+      progress: 1 - backEvent.progress,
+    );
+  }
+
+  @override
+  void handleCancelBackGesture() {
+    if (!widget.route.isCurrent) {
+      return;
+    }
+    widget.route.handleCancelBackGesture();
+  }
+
+  @override
+  void handleCommitBackGesture() {
+    if (!widget.route.isCurrent) {
+      return;
+    }
+    widget.route.handleCommitBackGesture();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final Animation<double> curved = widget.animation.drive(
+      CurveTween(curve: Curves.easeOutCubic),
+    );
+    return FadeTransition(
+      opacity: curved,
+      child: SlideTransition(
+        position: Tween<Offset>(
+          begin: const Offset(0, 0.02),
+          end: Offset.zero,
+        ).animate(curved),
+        child: KeyedSubtree(
+          key: _SplitPageTransition.testKey,
+          child: widget.child,
+        ),
+      ),
+    );
   }
 }
 
@@ -463,8 +633,8 @@ class _BranchNavigatorState extends NavigatorState {
     PaneEntryRef? found;
     context.visitAncestorElements((Element element) {
       final Widget widget = element.widget;
-      if (widget is PaneScope) {
-        found = widget.entry;
+      if (widget is FoldablePaneScope) {
+        found = widget.owner as PaneEntryRef?;
         return false;
       }
       return true;
@@ -1325,10 +1495,7 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
     _notifyAfter(before);
   }
 
-  /// Builds the frame of [shell] around the nested navigators of the
-  /// branches: each branch stays at a fixed place in the tree (offstage when
-  /// it is not the current one), and the current branch is wrapped in the
-  /// pane area, which asks the shell for its `buildPanes` layout.
+  /// Builds the shell around the nested navigators of its branches.
   Widget _buildShellBody(BuildContext context, _Shell shell) {
     // Only the top page of the *visible* branch may take a back gesture: a
     // page on top of a hidden tab, of a branch covered by a full-screen
@@ -1376,113 +1543,39 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
         ),
       );
     }
-    return shell.route.buildShell(
-      context,
-      FoldableShellState(
-        child: _ShellPaneArea(
-          route: shell.route,
-          metrics: shell.panes[shell.current],
+    return FoldablePaneTransitionScope(
+      transitions: shell.transitions,
+      child: shell.route.buildShell(
+        context,
+        FoldableShellState(
+          child: Builder(
+            builder: (BuildContext context) {
+              final rects = FoldablePaneRectsScope.maybeOf(context)?.rects;
+              _onRectsBuilt(shell, rects);
+              return Stack(fit: StackFit.expand, children: children);
+            },
+          ),
+          currentIndex: shell.current,
+          goBranch: goBranch,
           stackLength: shell.branchStacks[shell.current]?.length ?? 0,
-          onBuilt: (FoldablePanes panes, bool twoPane) =>
-              _onAreaBuilt(shell, panes, twoPane),
-          onRectsBuilt: (FoldablePaneRects rects) =>
-              _onRectsBuilt(shell, rects),
-          child: Stack(fit: StackFit.expand, children: children),
+          // Closes the top page of the current branch, i.e. the secondary pane.
+          closeSecondary: () => pop(),
         ),
-        currentIndex: shell.current,
-        goBranch: goBranch,
-        stackLength: shell.branchStacks[shell.current]?.length ?? 0,
       ),
     );
   }
 
-  /// Called while the tab area builds in the "rects as data" mode, when a
-  /// [FoldablePaneRectsScope] is above the tab area (a `FoldableScaffold`
-  /// through its `paneContent`, or an app computing the rectangles itself).
-  ///
-  /// The rectangles tell whether the tab is a split and, through
-  /// [PaneMetrics], drive the page placement of the pane slots. Nothing is
-  /// measured: the pages lay out on the very rectangles the scope carries, in
-  /// the same frame.
-  void _onRectsBuilt(_Shell shell, FoldablePaneRects rects) {
+  /// Publishes the pane mode carried by the nearest rects scope.
+  void _onRectsBuilt(_Shell shell, FoldablePaneRects? rects) {
     final PaneMetrics metrics = shell.panes[shell.current];
     final int length = shell.branchStacks[shell.current]?.length ?? 0;
-    metrics
-      ..hasSecondary = length >= 2
-      ..stackLength = length;
-    if (metrics.twoPane.value != rects.isSplit) {
-      metrics.twoPane.value = rects.isSplit;
+    metrics.stackLength = length;
+    final bool twoPane = rects?.isSplit ?? false;
+    if (metrics.twoPane.value != twoPane) {
+      metrics.twoPane.value = twoPane;
       _syncBranchRoutes(shell, shell.current);
     }
     _refreshPaneAssignments(shell);
-  }
-
-  /// Called while the tab area builds, before the pages of the branch do.
-  ///
-  /// The mode of the tab (one or two panes) is only known here; it is
-  /// published before the pages build, so they can pick it up in the same
-  /// frame: the notifiers are listened to by widgets that are descendants of
-  /// the tab area (marking them dirty is allowed while it builds). The routes
-  /// of the branch also sync their opacity/barrier, which live in the
-  /// navigator of the branch, a descendant as well.
-  void _onAreaBuilt(_Shell shell, FoldablePanes panes, bool twoPane) {
-    final PaneMetrics metrics = shell.panes[panes.branchIndex];
-    metrics
-      ..hasSecondary = panes.hasSecondary
-      ..stackLength = shell.branchStacks[panes.branchIndex]?.length ?? 0;
-    if (metrics.twoPane.value != twoPane) {
-      metrics.twoPane.value = twoPane;
-      _syncBranchRoutes(shell, panes.branchIndex);
-    }
-    _refreshPaneAssignments(shell);
-    _scheduleFrameChecks(metrics);
-  }
-
-  /// Schedules, after the frame that built the tab area, the report of frames
-  /// the app forgot to place.
-  void _scheduleFrameChecks(PaneMetrics metrics) {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (_disposed) return;
-      if (!metrics.twoPane.value) return;
-      if (metrics.primaryFrames == 0 && !metrics.reportedMissing) {
-        metrics.reportedMissing = true;
-        _reportMissingFrame(
-          metrics,
-          'primary',
-          'FoldablePanes.primary must be placed in the widget tree returned '
-              'by FoldableShellRoute.buildPanes, once for each two-pane tab.',
-        );
-      } else if (metrics.hasSecondary &&
-          metrics.secondaryFrames == 0 &&
-          !metrics.reportedMissing) {
-        metrics.reportedMissing = true;
-        _reportMissingFrame(
-          metrics,
-          'secondary',
-          'The stack of the tab has at least two pages, so the layout of '
-              'FoldableShellRoute.buildPanes must place FoldablePanes.secondary: '
-              'without it there is nowhere to draw the top page.',
-        );
-      }
-    });
-  }
-
-  void _reportMissingFrame(PaneMetrics metrics, String pane, String detail) {
-    FlutterError.reportError(
-      FlutterErrorDetails(
-        exception: FlutterError.fromParts(<DiagnosticsNode>[
-          ErrorSummary('A two-pane tab does not place its $pane pane.'),
-          ErrorDescription(detail),
-          ErrorHint(
-            'Return null from FoldableShellRoute.buildPanes to use one pane, '
-            'or place FoldablePanes.$pane in the returned layout.',
-          ),
-          DiagnosticsProperty<String>('Branch', '${metrics.branchIndex}'),
-        ]),
-        library: 'foldable_router',
-        context: ErrorDescription('while laying out the panes of a tab'),
-      ),
-    );
   }
 
   /// Recomputes the pane and the position of every page of every branch.
@@ -1730,55 +1823,5 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
     isNavigating.dispose();
     stackChanges.dispose();
     super.dispose();
-  }
-}
-
-/// The tab area of the current branch, in the "rects as data" mode or the
-/// legacy measurement mode.
-///
-/// When a [FoldablePaneRectsScope] is above it (a `FoldableScaffold` through
-/// its `paneContent`, or an app that computes the rectangles itself), the
-/// pages are placed straight on the published rectangles with no measurement:
-/// the navigators of the branches are returned as they are and the rectangles
-/// flow to the pane slots through the scope. Otherwise the legacy [BranchArea]
-/// measures the placeholder frames returned by
-/// [FoldableShellRoute.buildPanes].
-class _ShellPaneArea extends StatelessWidget {
-  const _ShellPaneArea({
-    required this.route,
-    required this.metrics,
-    required this.stackLength,
-    required this.child,
-    required this.onBuilt,
-    required this.onRectsBuilt,
-  });
-
-  final FoldableShellRoute route;
-  final PaneMetrics metrics;
-  final int stackLength;
-  final Widget child;
-  final void Function(FoldablePanes panes, bool twoPane) onBuilt;
-  final void Function(FoldablePaneRects rects) onRectsBuilt;
-
-  @override
-  Widget build(BuildContext context) {
-    final FoldablePaneRects? rects = FoldablePaneRectsScope.maybeOf(
-      context,
-    )?.rects;
-    if (rects == null) {
-      return BranchArea(
-        route: route,
-        metrics: metrics,
-        stackLength: stackLength,
-        onBuilt: onBuilt,
-        child: child,
-      );
-    }
-    // The rectangles are the animated pane geometry of the scaffold built this
-    // very frame; publish their split state to the branch before the pages
-    // build, then return the navigators (they lay out on the rectangles in the
-    // pane slots, in the same frame).
-    onRectsBuilt(rects);
-    return child;
   }
 }

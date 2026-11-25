@@ -65,8 +65,8 @@ Tài liệu cho người dùng nằm ở `README.md`; lịch sử thay đổi �
 | `lib/src/foldable_route.dart` | `FoldableRoute`: `path`, `params`, `parent`, `redirect(context, state)`, `uri`, `==` theo query đã mã hóa. |
 | `lib/src/foldable_params.dart` | `FoldableParams`: đọc tham số URL có kiểu. |
 | `lib/src/foldable_router.dart` | `FoldableRouter`, `routeFor`, `paneOf`, `close`. |
-| `lib/src/foldable_shell_route.dart` | `FoldableShellRoute`, `buildShell`, `buildPanes`. |
-| `lib/src/foldable_panes.dart` | Hai ô: `FoldablePanes`, `PaneMetrics`, `BranchArea`/`_RawPaneArea`, `PaneFrame`, `PaneSlot`, `PanePageView`. |
+| `lib/src/foldable_shell_route.dart` | `FoldableShellRoute`, `buildShell`, `FoldableShellState` (`goBranch`, `stackLength`, `hasSecondary`, `closeSecondary`). |
+| `lib/src/foldable_panes.dart` | Cách vẽ hai ô: `PaneMetrics`, `PanePageView` (`HeroMode`), `PaneSlot` (đặt trang vào `FoldablePaneRects` và cắt theo ô). |
 | `lib/src/router_delegate.dart` | Delegate: stack, shell, back, `_BranchPageRoute`, `_BranchNavigator`, kiểm lại ngầm. |
 | `lib/src/redirect_resolver.dart` | Chạy chuỗi redirect, token thế hệ, vòng lặp, `maxRedirects`. |
 | `lib/src/route_information_parser.dart` | Chuyển URL và bắt context của `Router`. |
@@ -82,8 +82,13 @@ Tài liệu cho người dùng nằm ở `README.md`; lịch sử thay đổi �
 - Cửa sổ trượt trên stack của tab: trang trên cùng ở ô phải (`secondary`),
   trang ngay dưới ở ô trái (`primary`), trang sâu hơn bị ẩn nhưng còn sống.
   `[A]`: A trái, phải trống. `[A,B]`: A trái, B phải. `[A,B,C]`: B trái, C phải.
-- App quyết định khi nào dùng hai ô: `buildPanes(context, panes)` trả `null`
-  là một ô, trả widget chứa `panes.primary` / `panes.secondary` là hai ô.
+- App/layout quyết định khi nào dùng hai ô bằng cách công bố `FoldablePaneRects`
+  (hai hình chữ nhật `primary`/`secondary`) qua `FoldablePaneRectsScope`:
+  scaffold phát qua `paneContent`, hoặc app tự bọc `FoldablePaneRectsScope`.
+  Router đọc scope và đặt trang vào đúng hình chữ nhật, không đo khung.
+- Rects là dữ liệu thuần: `FoldablePaneRects.sideBySide` / `.stacked` dựng rect
+  cho bố cục ngang/dọc, dùng được độc lập. Không có scope hoặc `secondary` null
+  là một ô (giữ slide toàn màn hình).
 - Giữ trạng thái trang là yêu cầu cốt lõi, không đánh đổi. Mỗi tab một
   Navigator; trang không rời Navigator, chỉ đổi chỗ được vẽ.
 - Back hệ thống và predictive back chỉ gỡ trang trên cùng.
@@ -97,13 +102,15 @@ Tài liệu cho người dùng nằm ở `README.md`; lịch sử thay đổi �
 
 ### Hai bài học về vẽ (đã từng gây lỗi)
 
-- Vị trí khung phải chốt xong trong lúc layout. `flushPaint` vẽ nút sâu nhất
-  trước, mỗi route có `RepaintBoundary`, nên tính vị trí ở lúc paint là trang
-  đã vẽ xong ở chỗ cũ. Cơ chế hiện tại: `_RawPaneArea` layout bố cục ô trước,
-  công bố hình chữ nhật, rồi mới layout các Navigator.
-- `PaneSlot` phải bọc BÊN NGOÀI hiệu ứng chuyển trang (`buildTransitions`).
-  Nếu để hiệu ứng bọc slot, scrim của hiệu ứng Zoom (Linux/Windows) và bóng
-  của Cupertino tràn sang ô kia.
+- Vị trí khung phải chốt xong trong lúc layout. Cách cũ đo khung ở post-frame
+  nên trễ một frame. Cách hiện tại là "rects as data": layout tính sẵn
+  `FoldablePaneRects` trong build và công bố qua `FoldablePaneRectsScope`;
+  `PaneSlot` đặt trang ngay theo rect đó, không đo lại, không trễ frame và
+  không đột biến trong lúc layout.
+- Hiệu ứng chuyển trang phải nằm TRONG `PaneSlot`, và slot cắt theo ô. Nếu để
+  hiệu ứng bọc slot, scrim của hiệu ứng Zoom (Linux/Windows) và bóng của
+  Cupertino tràn sang ô kia. Trong hai ô, trang bên dưới không chạy hiệu ứng
+  lùi (secondary animation bị tắt) và `Hero` bị tắt (`HeroMode`).
 
 ### Params
 

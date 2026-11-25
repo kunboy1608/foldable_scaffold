@@ -1,7 +1,7 @@
 # foldable_scaffold
 
 > [!WARNING]
-> **Experimental.** This is a prerelease (`0.1.0-dev.10`). The API will change
+> **Experimental.** This is a prerelease (`0.1.0-dev.11`). The API will change
 > without notice and the package is not ready for production use.
 
 A [Scaffold](https://pub.dev/documentation/material_ui/latest/material_ui/Scaffold-class.html)
@@ -14,7 +14,7 @@ but a `FoldableScaffold` works on its own.
 ## Install
 
 ```sh
-flutter pub add foldable_scaffold:^0.1.0-dev.10
+flutter pub add foldable_scaffold:^0.1.0-dev.11
 ```
 
 ## Usage
@@ -95,6 +95,78 @@ does not take pointer events, and its tickers (animations) are muted. This only
 kicks in once the pane has actually collapsed to zero width: a pane that is
 sliding in or out still has a non-zero width and stays fully live, so a page
 slide from `foldable_router` is never cut short.
+
+### Placing a router in the panes (`paneContent`)
+
+`paneContent` covers the whole pane area, above `body` and `secondaryBody` and
+below the divider (so the divider stays draggable). It is what
+[`foldable_router`](../foldable_router) uses to put a page stack in the panes
+without measuring anything: the builder receives the two pane rectangles the
+scaffold laid out *this* frame, already animated, and can place its pages on
+them directly. The same rectangles are also published around the content as a
+`FoldablePaneRectsScope`.
+
+```dart
+FoldableScaffold(
+  hasSecondaryBody: hasDetail, // whether the second pane exists
+  paneContent: (context, rects) => MyRouterPages(rects: rects),
+)
+```
+
+`paneContent` replaces the content of the panes: do not pass it together with a
+`body`, `bodyBuilder`, `secondaryBody` or `secondaryBodyBuilder` that has
+content (a debug assertion catches it). A `FoldableScaffold` with `paneContent`
+and no body at all is valid: the body wire stays empty and only the content is
+drawn.
+
+It is fully independent of `foldable_router`: a `paneContent` given any widget
+works with a scaffold that knows nothing about the router, and the scaffold
+still runs on its own without any router.
+
+### Dùng cùng nhau: scaffold + router
+
+A `FoldableShellRoute` hosted in a `FoldableScaffold` is the usual way to use
+the two packages together: the scaffold decides the pane layout (breakpoints,
+divider, animated switching) and the router supplies the page stacks. The
+shell reads the router state from `FoldableShellState`.
+
+```dart
+class MailShellRoute extends FoldableShellRoute {
+  const MailShellRoute();
+
+  @override
+  List<FoldableShellChildRoute> get branches => const [
+    InboxRoute(),
+    UsersRoute(),
+    ProfileRoute(),
+  ];
+
+  @override
+  Widget buildShell(BuildContext context, FoldableShellState shell) {
+    return FoldableScaffold(
+      appBar: AppBar(title: const Text('Mail')),
+      paneContent: (context, rects) => shell.child,
+      hasSecondaryBody: shell.hasSecondary,
+      onSecondBodyClose: (didPop, result) => shell.closeSecondary?.call(),
+      navigationBuilder: (context, placement, constraints, padding) =>
+          placement.isSide
+              ? NavigationRail(
+                  selectedIndex: shell.currentIndex,
+                  onDestinationSelected: shell.goBranch,
+                  destinations: const [/* one per branch */],
+                )
+              : NavigationBar(
+                  selectedIndex: shell.currentIndex,
+                  onDestinationSelected: shell.goBranch,
+                  destinations: const [/* one per branch */],
+                ),
+    );
+  }
+}
+```
+
+The full runnable example is
+[`example/lib/with_scaffold.dart`](../foldable_router/example/lib/with_scaffold.dart).
 
 ## Layout rules
 

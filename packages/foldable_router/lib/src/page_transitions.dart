@@ -1,4 +1,5 @@
 import 'package:flutter/widgets.dart';
+import 'package:foldable_core/foldable_core.dart';
 
 /// Picks the [PageTransitionsBuilder] used for the page transitions of a
 /// [FoldableRouter], given the context of the route being built.
@@ -29,12 +30,16 @@ mixin FoldablePageRouteMixin<T> on PageRoute<T> {
   FoldablePageTransitionsResolver get pageTransitionsResolver;
 
   @override
-  Duration get transitionDuration =>
-      pageTransitionsResolver(navigator!.context).transitionDuration;
+  Duration get transitionDuration => FoldableMotion.readOf(
+    navigator!.context,
+    pageTransitionsResolver(navigator!.context).transitionDuration,
+  );
 
   @override
-  Duration get reverseTransitionDuration =>
-      pageTransitionsResolver(navigator!.context).reverseTransitionDuration;
+  Duration get reverseTransitionDuration => FoldableMotion.readOf(
+    navigator!.context,
+    pageTransitionsResolver(navigator!.context).reverseTransitionDuration,
+  );
 
   // The controller is created once with the durations of the first builder;
   // refresh them when the builder changes (theme or platform change).

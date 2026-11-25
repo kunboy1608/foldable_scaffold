@@ -3,7 +3,6 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
 
-import 'foldable_panes.dart';
 import 'route_state.dart';
 
 part 'foldable_shell_route.dart';

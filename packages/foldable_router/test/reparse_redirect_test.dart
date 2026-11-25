@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:foldable_router/foldable_router.dart';
 
+import 'rects_test_harness.dart';
+
 int sizedRedirects = 0;
 int slowRedirects = 0;
 bool slowMode = false;
@@ -246,19 +248,15 @@ class PaneShell extends FoldableShellRoute {
   List<FoldableShellChildRoute> get branches => const [PaneRoot()];
 
   @override
-  Widget? buildPanes(BuildContext context, FoldablePanes panes) {
-    if (panes.constraints.maxWidth < 600) return null;
-    return Row(
-      children: [
-        Expanded(child: panes.primary),
-        if (panes.hasSecondary) Expanded(child: panes.secondary),
-      ],
-    );
-  }
-
-  @override
-  Widget buildShell(BuildContext context, FoldableShellState shell) =>
-      Scaffold(body: shell.child);
+  Widget buildShell(BuildContext context, FoldableShellState shell) => Scaffold(
+    body: LayoutBuilder(
+      builder: (context, constraints) => RectsTestHarness(
+        enabled: constraints.maxWidth >= 600,
+        dividerExtent: 0,
+        child: shell.child,
+      ),
+    ),
+  );
 }
 
 class PaneRoot extends FoldableShellChildRoute {

@@ -13,6 +13,7 @@ class FoldableShellState {
     required this.currentIndex,
     required this.goBranch,
     this.stackLength = 0,
+    this.closeSecondary,
   });
 
   /// The area where the pages of the current branch are shown.
@@ -40,6 +41,12 @@ class FoldableShellState {
   /// `hasSecondaryBody: shell.hasSecondary`, so it opens the secondary pane
   /// only when there is a top page to show there.
   final int stackLength;
+
+  /// Closes the top page of the current branch, i.e. empties the secondary
+  /// pane: `router.pop()` for the current branch. Used for
+  /// `FoldableScaffold.onSecondBodyClose`. Does nothing at the branch root
+  /// (the root of a tab cannot be closed).
+  final VoidCallback? closeSecondary;
 
   /// Whether the stack of the current branch has at least two pages, i.e.
   /// whether there is a top page to show in a secondary pane.
@@ -157,28 +164,6 @@ abstract class FoldableShellRoute extends FoldableShellParent {
     '$runtimeType is a FoldableShellRoute: it is shown through buildShell, '
     'not build.',
   );
-
-  /// Builds how the pages of one tab are shown when the app wants two panes.
-  ///
-  /// Return `null` (the default) to keep the classic one-pane behavior: only
-  /// the top page of the tab is visible, filling the whole area of the tab.
-  ///
-  /// Return a widget to show two panes. The widget is placed *below* the
-  /// navigators of the branches and receives a [FoldablePanes] whose
-  /// [FoldablePanes.primary] frame (and [FoldablePanes.secondary] frame, when
-  /// the stack of the tab has at least two pages) the app must place inside
-  /// its layout. The frames
-  /// take room and mark the rectangles the pages are drawn in; the pages
-  /// themselves keep their own navigator and only change place. If the app
-  /// never places [FoldablePanes.primary], or never places
-  /// [FoldablePanes.secondary] while [FoldablePanes.hasSecondary] is `true`, the router reports a [FlutterError] in debug
-  /// builds.
-  ///
-  /// Called once per tab, inside the area of that tab, and re-run when the
-  /// tab area rebuilds (a [MediaQuery] or size change, or a different layout
-  /// returned by this method). The returned layout may not rely on page
-  /// state: pages stay mounted while they only change pane.
-  Widget? buildPanes(BuildContext context, FoldablePanes panes) => null;
 
   @override
   bool operator ==(Object other) =>

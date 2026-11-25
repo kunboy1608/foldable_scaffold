@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
+import 'package:foldable_core/foldable_core.dart';
 
 import 'foldable_panes.dart';
 import 'foldable_params.dart';
@@ -334,8 +335,8 @@ class FoldableRouter implements Listenable {
   static FoldableRouter? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<FoldableRouterScope>()?.router;
 
-  /// The pane the page that built [context] is shown in, in a shell that
-  /// returns two panes for its tab (see [FoldableShellRoute.buildPanes]).
+  /// The pane the page that built [context] is shown in, when its host
+  /// publishes two pane rectangles through [FoldablePaneRectsScope].
   ///
   /// The calling widget is rebuilt when the answer changes (a push or a pop
   /// that moves the page to another pane, or a one-pane <-> two-pane
@@ -345,10 +346,8 @@ class FoldableRouter implements Listenable {
   /// screen pages, dialogs) and for every page of a one-pane tab. Pages
   /// deeper than the second appear as [FoldablePane.primary]: they are kept
   /// alive behind the left pane, out of the screen.
-  static FoldablePane paneOf(BuildContext context) {
-    final PaneScope? scope = PaneScope.maybeOf(context);
-    return scope?.notifier?.value ?? FoldablePane.single;
-  }
+  static FoldablePane paneOf(BuildContext context) =>
+      FoldablePaneScope.paneOf(context);
 
   /// Removes the page that built [context], and every page above it in the
   /// stack of its tab, in one update of the stack.
@@ -365,11 +364,13 @@ class FoldableRouter implements Listenable {
   /// With pageless routes (sheets, menus) above the pages: they stay; only
   /// pages are closed.
   static void close(BuildContext context) {
-    final PaneScope? scope = PaneScope.read(context);
-    if (scope == null) return;
+    final FoldablePaneScope? scope = FoldablePaneScope.read(context);
     final FoldableRouter? router = context
         .getInheritedWidgetOfExactType<FoldableRouterScope>()
         ?.router;
-    router?._delegate.closeEntry(scope.entry);
+    final owner = scope?.owner;
+    if (router != null && owner is PaneEntryRef) {
+      router._delegate.closeEntry(owner);
+    }
   }
 }

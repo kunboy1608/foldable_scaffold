@@ -15,11 +15,9 @@ export 'src/foldable_route.dart'
         FoldableShellRoute,
         FoldableShellState;
 export 'src/foldable_params.dart' show FoldableParams;
-export 'package:foldable_core/foldable_core.dart'
-    show FoldablePaneRects, FoldablePaneRectsScope;
+export 'package:foldable_core/foldable_core.dart';
 export 'src/foldable_router.dart'
     show FoldableRouter, FoldableRouteFactory, FoldableNotFoundBuilder;
-export 'src/foldable_panes.dart' show FoldablePane, FoldablePanes;
 export 'src/page_transitions.dart' show FoldablePageTransitionsResolver;
 export 'src/redirect_resolver.dart'
     show

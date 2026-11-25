@@ -360,31 +360,52 @@ Rules:
 ## Two panes
 
 A shell can show **two panes of the same tab** on wide layouts (tablet,
-desktop, an unfolded foldable). Override `buildPanes` and return `null` for
-one pane (the default) or a widget for two:
+desktop, an unfolded foldable). The split is plain **data**: the layout
+computes two rectangles (`FoldablePaneRects`) and publishes them down the
+tree through `FoldablePaneRectsScope`. The router reads that scope and
+places each page directly in its rectangle — no frame measurement, no layout
+loop, no one-frame lag. The router does not depend on any particular layout
+package: any widget that publishes the scope works.
+
+The scaffold package publishes the scope for you through
+`FoldableScaffold.paneContent`, so a shell hosted in a scaffold is just:
 
 ```dart
 class MainShellRoute extends FoldableShellRoute {
   // ...
 
   @override
-  Widget? buildPanes(BuildContext context, FoldablePanes panes) {
-    if (panes.constraints.maxWidth < 840) return null; // one pane
-    return Row(
-      children: [
-        Expanded(flex: 2, child: panes.primary),
-        const VerticalDivider(width: 1),
-        Expanded(
-          flex: 3,
-          child: panes.hasSecondary
-              ? panes.secondary
-              : const Center(child: Text('Nothing selected')),
-        ),
-      ],
-    );
-  }
+  Widget buildShell(BuildContext context, FoldableShellState shell) =>
+      FoldableScaffold(
+        // The router places its pages in the rects the scaffold publishes.
+        paneContent: (context, rects) => shell.child,
+        // A secondary pane only when the branch has a top page to show.
+        hasSecondaryBody: shell.hasSecondary,
+        // Closing the secondary pane pops the top page of the branch.
+        onSecondBodyClose: (didPop, result) => shell.closeSecondary(),
+        // ... navigationBuilder ...
+      );
 }
 ```
+
+Without a scaffold, compute the rects yourself and wrap the pages:
+
+```dart
+FoldablePaneRectsScope(
+  rects: FoldablePaneRects.sideBySide(
+    size,
+    secondaryFraction: 0.6,
+    dividerExtent: 1,
+  ),
+  child: pages,
+);
+```
+
+`FoldablePaneRects.sideBySide` (horizontal) and `FoldablePaneRects.stacked`
+(vertical, around a hinge) are pure helpers on the data: use them on their
+own to lay out any split, with or without the router. When there is no scope,
+or the rects say one pane (`secondary == null`), the router keeps the classic
+full-screen slide.
 
 Display rules, for the stack of the tab currently shown:
 
@@ -402,27 +423,21 @@ Display rules, for the stack of the tab currently shown:
   transition: `[A, B, C]` popped gives `[A, B]` on the very next frame — B
   moves to the right pane and A appears on the left at once — while C
   animates away above the right pane.
-- `panes.primary` and `panes.secondary` are **placeholder frames**: they
-  take room in your layout and mark the rectangle where the pages are
-  painted, but they paint nothing themselves. The pages are drawn *above*
-  the widget `buildPanes` returns, so dividers, backgrounds and other chrome
-  you draw around a frame stay visible; taps outside the frames go to your
-  layout, taps inside a frame go to the page drawn in it.
-- Frames need bounded constraints (`Expanded`, `SizedBox`,
-  `Positioned.fill`, ...). A frame under a scale transform cannot be
-  measured. A two-pane tab that never places `primary`, or never places
-  `secondary` while `hasSecondary` is `true`, is reported with a
-  `FlutterError` in debug builds.
-- The rectangles are re-measured whenever the tab area rebuilds (a
-  `MediaQuery` or size change, or a new layout returned by `buildPanes`):
-  pages match their new frame on the same frame. A layout change that comes
-  from *inside* the widget returned by `buildPanes` (say, an `AnimatedContainer`
-  in your own tree) makes the pages catch up on the next frame.
-- Limits of the frames: `Hero` flights are disabled in two-pane tabs (both
-  pages stay on screen, so a flight would duplicate the widget; use
-  `transitionOnUserGestures`-free heroes or skip heroes there). The pages
-  of a tab are positioned by the router: do not wrap a frame in transforms
-  that move its paint position without moving its layout.
+- Each page is painted inside its own rectangle: the page is laid out to it,
+  taps and pointer events outside a rectangle reach the layout (the divider,
+  the background), taps inside reach the page, and anything a page draws
+  beyond its rectangle is clipped to it.
+- The rectangles are the values the layout computed this frame: whenever the
+  tab area rebuilds (`MediaQuery`, a resize, a new layout) the pages match the
+  new rectangles on the same frame. A change that comes from *inside* the
+  pages (say, an `AnimatedContainer`) is picked up on the next frame.
+- In two-pane mode the `Hero`s of the pages are turned off (`HeroMode`, no
+  flight), so a page changing slot never duplicates a widget; the pages of a
+  tab are placed by the router and never leave their navigator.
+- A split (`FoldablePaneRects.isSplit`) uses a light fade with a hint of
+  slide instead of the full-screen slide, so a page changing slot does not
+  travel across the whole screen. One pane, or no rects scope, keeps the
+  platform transition; both honour the `FoldableMotion` duration.
 - `FoldableRouter.paneOf(context)` tells which pane the calling page is in
   (`FoldablePane.single`, `primary` or `secondary`) and rebuilds the caller
   when it changes. The left pane is the page right below the top one; a lone
