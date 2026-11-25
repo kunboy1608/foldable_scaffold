@@ -12,6 +12,7 @@ class FoldableShellState {
     required this.child,
     required this.currentIndex,
     required this.goBranch,
+    this.stackLength = 0,
   });
 
   /// The area where the pages of the current branch are shown.
@@ -23,7 +24,7 @@ class FoldableShellState {
   /// Index, in [FoldableShellRoute.branches], of the branch currently shown.
   final int currentIndex;
 
-  /// Switches to the branch at [index], keeping its stack.
+  /// Switches to the branch at `index`, keeping its stack.
   ///
   /// A branch is built lazily: the first visit runs its redirects (and the
   /// redirects of the ancestors of the branch root) and opens the branch
@@ -32,6 +33,17 @@ class FoldableShellState {
   /// superseded by a newer one, and [FoldableRouter.isNavigating] is `true`
   /// while its redirects run.
   final Future<void> Function(int index) goBranch;
+
+  /// Number of pages on the stack of the current branch.
+  ///
+  /// A `FoldableScaffold` given the pages as its panes wants
+  /// `hasSecondaryBody: shell.hasSecondary`, so it opens the secondary pane
+  /// only when there is a top page to show there.
+  final int stackLength;
+
+  /// Whether the stack of the current branch has at least two pages, i.e.
+  /// whether there is a top page to show in a secondary pane.
+  bool get hasSecondary => stackLength >= 2;
 }
 
 /// A route that shows a persistent frame (bottom navigation, side rail, ...)
@@ -153,12 +165,13 @@ abstract class FoldableShellRoute extends FoldableShellParent {
   ///
   /// Return a widget to show two panes. The widget is placed *below* the
   /// navigators of the branches and receives a [FoldablePanes] whose
-  /// [primary] frame (and [secondary] frame, when the stack of the tab has
-  /// at least two pages) the app must place inside its layout. The frames
+  /// [FoldablePanes.primary] frame (and [FoldablePanes.secondary] frame, when
+  /// the stack of the tab has at least two pages) the app must place inside
+  /// its layout. The frames
   /// take room and mark the rectangles the pages are drawn in; the pages
   /// themselves keep their own navigator and only change place. If the app
-  /// never places [primary], or never places [secondary] while
-  /// [hasSecondary] is `true`, the router reports a [FlutterError] in debug
+  /// never places [FoldablePanes.primary], or never places
+  /// [FoldablePanes.secondary] while [FoldablePanes.hasSecondary] is `true`, the router reports a [FlutterError] in debug
   /// builds.
   ///
   /// Called once per tab, inside the area of that tab, and re-run when the

@@ -6,6 +6,8 @@ export 'package:foldable_core/foldable_core.dart'
         FoldableMotion,
         FoldablePane,
         FoldablePaneLayout,
+        FoldablePaneRects,
+        FoldablePaneRectsScope,
         FoldablePaneScope,
         FoldablePaneTransitionScope,
         FoldablePaneTransitions;

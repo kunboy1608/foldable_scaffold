@@ -54,30 +54,22 @@ class ScaffoldShell extends FoldableShellRoute {
   List<FoldableShellChildRoute> get branches => const [ScaffoldRoot()];
   @override
   Widget buildShell(BuildContext context, FoldableShellState shell) =>
-      shell.child;
-  @override
-  Widget? buildPanes(BuildContext context, FoldablePanes panes) {
-    if (!_breakpoints.canSplit(
-      panes.constraints.maxWidth,
-      MediaQuery.sizeOf(context),
-    )) {
-      return null;
-    }
-    return FoldableScaffold(
-      breakpoints: _breakpoints,
-      followFold: false,
-      avoidCutouts: false,
-      paneAnimationDuration: Duration.zero,
-      appBar: AppBar(title: const Text('scaffold host')),
-      navigationBuilder: (_, _, _, _) => const SizedBox.shrink(),
-      body: panes.primary,
-      secondaryBody: panes.hasSecondary
-          ? panes.secondary
-          : const Center(child: Text('empty')),
-      hasSecondaryBody: panes.hasSecondary,
-      onSecondBodyClose: (_, _) => FoldableRouter.of(context).pop(),
-    );
-  }
+      FoldableScaffold(
+        key: const Key('real-scaffold-shell'),
+        breakpoints: _breakpoints,
+        followFold: false,
+        avoidCutouts: false,
+        paneAnimationDuration: const Duration(milliseconds: 250),
+        appBar: AppBar(title: const Text('scaffold host')),
+        navigationBuilder: (_, _, _, _) => const SizedBox.shrink(),
+        body: const SizedBox.shrink(key: Key('scaffold-body-placeholder')),
+        secondaryBody: const SizedBox.shrink(
+          key: Key('scaffold-secondary-placeholder'),
+        ),
+        hasSecondaryBody: shell.hasSecondary,
+        paneContent: (_, _) => shell.child,
+        onSecondBodyClose: (_, _) => FoldableRouter.of(context).pop(),
+      );
 }
 
 class ScaffoldRoot extends FoldableShellChildRoute {
@@ -357,11 +349,12 @@ void main() {
   });
 
   // -------------------------------------------------------------------------
-  // The headline finding: the same two-pane tab, but with the frames dropped
-  // into a real FoldableScaffold instead of a plain Row. This *fails* today.
+  // The headline finding: real router + real FoldableScaffold, with rects
+  // passed as data. The old measurement crash must not occur.
   // -------------------------------------------------------------------------
-  testWidgets('[blocker] frames hosted in a real FoldableScaffold crash the '
-      'router layout protocol', (tester) async {
+  testWidgets('[blocker resolved] real scaffold uses pane rects as data', (
+    tester,
+  ) async {
     tester.view.physicalSize = _wide;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.reset);
@@ -374,34 +367,39 @@ void main() {
       routes: {'/hosted': (_) => const ScaffoldRoot()},
       notFoundBuilder: (_, uri) => Text('not found: $uri'),
     );
+    addTearDown(router.dispose);
     try {
       await tester.pumpWidget(
         MaterialApp.router(routerConfig: router.routerConfig),
       );
       await tester.pumpAndSettle();
-      final push = find.byKey(const Key('hosted-push'));
-      if (push.evaluate().isNotEmpty) {
-        await tester.tap(push);
-        await tester.pumpAndSettle();
-      }
+      await tester.tap(find.byKey(const Key('hosted-push')));
+      await tester.pumpAndSettle();
     } finally {
       FlutterError.onError = previous;
-      // Swallow whatever the binding also recorded for this intentional crash.
       while (tester.takeException() != null) {}
     }
-    addTearDown(router.dispose);
 
     expect(
-      errors.any(
+      errors.where(
         (e) => e.exception.toString().contains(
           '_RenderPaneSlot was mutated in _RenderPaneFrame.performLayout',
         ),
       ),
-      isTrue,
-      reason:
-          'Expected the known incompatibility between the router frame '
-          'measurement protocol and FoldableScaffold\'s independent pane '
-          'relayout. If this no longer throws, the fallback may now be viable.',
+      isEmpty,
     );
+    expect(find.byKey(const Key('hosted detail')), findsOneWidget);
+    expect(find.byKey(const Key('pane_divider')), findsOneWidget);
+
+    // Both values come from the same render tree after the same pump: the
+    // route page is positioned by the rect scope and the divider is positioned
+    // by the scaffold's animated geometry.
+    final Rect page = tester.getRect(find.byKey(const Key('hosted detail')));
+    final Rect primary = tester.getRect(
+      find.byKey(const Key('scaffold-body-placeholder')),
+    );
+    expect(page, isNot(primary));
+    expect(page.width, greaterThan(0));
+    expect(page.height, greaterThan(0));
   });
 }

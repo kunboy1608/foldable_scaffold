@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
+import 'package:foldable_core/foldable_core.dart'
+    show FoldablePaneRects, FoldablePaneRectsScope;
 
 import 'foldable_panes.dart';
 import 'foldable_route.dart';
@@ -1377,18 +1379,42 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
     return shell.route.buildShell(
       context,
       FoldableShellState(
-        child: BranchArea(
+        child: _ShellPaneArea(
           route: shell.route,
           metrics: shell.panes[shell.current],
           stackLength: shell.branchStacks[shell.current]?.length ?? 0,
           onBuilt: (FoldablePanes panes, bool twoPane) =>
               _onAreaBuilt(shell, panes, twoPane),
+          onRectsBuilt: (FoldablePaneRects rects) =>
+              _onRectsBuilt(shell, rects),
           child: Stack(fit: StackFit.expand, children: children),
         ),
         currentIndex: shell.current,
         goBranch: goBranch,
+        stackLength: shell.branchStacks[shell.current]?.length ?? 0,
       ),
     );
+  }
+
+  /// Called while the tab area builds in the "rects as data" mode, when a
+  /// [FoldablePaneRectsScope] is above the tab area (a `FoldableScaffold`
+  /// through its `paneContent`, or an app computing the rectangles itself).
+  ///
+  /// The rectangles tell whether the tab is a split and, through
+  /// [PaneMetrics], drive the page placement of the pane slots. Nothing is
+  /// measured: the pages lay out on the very rectangles the scope carries, in
+  /// the same frame.
+  void _onRectsBuilt(_Shell shell, FoldablePaneRects rects) {
+    final PaneMetrics metrics = shell.panes[shell.current];
+    final int length = shell.branchStacks[shell.current]?.length ?? 0;
+    metrics
+      ..hasSecondary = length >= 2
+      ..stackLength = length;
+    if (metrics.twoPane.value != rects.isSplit) {
+      metrics.twoPane.value = rects.isSplit;
+      _syncBranchRoutes(shell, shell.current);
+    }
+    _refreshPaneAssignments(shell);
   }
 
   /// Called while the tab area builds, before the pages of the branch do.
@@ -1704,5 +1730,55 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
     isNavigating.dispose();
     stackChanges.dispose();
     super.dispose();
+  }
+}
+
+/// The tab area of the current branch, in the "rects as data" mode or the
+/// legacy measurement mode.
+///
+/// When a [FoldablePaneRectsScope] is above it (a `FoldableScaffold` through
+/// its `paneContent`, or an app that computes the rectangles itself), the
+/// pages are placed straight on the published rectangles with no measurement:
+/// the navigators of the branches are returned as they are and the rectangles
+/// flow to the pane slots through the scope. Otherwise the legacy [BranchArea]
+/// measures the placeholder frames returned by
+/// [FoldableShellRoute.buildPanes].
+class _ShellPaneArea extends StatelessWidget {
+  const _ShellPaneArea({
+    required this.route,
+    required this.metrics,
+    required this.stackLength,
+    required this.child,
+    required this.onBuilt,
+    required this.onRectsBuilt,
+  });
+
+  final FoldableShellRoute route;
+  final PaneMetrics metrics;
+  final int stackLength;
+  final Widget child;
+  final void Function(FoldablePanes panes, bool twoPane) onBuilt;
+  final void Function(FoldablePaneRects rects) onRectsBuilt;
+
+  @override
+  Widget build(BuildContext context) {
+    final FoldablePaneRects? rects = FoldablePaneRectsScope.maybeOf(
+      context,
+    )?.rects;
+    if (rects == null) {
+      return BranchArea(
+        route: route,
+        metrics: metrics,
+        stackLength: stackLength,
+        onBuilt: onBuilt,
+        child: child,
+      );
+    }
+    // The rectangles are the animated pane geometry of the scaffold built this
+    // very frame; publish their split state to the branch before the pages
+    // build, then return the navigators (they lay out on the rectangles in the
+    // pane slots, in the same frame).
+    onRectsBuilt(rects);
+    return child;
   }
 }

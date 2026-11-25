@@ -3,6 +3,8 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
+import 'package:foldable_core/foldable_core.dart'
+    show FoldablePaneRects, FoldablePaneRectsScope;
 
 import 'foldable_route.dart';
 
@@ -853,12 +855,22 @@ class PaneSlot extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    // Lays out again whenever the shell body (and so the panes) rebuilt.
-    context.dependOnInheritedWidgetOfExactType<PaneEpoch>();
+    // When a scaffold (or the app) publishes the pane rectangles as data, the
+    // slot reads them straight from the inherited scope: the page is laid out
+    // on the final rectangle in the same frame, with no measurement and no
+    // lag. Otherwise the legacy measurement path is used: relayout whenever
+    // the shell body (and so the panes) rebuilt.
+    final FoldablePaneRects? rects = FoldablePaneRectsScope.maybeOf(
+      context,
+    )?.rects;
+    if (rects == null) {
+      context.dependOnInheritedWidgetOfExactType<PaneEpoch>();
+    }
     return _RawPaneSlot(
       metrics: metrics,
       entry: entry,
       clip: clip,
+      rects: rects,
       child: child,
     );
   }
@@ -869,6 +881,7 @@ class _RawPaneSlot extends SingleChildRenderObjectWidget {
     required this.metrics,
     required this.entry,
     required this.clip,
+    required this.rects,
     required super.child,
   });
 
@@ -876,17 +889,23 @@ class _RawPaneSlot extends SingleChildRenderObjectWidget {
   final PaneEntryRef entry;
   final bool clip;
 
+  /// The pane rectangles published as data, or `null` in the legacy
+  /// measurement path.
+  final FoldablePaneRects? rects;
+
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      _RenderPaneSlot(metrics, entry, clip);
+      _RenderPaneSlot(metrics, entry, clip, rects);
 
   @override
   _PaneSlotElement createElement() => _PaneSlotElement(this);
 
   @override
   void updateRenderObject(BuildContext context, _RenderPaneSlot renderObject) {
-    renderObject.clip = clip;
-    renderObject.markNeedsLayout();
+    renderObject
+      ..clip = clip
+      ..rects = rects
+      ..markNeedsLayout();
   }
 }
 
@@ -901,11 +920,33 @@ class _PaneSlotElement extends SingleChildRenderObjectElement {
 }
 
 class _RenderPaneSlot extends RenderShiftedBox {
-  _RenderPaneSlot(this.metrics, this.entry, this._clip) : super(null);
+  _RenderPaneSlot(this.metrics, this.entry, this._clip, this.rects)
+    : super(null);
 
   final PaneMetrics metrics;
   final PaneEntryRef entry;
   bool _clip;
+
+  /// The pane rectangles published as data, or `null` in the legacy
+  /// measurement path (then the rectangles come from [metrics]).
+  FoldablePaneRects? rects;
+
+  /// Whether the current tab is drawn with two panes.
+  bool get _twoPane => rects?.isSplit ?? metrics.twoPane.value;
+
+  /// The rectangle of [pane], from the data if given, else from the measured
+  /// metrics.
+  Rect? _rectFor(FoldablePane pane) {
+    final r = rects;
+    if (r != null) {
+      return switch (pane) {
+        FoldablePane.primary => r.primary,
+        FoldablePane.secondary => r.secondary,
+        FoldablePane.single => null,
+      };
+    }
+    return metrics.rectFor(pane);
+  }
 
   /// Whether to clip the page (transition included) to its pane rectangle.
   bool get clip => _clip;
@@ -935,7 +976,7 @@ class _RenderPaneSlot extends RenderShiftedBox {
     if (entry.paneFrozen) {
       return entry.frozenHidden ? null : entry.frozenPane;
     }
-    if (!metrics.twoPane.value) return FoldablePane.single;
+    if (!_twoPane) return FoldablePane.single;
     final int position = entry.position.value;
     if (position == 0) {
       // A lone page of a two-pane tab sits on the left.
@@ -966,9 +1007,7 @@ class _RenderPaneSlot extends RenderShiftedBox {
       parentData.offset = Offset.zero;
       return;
     }
-    final Rect? rect = pane == FoldablePane.single
-        ? null
-        : metrics.rectFor(pane);
+    final Rect? rect = pane == FoldablePane.single ? null : _rectFor(pane);
     if (rect == null || !rect.size.isFinite || rect.isEmpty) {
       // No rectangle (yet): the page takes the whole area. This happens for
       // one frame if the app did not place the frame it needs (reported as an

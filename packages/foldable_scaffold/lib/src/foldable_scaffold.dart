@@ -127,6 +127,7 @@ class FoldableScaffold extends StatefulWidget {
     this.bodyBuilder,
     this.secondaryBody,
     this.secondaryBodyBuilder,
+    this.paneContent,
     this.appBar,
     this.appBarBuilder,
     this.primaryNavigation,
@@ -239,6 +240,26 @@ class FoldableScaffold extends StatefulWidget {
   /// Returning null leaves the pane empty, which does not change the layout
   /// nor whether the back gesture is blocked.
   final BoxConstraintsNullableWidgetBuilder? secondaryBodyBuilder;
+
+  /// Builds a widget that covers the whole pane area of the scaffold, on top
+  /// of [body] and [secondaryBody] and below the divider.
+  ///
+  /// It receives the two pane rectangles the scaffold laid out *this* frame,
+  /// already animated ([FoldablePaneRects], in the coordinates of the pane
+  /// area). A router can place its pages in them directly: no measuring, no
+  /// cross-layout-pass mutation, no frame of lag. The content is independent of
+  /// [body] / [secondaryBody] (they stay usable on their own), so an app can
+  /// leave both empty and show only what [paneContent] returns.
+  ///
+  /// The rectangles are the same ones [computePaneRects] gives for the
+  /// animated geometry, so a widget placed on them lands exactly on the pane
+  /// pixels. It is painted above the panes but below the divider, so the
+  /// divider stays draggable on top of it.
+  ///
+  /// Returning null draws nothing. The closest [FoldablePaneRectsScope] is
+  /// published around whatever this returns, so a router placed here can read
+  /// the same rectangles through an `InheritedWidget` instead of a parameter.
+  final FoldablePaneContentBuilder? paneContent;
 
   /// The app bar, forwarded to [Scaffold.appBar].
   ///
@@ -1648,67 +1669,99 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
         geometry.primaryVisible &&
         geometry.secondaryVisible;
 
+    // The pane rectangles are the animated geometry of this very build, so a
+    // router hosted through [paneContent] can place its pages on them in the
+    // same frame, with no measurement and no lag.
+    final FoldablePaneRects? rects = widget.paneContent == null
+        ? null
+        : computePaneRects(
+            geometry: geometry,
+            textDirection: frame.textDirection,
+            size: constraints.biggest,
+          );
+    final Widget? content = rects == null
+        ? null
+        : widget.paneContent!(context, rects);
+
+    final Widget primaryPane = LayoutId(
+      id: PaneSlot.primary,
+      // The scope stays up while the pane is hidden, so a page that moves
+      // back into this slot still reads the right [FoldablePane].
+      child: FoldablePaneScope(
+        pane: FoldablePane.primary,
+        child: _buildPane(
+          child: _body(),
+          hidden: !geometry.primaryVisible,
+          media: stacked
+              ? paneMedia.copyWith(
+                  padding: paneMedia.padding.copyWith(bottom: 0),
+                )
+              : paneMedia,
+        ),
+      ),
+    );
+    final Widget secondaryPane = LayoutId(
+      id: PaneSlot.secondary,
+      child: FoldablePaneScope(
+        pane: FoldablePane.secondary,
+        child: _buildPane(
+          child: _secondaryBody(),
+          hidden: !geometry.secondaryVisible,
+          media: stacked
+              ? paneMedia.copyWith(padding: paneMedia.padding.copyWith(top: 0))
+              : paneMedia,
+        ),
+      ),
+    );
+    final Widget dividerPane = LayoutId(
+      id: PaneSlot.divider,
+      // The handle is the only part of the panes that follows the hover
+      // and the focus of the divider, so nothing else rebuilds for them.
+      child: ListenableBuilder(
+        listenable: Listenable.merge([
+          _isHoveringDivider,
+          _isDraggingDivider,
+          _dividerFocusNode,
+        ]),
+        builder: (context, _) => _buildDivider(
+          metrics: metrics,
+          constraints: constraints,
+          paneLayout: paneLayout,
+          frame: frame,
+          currentRatio: currentRatio,
+          splitWidth: splitWidth,
+          minSecondarySize: minSecondarySize,
+          maxSecondarySize: maxSecondarySize,
+          canSplitPanel: canSplitPanel,
+        ),
+      ),
+    );
+    final Widget? contentPane = content == null
+        ? null
+        : LayoutId(
+            id: _kPaneContentSlot,
+            // Painted above both panes (so a router's pages win over the body
+            // / secondary body) and below the divider (so it stays draggable).
+            child: MediaQuery(
+              data: paneMedia,
+              child: FoldablePaneRectsScope(rects: rects!, child: content),
+            ),
+          );
+
     final panes = CustomMultiChildLayout(
       delegate: _PaneLayoutDelegate(
         geometry: geometry,
         textDirection: frame.textDirection,
       ),
-      children: [
-        LayoutId(
-          id: PaneSlot.primary,
-          // The scope stays up while the pane is hidden, so a page that moves
-          // back into this slot still reads the right [FoldablePane].
-          child: FoldablePaneScope(
-            pane: FoldablePane.primary,
-            child: _buildPane(
-              child: _body(),
-              hidden: !geometry.primaryVisible,
-              media: stacked
-                  ? paneMedia.copyWith(
-                      padding: paneMedia.padding.copyWith(bottom: 0),
-                    )
-                  : paneMedia,
-            ),
-          ),
-        ),
-        LayoutId(
-          id: PaneSlot.divider,
-          // The handle is the only part of the panes that follows the hover
-          // and the focus of the divider, so nothing else rebuilds for them.
-          child: ListenableBuilder(
-            listenable: Listenable.merge([
-              _isHoveringDivider,
-              _isDraggingDivider,
-              _dividerFocusNode,
-            ]),
-            builder: (context, _) => _buildDivider(
-              metrics: metrics,
-              constraints: constraints,
-              paneLayout: paneLayout,
-              frame: frame,
-              currentRatio: currentRatio,
-              splitWidth: splitWidth,
-              minSecondarySize: minSecondarySize,
-              maxSecondarySize: maxSecondarySize,
-              canSplitPanel: canSplitPanel,
-            ),
-          ),
-        ),
-        LayoutId(
-          id: PaneSlot.secondary,
-          child: FoldablePaneScope(
-            pane: FoldablePane.secondary,
-            child: _buildPane(
-              child: _secondaryBody(),
-              hidden: !geometry.secondaryVisible,
-              media: stacked
-                  ? paneMedia.copyWith(
-                      padding: paneMedia.padding.copyWith(top: 0),
-                    )
-                  : paneMedia,
-            ),
-          ),
-        ),
+      children: <Widget>[
+        primaryPane,
+        // Without pane content the child order (and so the paint order) is
+        // exactly what it always was. With content: the panes, then the
+        // content on top of them, then the divider on top of everything.
+        if (contentPane == null) dividerPane,
+        secondaryPane,
+        if (contentPane != null) contentPane,
+        if (contentPane != null) dividerPane,
       ],
     );
     // [canSplit] is geometry only (width / breakpoints / fold / insets) plus
@@ -1902,6 +1955,11 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
 typedef BoxConstraintsNullableWidgetBuilder =
     Widget? Function(BuildContext context, BoxConstraints constraints);
 
+/// Builds the pane content overlay of a [FoldableScaffold] with the two pane
+/// rectangles of the current frame. Returning null draws nothing.
+typedef FoldablePaneContentBuilder =
+    Widget? Function(BuildContext context, FoldablePaneRects rects);
+
 /// Builds the navigation shown at the start of the scaffold row.
 ///
 /// The constraints are the extent (without the system inset of the edge, which
@@ -2059,6 +2117,15 @@ class _CutoutAvoidingAppBar extends StatelessWidget
   }
 }
 
+/// Identifies the [FoldableScaffold.paneContent] overlay child in
+/// [_PaneLayoutDelegate]. A stable const instance so the delegate and the
+/// widget list agree on the child id.
+const Object _kPaneContentSlot = _PaneContentSlot();
+
+class _PaneContentSlot {
+  const _PaneContentSlot();
+}
+
 /// Positions the primary pane, the divider and the secondary pane along the
 /// axis of the [geometry].
 ///
@@ -2111,6 +2178,13 @@ class _PaneLayoutDelegate extends MultiChildLayoutDelegate {
     place(PaneSlot.primary, geometry.primaryExtent * scale);
     place(PaneSlot.divider, geometry.dividerExtent * scale);
     place(PaneSlot.secondary, geometry.secondaryExtent * scale);
+
+    // The pane-content overlay fills the whole pane area: a router hosted
+    // there positions its own pages inside it using the pane rectangles.
+    if (hasChild(_kPaneContentSlot)) {
+      layoutChild(_kPaneContentSlot, BoxConstraints.tight(size));
+      positionChild(_kPaneContentSlot, Offset.zero);
+    }
   }
 
   @override

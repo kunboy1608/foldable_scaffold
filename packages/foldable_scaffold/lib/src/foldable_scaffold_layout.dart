@@ -2,6 +2,7 @@ import 'dart:math' as math;
 import 'dart:ui' show DisplayFeature, DisplayFeatureType;
 
 import 'package:flutter/material.dart';
+import 'package:foldable_core/foldable_core.dart' show FoldablePaneRects;
 
 import 'foldable_breakpoints.dart';
 import 'foldable_fold.dart';
@@ -631,6 +632,71 @@ class PaneGeometryTween extends Tween<PaneGeometry> {
           (endValue.secondaryExtent - beginValue.secondaryExtent) * t,
     );
   }
+}
+
+/// The two pane rectangles of [geometry] laid out in a pane area of [size],
+/// expressed in that area's coordinates.
+///
+/// This mirrors exactly where [FoldableScaffold] places the two panes
+/// (`_PaneLayoutDelegate`): the same total-extent scale, the same start edge
+/// (left in LTR, right in RTL side by side; always the top when stacked) and
+/// the same order of subtractions and additions. Because the arithmetic is the
+/// same, a page placed on [FoldablePaneRects] lands on the very pixels of the
+/// pane the scaffold lays out, in the same frame, with no measurement and no
+/// lag.
+///
+/// A collapsed pane (animated extent zero) comes back as `null`, so callers
+/// treat "hidden" separately from a zero-size rectangle.
+///
+/// Pure: no [BuildContext], widget or state, so it can be tested without
+/// pumping a widget.
+FoldablePaneRects computePaneRects({
+  required PaneGeometry geometry,
+  required TextDirection textDirection,
+  required Size size,
+}) {
+  final axis = geometry.axis;
+  final isHorizontal = axis == Axis.horizontal;
+  final extent = isHorizontal ? size.width : size.height;
+  final crossExtent = isHorizontal ? size.height : size.width;
+  final totalTargetExtent =
+      geometry.primaryExtent +
+      geometry.dividerExtent +
+      geometry.secondaryExtent;
+  final scale = totalTargetExtent > extent && totalTargetExtent > 0
+      ? extent / totalTargetExtent
+      : 1.0;
+
+  // Same start edge and order as _PaneLayoutDelegate.performLayout.
+  final fromEnd = isHorizontal && textDirection == TextDirection.rtl;
+  var position = fromEnd ? extent : 0.0;
+
+  Rect rectOf(double paneExtent) {
+    final scaled = (paneExtent * scale).clamp(0.0, extent);
+    final Rect rect;
+    if (fromEnd) {
+      position -= scaled;
+      rect = isHorizontal
+          ? Rect.fromLTWH(position, 0, scaled, crossExtent)
+          : Rect.fromLTWH(0, position, crossExtent, scaled);
+    } else {
+      rect = isHorizontal
+          ? Rect.fromLTWH(position, 0, scaled, crossExtent)
+          : Rect.fromLTWH(0, position, crossExtent, scaled);
+      position += scaled;
+    }
+    return rect;
+  }
+
+  final Rect primaryRaw = rectOf(geometry.primaryExtent);
+  rectOf(geometry.dividerExtent); // advance past the divider
+  final Rect secondaryRaw = rectOf(geometry.secondaryExtent);
+
+  return FoldablePaneRects(
+    primary: geometry.primaryVisible ? primaryRaw : null,
+    secondary: geometry.secondaryVisible ? secondaryRaw : null,
+    axis: axis,
+  );
 }
 
 enum PaneSlot { primary, divider, secondary }
