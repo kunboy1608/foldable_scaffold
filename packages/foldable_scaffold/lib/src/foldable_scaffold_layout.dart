@@ -419,6 +419,18 @@ class PaneGeometry {
 
   /// Whether the secondary pane has room. See [primaryVisible].
   bool get secondaryVisible => secondaryExtent > 0;
+
+  @override
+  bool operator ==(Object other) =>
+      other is PaneGeometry &&
+      other.axis == axis &&
+      other.primaryExtent == primaryExtent &&
+      other.dividerExtent == dividerExtent &&
+      other.secondaryExtent == secondaryExtent;
+
+  @override
+  int get hashCode =>
+      Object.hash(axis, primaryExtent, dividerExtent, secondaryExtent);
 }
 
 /// The "pane geometry" of the layout: from the pane area extent, the divider
@@ -613,6 +625,13 @@ int computeSecondaryPanePercent({
 /// would make look right.
 class PaneGeometryTween extends Tween<PaneGeometry> {
   PaneGeometryTween({required PaneGeometry end}) : super(end: end);
+
+  @override
+  bool operator ==(Object other) =>
+      other is PaneGeometryTween && other.begin == begin && other.end == end;
+
+  @override
+  int get hashCode => Object.hash(begin, end);
 
   @override
   PaneGeometry lerp(double t) {

@@ -25,7 +25,10 @@
 * Added `FoldablePaneScope` (`pane`, `owner`, `maybeOf`, `read`, `paneOf`;
   `paneOf` falls back to `FoldablePane.single` without a provider).
 * Added `FoldablePaneTransitions` (ref-counted `begin` / `end`,
-  `ValueListenable<bool>`).
+  `ValueListenable<bool>`), shared by all branches of one shell and safe when
+  late transition callbacks arrive after disposal.
+* Pane rectangle helpers return `null` for panes with no extent; `isSplit` is
+  false whenever either pane has no room.
 * Added `FoldablePaneTransitionScope` (`of`, `read`, `isTransitioningOf`).
 * `FoldableMotion`: API unchanged; dartdoc corrected — it no longer mentions
   `FoldableNavigator` (that class does not exist).

@@ -1,5 +1,11 @@
 ## 0.3.0-dev.1
 
+* Fixed transition signaling for pop animations and for transitions canceled
+  when a hidden branch is switched away from. Late callbacks after shell
+  disposal are harmless.
+* Documented that `closeSecondary` pops full-screen overlays before branch
+  pages.
+
 * **Rects as data.** The router no longer measures placeholder frames. It reads
   the pane rectangles the layout publishes through `FoldablePaneRectsScope`
   (`foldable_core`) and places each page directly in its rectangle. A layout
@@ -13,9 +19,11 @@
   instead of the full-screen slide, and its `Hero`s are off (`HeroMode`). One
   pane, or no rects scope, keeps the platform transition. Both honour the
   `FoldableMotion` duration.
-* **`FoldableShellState.closeSecondary`**: pops the top page of the current
-  branch (empties the secondary pane), for `FoldableScaffold.onSecondBodyClose`.
-  `stackLength` / `hasSecondary` are unchanged and drive `hasSecondaryBody`.
+* **`FoldableShellState.closeSecondary`**: calls `router.pop()`, so a full-screen
+  overlay above the shell is popped first; otherwise it pops the top page of the
+  current branch (empties the secondary pane), for
+  `FoldableScaffold.onSecondBodyClose`. `stackLength` / `hasSecondary` are
+  unchanged and drive `hasSecondaryBody`.
 * **Fix:** `RedirectResolver.chainOf` no longer reports a false cycle when a
   shell and its branch root resolve to the same path (`/`): a cycle is now
   "the same instance appears twice", not "two equal instances". The error

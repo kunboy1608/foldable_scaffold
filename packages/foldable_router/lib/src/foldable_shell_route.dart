@@ -43,9 +43,10 @@ class FoldableShellState {
   final int stackLength;
 
   /// Closes the top page of the current branch, i.e. empties the secondary
-  /// pane: `router.pop()` for the current branch. Used for
-  /// `FoldableScaffold.onSecondBodyClose`. Does nothing at the branch root
-  /// (the root of a tab cannot be closed).
+  /// pane. This is `router.pop()`, which closes a full-screen page pushed
+  /// above the shell first (when there is one), then the top page of the
+  /// current branch. Used for `FoldableScaffold.onSecondBodyClose`. Does
+  /// nothing at the branch root (the root of a tab cannot be closed).
   final VoidCallback? closeSecondary;
 
   /// Whether the stack of the current branch has at least two pages, i.e.

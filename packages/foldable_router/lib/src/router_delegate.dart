@@ -229,9 +229,11 @@ class _Shell {
     for (final gate in gestureGates) {
       gate.dispose();
     }
-    for (final metrics in panes) {
-      metrics.dispose();
-    }
+    // The branch routes can remain mounted while their removal transition
+    // finishes. Their page builders still listen to `twoPane`, so disposing
+    // those notifiers here would race the Navigator's removal frame. They are
+    // owned only by this shell and become unreachable with it; the shared
+    // transition notifier is explicitly hardened for late callbacks.
     transitions.dispose();
   }
 
@@ -323,8 +325,18 @@ class _BranchPageRoute<T> extends PageRoute<T> with FoldablePageRouteMixin<T> {
 
   @override
   bool didPop(T? result) {
-    animation?.removeStatusListener(_onAnimationStatus);
+    // Keep the listener attached: popping runs the reverse animation, whose
+    // status changes must close the shared transition signal.
     return super.didPop(result);
+  }
+
+  /// Stops counting a transition when its branch is hidden before its ticker
+  /// can reach a terminal status. The status listener stays attached, so a
+  /// later pop of the same route still signals.
+  void cancelTransitionSignal() {
+    if (!_transitionActive) return;
+    _transitionActive = false;
+    _signalTransition(false);
   }
 
   @override
@@ -1293,7 +1305,10 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
     for (final entry in removedBranch) {
       entry.complete();
     }
-    shell.current = branchIndex;
+    if (shell.current != branchIndex) {
+      _cancelBranchTransitions(shell, shell.current);
+      shell.current = branchIndex;
+    }
     return shell.branchStacks[branchIndex]!.last;
   }
 
@@ -1333,7 +1348,20 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
   /// Releases the resources of a shell that is being removed, once the frame
   /// that unmounts its navigators has run.
   void _retireShell(_Shell shell) {
-    WidgetsBinding.instance.addPostFrameCallback((_) => shell.dispose());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => shell.dispose());
+    });
+  }
+
+  void _cancelBranchTransitions(_Shell shell, int branchIndex) {
+    final entries = shell.branchStacks[branchIndex];
+    if (entries == null) return;
+    for (final entry in entries) {
+      final route = entry.navigatorRoute;
+      if (route is _BranchPageRoute<Object?>) {
+        route.cancelTransitionSignal();
+      }
+    }
   }
 
   /// Switches to the branch at [index], keeping its stack.
@@ -1360,6 +1388,7 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
       // shell (if it is still the same) is now showing [index].
       final now = _shell;
       if (now != null && identical(now, shell) && now.current != index) {
+        _cancelBranchTransitions(now, now.current);
         now.current = index;
         _refreshBackState();
       }

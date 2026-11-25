@@ -258,12 +258,17 @@ class FoldableScaffold extends StatefulWidget {
   /// area). A router can place its pages in them directly: no measuring, no
   /// cross-layout-pass mutation, no frame of lag. The content is independent of
   /// [body] / [secondaryBody] (they stay usable on their own), so an app can
-  /// leave both empty and show only what [paneContent] returns.
+  /// leave both empty and show only what [paneContent] returns. Setting
+  /// [hasSecondaryBody] to `true` without a [secondaryBody] creates a second,
+  /// empty pane that [paneContent] fills too: that is the form to use when the
+  /// content supplies both panes (for example a router with a two-pane shell).
   ///
-  /// The rectangles are the same ones [computePaneRects] gives for the
-  /// animated geometry, so a widget placed on them lands exactly on the pane
-  /// pixels. It is painted above the panes but below the divider, so the
-  /// divider stays draggable on top of it.
+  /// The rectangles are the pane area of this frame, already animated, so a
+  /// widget placed on them lands exactly on the pane pixels. They are the
+  /// `primary` and `secondary` of [FoldablePaneRects]: an app that computes
+  /// them itself can use [FoldablePaneRects.sideBySide] or
+  /// [FoldablePaneRects.stacked]. The content is painted above the panes but
+  /// below the divider, so the divider stays draggable on top of it.
   ///
   /// Returning null draws nothing. The closest [FoldablePaneRectsScope] is
   /// published around whatever this returns, so a router placed here can read
@@ -352,6 +357,11 @@ class FoldableScaffold extends StatefulWidget {
   /// Defaults to true: [secondaryBody] or [secondaryBodyBuilder] is enough to
   /// get the second pane. Set it to false to keep the widget but hide the
   /// pane, for example while what it shows is loading.
+  ///
+  /// Setting it to `true` without [secondaryBody] / [secondaryBodyBuilder]
+  /// creates a second, empty pane: that is how a [paneContent] that draws both
+  /// panes (a router shell) gets its two rectangles. Setting it to `false`
+  /// with no secondary body leaves a single pane.
   ///
   /// The hidden pane stays in the tree, so its widgets keep their state; while
   /// it has no width it does not take focus, is left out of the semantics tree,
@@ -564,8 +574,10 @@ class FoldableScaffold extends StatefulWidget {
   /// `foldable_router` provides around a shell page.
   final ValueListenable<bool>? paneTransition;
 
-  /// Called when the system back press is refused because the secondary body
-  /// is open.
+  /// Called when a back invocation is refused because [hasSecondaryBody] is
+  /// true and the secondary pane is open. In a plain scaffold, close it from
+  /// this callback. When hosted by `foldable_router`, system back is handled by
+  /// the router and does not pass through this scaffold `PopScope`.
   final PopInvokedWithResultCallback<dynamic>? onSecondBodyClose;
 
   /// Forwarded to [Scaffold.floatingActionButton].

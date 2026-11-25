@@ -71,7 +71,24 @@ class FoldablePaneRects {
       extent: secondaryExtent,
       fraction: secondaryFraction,
     );
+    // A pane with no room is not shown at all: `null`, not a zero-size rect.
+    // The remaining pane takes the whole area, so no empty divider gap is
+    // left behind either.
+    if (width <= 0) {
+      return FoldablePaneRects(
+        primary: size.isEmpty ? null : Offset.zero & size,
+        secondary: null,
+        axis: Axis.horizontal,
+      );
+    }
     final primaryWidth = size.width - dividerExtent - width;
+    if (primaryWidth <= 0) {
+      return FoldablePaneRects(
+        primary: null,
+        secondary: Offset.zero & size,
+        axis: Axis.horizontal,
+      );
+    }
     final primary = textDirection == TextDirection.ltr
         ? Rect.fromLTWH(0, 0, primaryWidth, size.height)
         : Rect.fromLTWH(width + dividerExtent, 0, primaryWidth, size.height);
@@ -103,7 +120,24 @@ class FoldablePaneRects {
       extent: secondaryExtent,
       fraction: secondaryFraction,
     );
+    // A pane with no room is not shown at all: `null`, not a zero-size rect.
+    // The remaining pane takes the whole area, so no empty divider gap is
+    // left behind either.
+    if (height <= 0) {
+      return FoldablePaneRects(
+        primary: size.isEmpty ? null : Offset.zero & size,
+        secondary: null,
+        axis: Axis.vertical,
+      );
+    }
     final primaryHeight = size.height - dividerExtent - height;
+    if (primaryHeight <= 0) {
+      return FoldablePaneRects(
+        primary: null,
+        secondary: Offset.zero & size,
+        axis: Axis.vertical,
+      );
+    }
     return FoldablePaneRects(
       primary: Rect.fromLTWH(0, 0, size.width, primaryHeight),
       secondary: Rect.fromLTWH(
@@ -158,8 +192,7 @@ class FoldablePaneRects {
 /// Consumer: the router package's pane host.
 ///
 /// When there is no provider: [maybeOf] returns `null`; callers fall back to
-/// their own rect computation (or to the legacy frame measurement of the
-/// router package).
+/// their own rectangle computation.
 class FoldablePaneRectsScope extends InheritedWidget {
   /// Creates the scope.
   const FoldablePaneRectsScope({

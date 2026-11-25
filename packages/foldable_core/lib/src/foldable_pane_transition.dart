@@ -4,8 +4,9 @@ import 'package:flutter/widgets.dart';
 /// Counts the page transitions in flight, so several overlapping animations do
 /// not make the signal flicker to false in between.
 ///
-/// Created by the package that animates the pages (`foldable_router`), which
-/// calls [begin] when a page transition starts and [end] when it completes.
+/// One instance is shared by all branches of one shell. The router calls
+/// [begin] when a push or pop transition starts and [end] when it completes.
+/// Calls that arrive after the instance is disposed are ignored.
 ///
 /// Provider: `foldable_router` (one instance per shell page).
 /// Consumer: `FoldableScaffold`, which switches the visible pane instantly
@@ -17,23 +18,39 @@ import 'package:flutter/widgets.dart';
 class FoldablePaneTransitions extends ChangeNotifier
     implements ValueListenable<bool> {
   int _count = 0;
+  bool _disposed = false;
 
   /// Whether at least one page transition is running.
   @override
   bool get value => _count > 0;
 
   /// Marks one transition as started.
+  ///
+  /// Does nothing once the notifier is disposed: a route can start or finish a
+  /// transition after the shell that owns the signal is gone.
   void begin() {
+    if (_disposed) return;
     _count++;
     if (_count == 1) notifyListeners();
   }
 
   /// Marks one transition as finished.
+  ///
+  /// Does nothing once the notifier is disposed, so a transition that is
+  /// cancelled while its shell is retired does not assert and the count never
+  /// goes negative.
   void end() {
+    if (_disposed) return;
     if (_count > 0) {
       _count--;
       if (_count == 0) notifyListeners();
     }
+  }
+
+  @override
+  void dispose() {
+    _disposed = true;
+    super.dispose();
   }
 }
 

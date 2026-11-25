@@ -743,6 +743,96 @@ void main() {
   });
 
   group('step 2: transitions', () {
+    testWidgets('retiring a shell during a push has no late signal error', (
+      tester,
+    ) async {
+      final router = await pumpApp(tester);
+
+      await tester.tap(find.text('User 7'));
+      await tester.pump(const Duration(milliseconds: 50));
+      await router.openUri(Uri.parse('/not-found'));
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('popping during a push keeps transition signaling balanced', (
+      tester,
+    ) async {
+      final router = await pumpApp(tester);
+
+      await tester.tap(find.text('User 7'));
+      await tester.pump(const Duration(milliseconds: 50));
+      router.pop();
+      await tester.pumpAndSettle();
+
+      expect(router.stack, [const TwoPaneShell(), const UsersRoute()]);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('switching branches during a push clears its signal', (
+      tester,
+    ) async {
+      final router = await pumpApp(tester);
+      await setTwoPane(tester, router, value: true);
+
+      await tester.tap(find.text('User 7'));
+      await tester.pump(const Duration(milliseconds: 50));
+      await tester.tap(find.text('Home'));
+      await tester.pumpAndSettle();
+
+      expect(router.stack, [const TwoPaneShell(), const HomeRoute()]);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('a settled push popped again signals the pop transition', (
+      tester,
+    ) async {
+      final router = await pumpApp(tester);
+      await tester.tap(find.text('User 7'));
+      await tester.pumpAndSettle();
+      final signal = FoldablePaneTransitionScope.read(
+        tester.element(
+          find.byKey(const Key('page users'), skipOffstage: false),
+        ),
+      );
+      expect(signal, isNotNull);
+      expect(signal!.value, isFalse);
+
+      router.pop();
+      await tester.pump();
+      await tester.pump();
+      expect(signal.value, isTrue, reason: 'the pop transition must signal');
+      await tester.pumpAndSettle();
+      expect(signal.value, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+
+    testWidgets('hiding a branch mid-transition clears the signal', (
+      tester,
+    ) async {
+      await pumpApp(tester);
+      await tester.tap(find.text('User 7'));
+      await tester.pump(const Duration(milliseconds: 40));
+      final signal = FoldablePaneTransitionScope.read(
+        tester.element(
+          find.byKey(const Key('page users'), skipOffstage: false),
+        ),
+      );
+      expect(signal, isNotNull);
+      await tester.pump();
+      expect(signal!.value, isTrue);
+
+      await tester.tap(find.text('Home'));
+      await tester.pumpAndSettle();
+      expect(
+        signal.value,
+        isFalse,
+        reason: 'a transition frozen in a hidden branch kept the signal true',
+      );
+      expect(tester.takeException(), isNull);
+    });
+
     testWidgets('one pane: during a push the page below is painted', (
       tester,
     ) async {
@@ -1089,6 +1179,36 @@ void main() {
 
       expect(router.stack, [const TwoPaneShell(), const UsersRoute()]);
       expect(find.text('users list'), findsOneWidget);
+    });
+
+    androidTest('the predictive back gesture ignores pages of a hidden tab', (
+      tester,
+    ) async {
+      final router = await pumpApp(tester);
+      await setTwoPane(tester, router, value: true);
+      await resumeApp(tester);
+
+      await tester.tap(find.text('User 7'));
+      await tester.pumpAndSettle();
+      // The Users tab keeps two pages, but is hidden once Home is selected.
+      await tester.tap(find.text('Home'));
+      await tester.pumpAndSettle();
+
+      expect(
+        await startBackGesture(tester),
+        isFalse,
+        reason: 'a hidden tab must not take the predictive back gesture',
+      );
+      await cancelBackGesture(tester);
+
+      await tester.tap(find.text('Users'));
+      await tester.pumpAndSettle();
+      expect(router.stack, [
+        const TwoPaneShell(),
+        const UsersRoute(),
+        const UserRoute(id: '7'),
+      ]);
+      expect(tester.takeException(), isNull);
     });
 
     androidTest('the predictive back gesture pops only the top page in '

@@ -1,5 +1,10 @@
 ## 0.1.0-dev.12
 
+* `PaneGeometry` and `PaneGeometryTween` now use value equality, preventing
+  redundant parent rebuilds from restarting pane animations.
+* Clarified that `hasSecondaryBody: true` without a secondary body creates an
+  empty second pane for `paneContent`; corrected the pane rectangle and
+  `onSecondBodyClose` documentation.
 * Docs: added a "Dùng cùng nhau" section showing a `FoldableShellRoute` hosted
   in a `FoldableScaffold` (`paneContent`, `hasSecondaryBody: shell.hasSecondary`,
   `onSecondBodyClose: shell.closeSecondary`, `navigationBuilder`), with a link

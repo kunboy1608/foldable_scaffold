@@ -97,6 +97,51 @@ void main() {
       expect(rects.secondary, const Rect.fromLTWH(0, 0, 200, 400));
       expect(rects.primary, const Rect.fromLTWH(204, 0, 396, 400));
     });
+
+    test(
+      'a zero secondaryExtent hides the secondary pane (null, no split)',
+      () {
+        final rects = FoldablePaneRects.sideBySide(size, secondaryExtent: 0);
+        expect(rects.secondary, isNull);
+        expect(rects.secondaryVisible, isFalse);
+        expect(rects.isSplit, isFalse);
+        // A single pane fills the whole area: no divider gap is left behind.
+        expect(rects.primary, const Rect.fromLTWH(0, 0, 600, 400));
+      },
+    );
+
+    test('a zero secondaryFraction hides the secondary pane in RTL too', () {
+      final rects = FoldablePaneRects.sideBySide(
+        size,
+        secondaryFraction: 0,
+        dividerExtent: 4,
+        textDirection: TextDirection.rtl,
+      );
+      expect(rects.secondary, isNull);
+      expect(rects.isSplit, isFalse);
+      expect(rects.primary, const Rect.fromLTWH(0, 0, 600, 400));
+    });
+
+    test('a narrow size that leaves the primary no room hides it (null)', () {
+      final rects = FoldablePaneRects.sideBySide(
+        const Size(100, 400),
+        secondaryExtent: 100,
+      );
+      expect(rects.primary, isNull);
+      expect(rects.primaryVisible, isFalse);
+      expect(rects.isSplit, isFalse);
+      expect(rects.secondary, const Rect.fromLTWH(0, 0, 100, 400));
+    });
+
+    test('a zero-size area hides both panes', () {
+      final rects = FoldablePaneRects.sideBySide(
+        Size.zero,
+        secondaryFraction: 0.5,
+      );
+      expect(rects.primary, isNull);
+      expect(rects.secondary, isNull);
+      expect(rects.isSplit, isFalse);
+    });
   });
 
   group('FoldablePaneRects.stacked', () {
@@ -119,6 +164,23 @@ void main() {
       expect(rects.primary!.height, 400);
       expect(rects.secondary!.height, 400);
       expect(rects.secondary!.top, 400);
+    });
+
+    test('a zero secondaryExtent hides the stacked secondary pane (null)', () {
+      final rects = FoldablePaneRects.stacked(size, secondaryExtent: 0);
+      expect(rects.secondary, isNull);
+      expect(rects.isSplit, isFalse);
+      expect(rects.primary, const Rect.fromLTWH(0, 0, 400, 800));
+    });
+
+    test('a narrow height that leaves the primary no room hides it (null)', () {
+      final rects = FoldablePaneRects.stacked(
+        const Size(400, 100),
+        secondaryFraction: 1,
+      );
+      expect(rects.primary, isNull);
+      expect(rects.secondary, const Rect.fromLTWH(0, 0, 400, 100));
+      expect(rects.isSplit, isFalse);
     });
   });
 

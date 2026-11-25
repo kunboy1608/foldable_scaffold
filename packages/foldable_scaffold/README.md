@@ -1,7 +1,7 @@
 # foldable_scaffold
 
 > [!WARNING]
-> **Experimental.** This is a prerelease (`0.1.0-dev.11`). The API will change
+> **Experimental.** This is a prerelease (`0.1.0-dev.12`). The API will change
 > without notice and the package is not ready for production use.
 
 A [Scaffold](https://pub.dev/documentation/material_ui/latest/material_ui/Scaffold-class.html)
@@ -80,6 +80,8 @@ FoldableScaffold(
 A builder may return null, which leaves the pane empty. That never changes the
 layout: whether there is a second pane is decided by `secondaryBody` (or
 `secondaryBodyBuilder`) and `hasSecondaryBody`, not by what the builder returns.
+Setting `hasSecondaryBody: true` by itself creates a second empty pane; use it
+with `paneContent` when that slot supplies both pane contents.
 
 ### The hidden pane
 
@@ -104,7 +106,8 @@ below the divider (so the divider stays draggable). It is what
 without measuring anything: the builder receives the two pane rectangles the
 scaffold laid out *this* frame, already animated, and can place its pages on
 them directly. The same rectangles are also published around the content as a
-`FoldablePaneRectsScope`.
+`FoldablePaneRectsScope`. Apps that compute their own rectangles can use the
+public `FoldablePaneRects.sideBySide` and `FoldablePaneRects.stacked` helpers.
 
 ```dart
 FoldableScaffold(
@@ -147,6 +150,7 @@ class MailShellRoute extends FoldableShellRoute {
       appBar: AppBar(title: const Text('Mail')),
       paneContent: (context, rects) => shell.child,
       hasSecondaryBody: shell.hasSecondary,
+      // The router pops a full-screen overlay before the branch page.
       onSecondBodyClose: (didPop, result) => shell.closeSecondary?.call(),
       navigationBuilder: (context, placement, constraints, padding) =>
           placement.isSide
