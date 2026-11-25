@@ -19,7 +19,7 @@ import 'foldable_scaffold_theme.dart';
 /// A [Scaffold] with two panes: a body and a secondary body.
 ///
 /// The scaffold only takes care of the layout. Who fills the panes is up to
-/// you: `FoldableNavigator` in `foldable_router` puts a page stack in them,
+/// you: `foldable_router` can put a page stack in them through a shell route,
 /// but any two widgets work.
 ///
 /// Layout, by available width (the numbers are [breakpoints], shown here for a
@@ -41,15 +41,14 @@ import 'foldable_scaffold_theme.dart';
 /// ### The hidden pane
 ///
 /// A pane that is not shown is never taken out of the tree: its widgets keep
-/// their state (a `FoldableNavigator` page stack, a scroll position, text being
-/// typed) and are shown again instantly with nothing lost. It is only laid out
-/// at zero width. To make sure nothing of it is seen or reached while it has no
-/// width, the hidden pane does not take focus (keyboard or screen reader), is
-/// left out of the semantics tree, does not take pointer events, and its
-/// tickers (animations) are muted. This applies once the pane has actually
-/// collapsed to zero width: a pane that is sliding in or out still has a
-/// non-zero width and stays fully live, so the slide of `FoldableNavigator` is
-/// never cut short.
+/// their state (a page stack, a scroll position, text being typed) and are
+/// shown again instantly with nothing lost. It is only laid out at zero width.
+/// To make sure nothing of it is seen or reached while it has no width, the
+/// hidden pane does not take focus (keyboard or screen reader), is left out of
+/// the semantics tree, does not take pointer events, and its tickers
+/// (animations) are muted. This applies once the pane has actually collapsed to
+/// zero width: a pane that is sliding in or out still has a non-zero width and
+/// stays fully live, so a page slide from `foldable_router` is never cut short.
 ///
 /// The navigation goes where [navigationPlacement] says: below the panes
 /// (the usual bottom bar), above them, or beside them on either side (a rail).
@@ -118,9 +117,9 @@ import 'foldable_scaffold_theme.dart';
 /// [bottomNavigationBarBuilder]. A slot takes one or the other, not both.
 ///
 /// Switching the one visible pane is instant while [paneTransition] is true,
-/// so a page slide (`FoldableNavigator`) does not run a pane resize on top of
+/// so a page slide from `foldable_router` does not run a pane resize on top of
 /// it. [FoldablePaneTransitionScope] provides the same signal automatically
-/// when the scaffold is built inside a `FoldableNavigator`.
+/// when the scaffold is built inside a `foldable_router` shell.
 class FoldableScaffold extends StatefulWidget {
   const FoldableScaffold({
     super.key,
@@ -532,7 +531,7 @@ class FoldableScaffold extends StatefulWidget {
   /// the secondary body still build; only the pane geometry stops animating.
   ///
   /// Defaults to the closest [FoldablePaneTransitionScope], which
-  /// `FoldableNavigator` provides.
+  /// `foldable_router` provides around a shell page.
   final ValueListenable<bool>? paneTransition;
 
   /// Called when the system back press is refused because the secondary body
@@ -1183,14 +1182,11 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
           onPopInvokedWithResult: widget.onSecondBodyClose,
           child: FoldableScaffoldControllerScope(
             controller: _controller,
-            child: FoldableScaffoldScope(
-              canSplit: frame.canSplit,
-              child: _buildScaffold(
-                context: context,
-                frame: frame,
-                padding: padding,
-                paneAnimationDuration: paneAnimationDuration,
-              ),
+            child: _buildScaffold(
+              context: context,
+              frame: frame,
+              padding: padding,
+              paneAnimationDuration: paneAnimationDuration,
             ),
           ),
         );
@@ -1653,21 +1649,26 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
         geometry.secondaryVisible;
 
     final panes = CustomMultiChildLayout(
-      delegate: FoldablePaneLayoutDelegate(
+      delegate: _PaneLayoutDelegate(
         geometry: geometry,
         textDirection: frame.textDirection,
       ),
       children: [
         LayoutId(
           id: PaneSlot.primary,
-          child: _buildPane(
-            child: _body(),
-            hidden: !geometry.primaryVisible,
-            media: stacked
-                ? paneMedia.copyWith(
-                    padding: paneMedia.padding.copyWith(bottom: 0),
-                  )
-                : paneMedia,
+          // The scope stays up while the pane is hidden, so a page that moves
+          // back into this slot still reads the right [FoldablePane].
+          child: FoldablePaneScope(
+            pane: FoldablePane.primary,
+            child: _buildPane(
+              child: _body(),
+              hidden: !geometry.primaryVisible,
+              media: stacked
+                  ? paneMedia.copyWith(
+                      padding: paneMedia.padding.copyWith(bottom: 0),
+                    )
+                  : paneMedia,
+            ),
           ),
         ),
         LayoutId(
@@ -1695,19 +1696,26 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
         ),
         LayoutId(
           id: PaneSlot.secondary,
-          child: _buildPane(
-            child: _secondaryBody(),
-            hidden: !geometry.secondaryVisible,
-            media: stacked
-                ? paneMedia.copyWith(
-                    padding: paneMedia.padding.copyWith(top: 0),
-                  )
-                : paneMedia,
+          child: FoldablePaneScope(
+            pane: FoldablePane.secondary,
+            child: _buildPane(
+              child: _secondaryBody(),
+              hidden: !geometry.secondaryVisible,
+              media: stacked
+                  ? paneMedia.copyWith(
+                      padding: paneMedia.padding.copyWith(top: 0),
+                    )
+                  : paneMedia,
+            ),
           ),
         ),
       ],
     );
+    // [canSplit] is geometry only (width / breakpoints / fold / insets) plus
+    // whether a secondary body exists for a stacking fold: it never reads what
+    // the pane content does, so a consumer cannot feed back into the layout.
     return FoldablePaneLayout(
+      canSplit: frame.canSplit,
       primaryVisible: paneLayout.primaryVisible,
       secondaryVisible: paneLayout.secondaryVisible,
       axis: paneLayout.geometry.axis,
@@ -1853,7 +1861,7 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
   /// constraints, so showing it again is instant and nothing jumps. The
   /// exclusion is keyed on the *animated* width: a pane that is sliding in or
   /// out still has a non-zero width and stays focusable, audible and tickable
-  /// until the animation ends, so the slide of `FoldableNavigator` is never
+  /// until the animation ends, so a page slide from `foldable_router` is never
   /// cut short.
   ///
   /// [media] is what the pane sees of the window: the same for both panes, except
@@ -2048,5 +2056,69 @@ class _CutoutAvoidingAppBar extends StatelessWidget
       ),
       child: appBar,
     );
+  }
+}
+
+/// Positions the primary pane, the divider and the secondary pane along the
+/// axis of the [geometry].
+///
+/// Private so its name does not collide with [FoldablePaneLayout] from
+/// `foldable_core`. Along [Axis.horizontal] they sit side by side, left to
+/// right in [TextDirection.ltr] and right to left in [TextDirection.rtl].
+/// Along [Axis.vertical] they are stacked, the primary pane on top, whatever
+/// the text direction.
+class _PaneLayoutDelegate extends MultiChildLayoutDelegate {
+  _PaneLayoutDelegate({required this.geometry, required this.textDirection});
+
+  final PaneGeometry geometry;
+  final TextDirection textDirection;
+
+  @override
+  void performLayout(Size size) {
+    final axis = geometry.axis;
+    final isHorizontal = axis == Axis.horizontal;
+    final extent = isHorizontal ? size.width : size.height;
+    final crossExtent = isHorizontal ? size.height : size.width;
+    final totalTargetExtent =
+        geometry.primaryExtent +
+        geometry.dividerExtent +
+        geometry.secondaryExtent;
+    final scale = totalTargetExtent > extent && totalTargetExtent > 0
+        ? extent / totalTargetExtent
+        : 1.0;
+
+    // Children are laid out from the start edge: left in LTR and right in RTL
+    // side by side, always the top when stacked.
+    final fromEnd = isHorizontal && textDirection == TextDirection.rtl;
+    var position = fromEnd ? extent : 0.0;
+
+    void place(PaneSlot slot, double paneExtent) {
+      if (!hasChild(slot)) return;
+      layoutChild(
+        slot,
+        isHorizontal
+            ? BoxConstraints.tightFor(width: paneExtent, height: crossExtent)
+            : BoxConstraints.tightFor(width: crossExtent, height: paneExtent),
+      );
+      if (fromEnd) position -= paneExtent;
+      positionChild(
+        slot,
+        isHorizontal ? Offset(position, 0) : Offset(0, position),
+      );
+      if (!fromEnd) position += paneExtent;
+    }
+
+    place(PaneSlot.primary, geometry.primaryExtent * scale);
+    place(PaneSlot.divider, geometry.dividerExtent * scale);
+    place(PaneSlot.secondary, geometry.secondaryExtent * scale);
+  }
+
+  @override
+  bool shouldRelayout(covariant _PaneLayoutDelegate oldDelegate) {
+    return geometry.axis != oldDelegate.geometry.axis ||
+        geometry.primaryExtent != oldDelegate.geometry.primaryExtent ||
+        geometry.dividerExtent != oldDelegate.geometry.dividerExtent ||
+        geometry.secondaryExtent != oldDelegate.geometry.secondaryExtent ||
+        textDirection != oldDelegate.textDirection;
   }
 }

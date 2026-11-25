@@ -1,6 +1,6 @@
 # foldable_scaffold: tài liệu bàn giao
 
-File này để một phiên Claude mới (hoặc người mới) tiếp tục công việc mà không cần lịch sử chat. Cập nhật nó mỗi khi có thay đổi lớn. Trạng thái ghi nhận: `0.1.0-dev.9` + fix SafeArea của rail (commit `61e09e5`).
+File này để một phiên Claude mới (hoặc người mới) tiếp tục công việc mà không cần lịch sử chat. Cập nhật nó mỗi khi có thay đổi lớn. Trạng thái ghi nhận: `0.1.0-dev.10` (pha 2: scaffold theo `foldable_core` 0.2.0-dev.1).
 
 ## 1. Mục tiêu
 
@@ -31,24 +31,26 @@ $F/flutter test                           # package; cũng example/, ../foldable
 $F/dart doc --dry-run; rm -rf doc         # phải 0 warning; xoá doc/ do lệnh tạo ra
 ```
 
-Mốc gần nhất: package 435 test, example 8, foldable_router 232, foldable_core 4, tất cả pass.
+Mốc pha 2: package **443** test (trước 435), example **8** test, tất cả pass. Thêm `foldable_scaffold_pane_scope_test`, `foldable_scaffold_transition_scope_test`.
+
+Ràng buộc kiến trúc: `foldable_scaffold` và `foldable_router` **không** phụ thuộc nhau; cả hai chỉ phụ thuộc `foldable_core`; core chỉ phụ thuộc `flutter`. Không import router từ scaffold.
 
 ## 4. Cấu trúc code (`lib/src`)
 
 | File | Vai trò |
 |---|---|
-| `foldable_scaffold.dart` | Widget và State chính: slot kiểu Scaffold, `navigationBuilder`, `_buildSideNavigation`/`_buildTopNavigation`/`_buildBottomNavigationBar`, `_railCutoutInsets`, `_CutoutAvoidingAppBar`, ẩn pane, controller, state restoration. |
-| `foldable_scaffold_layout.dart` | Hàm thuần: `computeFrameGeometry`, `computePaneLayout`, `computeSnapTarget`, `resolveFold`, `resolveCutouts`, `cutoutInsets`. `FrameGeometry`, `PaneGeometry` (có `axis`). Dễ test nhất. |
+| `foldable_scaffold.dart` | Widget và State chính: slot kiểu Scaffold, `navigationBuilder`, `_buildSideNavigation`/`_buildTopNavigation`/`_buildBottomNavigationBar`, `_railCutoutInsets`, `_CutoutAvoidingAppBar`, ẩn pane, controller, state restoration. Publish `FoldablePaneLayout` (canSplit / visibility / axis) quanh cả hai pane; mỗi pane bọc `FoldablePaneScope`. Delegate layout private: `_PaneLayoutDelegate`. `_isTransitioning` ưu tiên `paneTransition`, rồi `FoldablePaneTransitionScope`. |
+| `foldable_scaffold_layout.dart` | Hàm thuần: `computeFrameGeometry`, `computePaneLayout`, `computeSnapTarget`, `resolveFold`, `resolveCutouts`, `cutoutInsets`. `FrameGeometry`, `PaneGeometry` (có `axis`), `PaneSlot`. Dễ test nhất. |
 | `foldable_navigation.dart` | `FoldableNavigationEdge`, `FoldableNavigationPlacement(edge, {extent, alignment, insideInset})`, `FoldableNavigationAlignment`, `FoldableLayoutInfo`, resolver, `FoldableNavigationPlacements.handheld/desktop/forPlatform`, `defaultNavigationPlacement`, `FoldableNavigationBuilder`, `FoldableVerticalBarScope`. |
 | `foldable_fold.dart` | `FoldableFold` (axis, hinge dọc/ngang). |
 | `foldable_platform_{state,source,scope}.dart` | Cầu nối Dart cho iOS: `FoldablePlatformScope` đưa vùng reserved + `verticalBarEdge` vào `MediaQuery.displayFeatures` và `FoldableVerticalBarScope`. Ngoài iOS trả child nguyên vẹn. |
 | `foldable_scaffold_{controller,divider,theme}.dart`, `foldable_breakpoints.dart` | Controller, divider (bàn phím, semantics), `ThemeExtension`, breakpoints. |
 
 Khác:
+- Barrel `lib/foldable_scaffold.dart` chỉ re-export các tên core cần thiết (`FoldableMotion`, `FoldablePane`, `FoldablePaneLayout`, `FoldablePaneScope`, `FoldablePaneTransitionScope`, `FoldablePaneTransitions`), không export cả barrel core.
 - `ios/foldable_scaffold/Sources/foldable_scaffold/FoldableScaffoldPlugin.swift`: plugin iOS (kênh `foldable_scaffold/platform` method `getState` và `foldable_scaffold/platform/events`). KVO bounds + CADisplayLink 10fps. API iOS 27.1+ bọc `#available`. `ios/foldable_scaffold.podspec` và `ios/foldable_scaffold/Package.swift` (deployment 15.0).
-- `example/lib/main.dart` (ví dụ đầy đủ, `FoldablePlatformScope` trong `MaterialApp.builder`), `example/lib/platform_debug.dart` (dialog "Platform data" + nút Copy + ô pose, dòng "view padding (raw …)").
-- `../foldable_core/lib/src/foldable_pane_layout.dart`: `FoldablePaneLayout.axis`.
-- Test: mỗi file trong `test/` theo tên tính năng. `foldable_scaffold_device_profiles_test.dart` chứa 7 profile iPhone Duo thật (số đo từ `report iPhone Duo.rtf`), field `padding` còn TODO (số 0 giữ chỗ). `..._inside_inset_test.dart` (navigation trong dải hệ thống), `..._rail_safe_area_test.dart` (hồi quy SafeArea của rail).
+- `example/lib/main.dart` (ví dụ đầy đủ, `FoldablePlatformScope` trong `MaterialApp.builder`), `example/lib/platform_debug.dart` (dialog "Platform data" + nút Copy + ô pose, dòng "view padding (raw …)"). Đọc `FoldablePaneLayout.maybeOf(context)?.canSplit`.
+- Test: mỗi file trong `test/` theo tên tính năng. `foldable_scaffold_pane_scope_test.dart` (scope từng pane + canSplit theo breakpoints + đếm build). `foldable_scaffold_transition_scope_test.dart` (snap khi `FoldablePaneTransitions.begin()`). `foldable_scaffold_device_profiles_test.dart` chứa 7 profile iPhone Duo thật (số đo từ `report iPhone Duo.rtf`), field `padding` còn TODO (số 0 giữ chỗ). `..._inside_inset_test.dart` (navigation trong dải hệ thống), `..._rail_safe_area_test.dart` (hồi quy SafeArea của rail).
 
 ## 5. Mô hình navigation (quan trọng)
 

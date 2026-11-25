@@ -195,7 +195,7 @@ void main() {
 
       expect(
         tester
-            .widget<FoldableScaffoldScope>(find.byType(FoldableScaffoldScope))
+            .widget<FoldablePaneLayout>(find.byType(FoldablePaneLayout))
             .canSplit,
         isTrue,
       );
@@ -240,7 +240,7 @@ void main() {
       expect(controller.isStacked, isFalse);
       expect(
         tester
-            .widget<FoldableScaffoldScope>(find.byType(FoldableScaffoldScope))
+            .widget<FoldablePaneLayout>(find.byType(FoldablePaneLayout))
             .canSplit,
         isFalse,
       );
@@ -266,7 +266,7 @@ void main() {
       expect(_rectOf(tester, _body), const Rect.fromLTRB(0, 0, 800, 1200));
       expect(
         tester
-            .widget<FoldableScaffoldScope>(find.byType(FoldableScaffoldScope))
+            .widget<FoldablePaneLayout>(find.byType(FoldablePaneLayout))
             .canSplit,
         isFalse,
       );

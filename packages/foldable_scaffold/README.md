@@ -1,7 +1,7 @@
 # foldable_scaffold
 
 > [!WARNING]
-> **Experimental.** This is a prerelease (`0.1.0-dev.9`). The API will change
+> **Experimental.** This is a prerelease (`0.1.0-dev.10`). The API will change
 > without notice and the package is not ready for production use.
 
 A [Scaffold](https://pub.dev/documentation/material_ui/latest/material_ui/Scaffold-class.html)
@@ -14,7 +14,7 @@ but a `FoldableScaffold` works on its own.
 ## Install
 
 ```sh
-flutter pub add foldable_scaffold:^0.1.0-dev.9
+flutter pub add foldable_scaffold:^0.1.0-dev.10
 ```
 
 ## Usage
@@ -93,8 +93,8 @@ While it has no width, though, nothing of it is seen or reachable: it does not
 take focus (Tab or a screen reader), it is left out of the semantics tree, it
 does not take pointer events, and its tickers (animations) are muted. This only
 kicks in once the pane has actually collapsed to zero width: a pane that is
-sliding in or out still has a non-zero width and stays fully live, so the page
-slides of `FoldableNavigator` are never cut short.
+sliding in or out still has a non-zero width and stays fully live, so a page
+slide from `foldable_router` is never cut short.
 
 ## Layout rules
 
@@ -401,7 +401,7 @@ breakpoints: const FoldableBreakpoints.handheld(split: 700),
 * Switching the one visible pane is instant while `paneTransition` is true, so
   a page slide does not run a pane resize on top of it.
   `FoldablePaneTransitionScope` provides that signal automatically when a
-  `FoldableNavigator` builds the scaffold.
+  `foldable_router` shell builds the scaffold.
 
 ## Insets
 
@@ -680,15 +680,20 @@ or horizontal. In your own app, `foldable_dev_tools` has the same switch.
 
 ## Exposing the layout to the panes
 
-`FoldablePaneLayout` (and `FoldableScaffoldScope.canSplit`) is an
-`InheritedWidget` below the scaffold, so the widgets in the panes can ask what
-is visible:
+`FoldablePaneLayout` is an `InheritedWidget` above both panes, so the widgets
+in them can ask what is visible and whether the scaffold has room to split.
+Each pane is also wrapped in a `FoldablePaneScope` (`primary` / `secondary`),
+including while that pane is hidden:
 
 ```dart
 final layout = FoldablePaneLayout.maybeOf(context);
+if (layout?.canSplit ?? false) {
+  // Wide enough (or folded) for two panes.
+}
 if (layout?.secondaryVisible ?? false) {
   // The details pane is on screen.
 }
+final pane = FoldablePaneScope.paneOf(context); // primary, secondary, or single
 ```
 
 ## Animation speed

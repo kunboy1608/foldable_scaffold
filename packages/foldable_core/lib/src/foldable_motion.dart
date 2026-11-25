@@ -8,12 +8,13 @@ import 'package:flutter/widgets.dart';
 /// ```dart
 /// FoldableMotion(
 ///   scale: (duration) => duration * 5,
-///   child: FoldableDevTools(child: MyApp()),
+///   child: const MyApp(),
 /// )
 /// ```
 ///
-/// `FoldableScaffold` (and `FoldableNavigator` in `foldable_router`) read it
-/// with [FoldableMotion.of].
+/// The closest `FoldableMotion` above a caller is read with
+/// [FoldableMotion.of] or [FoldableMotion.readOf]; when there is none the
+/// duration is returned unchanged.
 class FoldableMotion extends InheritedWidget {
   const FoldableMotion({required this.scale, required super.child, super.key});
 

@@ -578,7 +578,7 @@ class _LayoutCard extends StatelessWidget {
     final size = MediaQuery.sizeOf(context);
     final fold = FoldableFold.maybeOf(context);
     final layout = FoldablePaneLayout.maybeOf(context);
-    final canSplit = FoldableScaffoldScope.maybeOf(context)?.canSplit ?? false;
+    final canSplit = layout?.canSplit ?? false;
     final panes = switch ((layout?.primaryVisible, layout?.secondaryVisible)) {
       (true, true) when layout?.axis == Axis.vertical => 'two panes, stacked',
       (true, true) => 'two panes',

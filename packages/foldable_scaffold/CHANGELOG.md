@@ -1,3 +1,24 @@
+## 0.1.0-dev.10
+
+**Breaking changes:**
+
+* Depends on `foldable_core` `^0.2.0-dev.1`. `FoldableScaffoldScope` is gone:
+  read `FoldablePaneLayout.canSplit` (and `primaryVisible` / `secondaryVisible` /
+  `axis`) instead. The scaffold publishes one `FoldablePaneLayout` above both
+  panes.
+* Each pane is wrapped in a `FoldablePaneScope` (`primary` / `secondary`), also
+  while the pane is hidden, so content can ask which slot it is in.
+* The public `FoldablePaneLayoutDelegate` is private (`_PaneLayoutDelegate`) so
+  its name does not collide with `FoldablePaneLayout` from core.
+* The package re-exports only the core names it needs (`FoldableMotion`,
+  `FoldablePane`, `FoldablePaneLayout`, `FoldablePaneScope`,
+  `FoldablePaneTransitionScope`, `FoldablePaneTransitions`), not the whole
+  `foldable_core` barrel.
+* Docs no longer mention a non-existent `FoldableNavigator`; they point at
+  `foldable_router` shell routes instead.
+
+Not verified: not run on a device.
+
 ## 0.1.0-dev.9
 
 Changed (behaviour, breaking in the pre-release):

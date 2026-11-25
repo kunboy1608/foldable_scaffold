@@ -66,12 +66,7 @@ void main() {
     expect(_paneWidth(tester, 'secondary_body_builder'), 800);
     expect(_layout(tester).primaryVisible, isFalse);
     expect(_layout(tester).secondaryVisible, isTrue);
-    expect(
-      tester
-          .widget<FoldableScaffoldScope>(find.byType(FoldableScaffoldScope))
-          .canSplit,
-      isFalse,
-    );
+    expect(_layout(tester).canSplit, isFalse);
   });
 
   testWidgets('keeps the body when focusOnPrimaryBody is true', (tester) async {
@@ -95,12 +90,7 @@ void main() {
     expect(_paneWidth(tester, 'secondary_body_builder'), greaterThan(0));
     expect(_layout(tester).primaryVisible, isTrue);
     expect(_layout(tester).secondaryVisible, isTrue);
-    expect(
-      tester
-          .widget<FoldableScaffoldScope>(find.byType(FoldableScaffoldScope))
-          .canSplit,
-      isTrue,
-    );
+    expect(_layout(tester).canSplit, isTrue);
   });
 
   testWidgets('splits the panes at exactly 1200, not below', (tester) async {
@@ -108,12 +98,7 @@ void main() {
 
     expect(_paneWidth(tester, 'body_builder'), 0);
     expect(_paneWidth(tester, 'secondary_body_builder'), 1199);
-    expect(
-      tester
-          .widget<FoldableScaffoldScope>(find.byType(FoldableScaffoldScope))
-          .canSplit,
-      isFalse,
-    );
+    expect(_layout(tester).canSplit, isFalse);
 
     await _pumpScaffold(tester, const Size(1200, 600), secondary: true);
 
@@ -130,12 +115,7 @@ void main() {
     );
     expect(_layout(tester).primaryVisible, isTrue);
     expect(_layout(tester).secondaryVisible, isTrue);
-    expect(
-      tester
-          .widget<FoldableScaffoldScope>(find.byType(FoldableScaffoldScope))
-          .canSplit,
-      isTrue,
-    );
+    expect(_layout(tester).canSplit, isTrue);
   });
 
   testWidgets('the divider stops at both edges and can be dragged back', (
@@ -457,13 +437,7 @@ void main() {
       for (final size in [portrait, Size(portrait.height, portrait.width)]) {
         await _pumpScaffold(tester, size, platform: platform, secondary: true);
         expect(isSplit(tester), split, reason: '$device at $size');
-        expect(
-          tester
-              .widget<FoldableScaffoldScope>(find.byType(FoldableScaffoldScope))
-              .canSplit,
-          split,
-          reason: '$device at $size',
-        );
+        expect(_layout(tester).canSplit, split, reason: '$device at $size');
         if (split) {
           // Both panes are usable, not squeezed to nothing.
           expect(_paneWidth(tester, 'body_builder'), greaterThanOrEqualTo(200));
@@ -743,9 +717,7 @@ void main() {
     bool isSplit(WidgetTester tester) =>
         _layout(tester).primaryVisible && _layout(tester).secondaryVisible;
 
-    bool canSplit(WidgetTester tester) => tester
-        .widget<FoldableScaffoldScope>(find.byType(FoldableScaffoldScope))
-        .canSplit;
+    bool canSplit(WidgetTester tester) => _layout(tester).canSplit;
 
     testWidgets('a hinge puts one pane on each screen, on a narrow window', (
       tester,

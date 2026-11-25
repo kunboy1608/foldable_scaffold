@@ -15,6 +15,11 @@ dependencies:
     sdk: flutter
   foldable_router:
     path: ../
+  # Prototype-only: this example app is allowed to depend on foldable_scaffold
+  # to prove the router's pane frames can be hosted in a real FoldableScaffold.
+  # The foldable_router *package* still does not depend on it.
+  foldable_scaffold:
+    path: ../../foldable_scaffold
 
 dev_dependencies:
   flutter_test:
