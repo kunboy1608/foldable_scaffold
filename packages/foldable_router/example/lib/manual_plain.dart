@@ -7,7 +7,7 @@
 //
 // Run with: tool/manual_test.sh plain-android
 // The steps are in MANUAL_TESTS.md.
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 
 /// Counts the pages on the navigator, so the status bar can show it.
 class _DepthObserver extends NavigatorObserver {

@@ -2,7 +2,8 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
+import 'package:foldable_core/foldable_core.dart';
 
 import 'foldable_panes.dart';
 import 'foldable_route.dart';
@@ -137,6 +138,7 @@ class _Shell {
       heroControllers = List.generate(branches.length, (_) => HeroController()),
       topRoutes = List.generate(branches.length, (_) => _TopRouteTracker()),
       panes = List.generate(branches.length, (i) => PaneMetrics(i)),
+      transitions = ValueNotifier<bool>(false),
       gestureGates = List.generate(
         branches.length,
         (_) => ValueNotifier<bool>(false),
@@ -158,6 +160,14 @@ class _Shell {
 
   /// The page layout metrics of each branch, index-aligned with [branches].
   final List<PaneMetrics> panes;
+
+  /// Whether a page transition is running on any branch.
+  ///
+  /// Provided to the layout of the tab (through
+  /// [FoldablePaneTransitionScope]) so a `FoldableScaffold` switches the
+  /// visible pane instantly instead of animating the pane resize on top of
+  /// the page slide.
+  final ValueNotifier<bool> transitions;
 
   /// Ancestors of the shell (its parent chain), bottom first: the pages of
   /// the root navigator that sit below the shell page.
@@ -224,6 +234,7 @@ class _Shell {
     for (final metrics in panes) {
       metrics.dispose();
     }
+    transitions.dispose();
   }
 
   bool _disposed = false;
@@ -245,6 +256,7 @@ class _BranchPage extends Page<Object?> {
     required this.popGate,
     required this.contentBuilder,
     required this.pageTransitionsResolver,
+    required this.onTransitionStatus,
   }) : super(key: entry.key, name: entry.route.uri.toString());
 
   final _Entry entry;
@@ -253,9 +265,16 @@ class _BranchPage extends Page<Object?> {
   final WidgetBuilder contentBuilder;
   final FoldablePageTransitionsResolver pageTransitionsResolver;
 
+  /// Gọi khi route này bắt đầu hoặc kết thúc enter/exit transition:
+  /// shell dùng để công bố `FoldablePaneTransitionScope`.
+  final VoidCallback onTransitionStatus;
+
   @override
   Route<Object?> createRoute(BuildContext context) {
-    final _BranchPageRoute<Object?> route = _BranchPageRoute<Object?>(this);
+    final _BranchPageRoute<Object?> route = _BranchPageRoute<Object?>(
+      this,
+      onTransitionStatus: onTransitionStatus,
+    );
     entry
       ..navigatorRoute = route
       ..popped = route.popped;
@@ -265,7 +284,8 @@ class _BranchPage extends Page<Object?> {
 
 /// The route of a [_BranchPage].
 class _BranchPageRoute<T> extends PageRoute<T> with FoldablePageRouteMixin<T> {
-  _BranchPageRoute(this.page) : super(settings: page);
+  _BranchPageRoute(this.page, {required this.onTransitionStatus})
+    : super(settings: page);
 
   @override
   FoldablePageTransitionsResolver get pageTransitionsResolver =>
@@ -273,10 +293,44 @@ class _BranchPageRoute<T> extends PageRoute<T> with FoldablePageRouteMixin<T> {
 
   final _BranchPage page;
 
+  /// Gọi khi route này bắt đầu/kết thúc transition: shell dùng để công bố
+  /// `FoldablePaneTransitionScope`.
+  final VoidCallback onTransitionStatus;
+
   @override
   final bool maintainState = true;
 
+  /// Whether this page is running its enter or reverse transition.
+  bool _isTransitioning = false;
+
+  /// Whether this page is running its enter or reverse transition.
+  bool get isTransitioning => _isTransitioning;
+
   PaneMetrics get _metrics => page.metrics;
+
+  @override
+  TickerFuture didPush() {
+    animation?.addStatusListener(_onAnimationStatus);
+    return super.didPush();
+  }
+
+  void _onAnimationStatus(AnimationStatus status) {
+    final bool now =
+        status == AnimationStatus.forward || status == AnimationStatus.reverse;
+    if (now == _isTransitioning) return;
+    _isTransitioning = now;
+    // Để layout của tab (qua FoldablePaneTransitionScope) phản ứng sau khung
+    // này thay vì giữa lúc overlay đang cập nhật.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      onTransitionStatus.call();
+    });
+  }
+
+  @override
+  void dispose() {
+    animation?.removeStatusListener(_onAnimationStatus);
+    super.dispose();
+  }
 
   /// In a one-pane tab this is `true`, like [MaterialPageRoute]: the page
   /// below is not painted once the top page settled, and it is painted (with
@@ -356,7 +410,7 @@ class _BranchPageRoute<T> extends PageRoute<T> with FoldablePageRouteMixin<T> {
         return PaneSlot(
           metrics: _metrics,
           entry: page.entry,
-          clip: twoPane,
+          clip: _metrics.frameMode,
           child: transitioned,
         );
       },
@@ -1364,6 +1418,7 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
                       popGate: shell.gestureGates[i],
                       contentBuilder: entry.route.build,
                       pageTransitionsResolver: _transitions,
+                      onTransitionStatus: () => _refreshTransitions(shell),
                     ),
                 ],
                 onDidRemovePage: (Page<Object?> page) =>
@@ -1374,20 +1429,26 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
         ),
       );
     }
-    return shell.route.buildShell(
-      context,
-      FoldableShellState(
-        child: BranchArea(
-          route: shell.route,
-          metrics: shell.panes[shell.current],
-          stackLength: shell.branchStacks[shell.current]?.length ?? 0,
-          onBuilt: (FoldablePanes panes, bool twoPane) =>
-              _onAreaBuilt(shell, panes, twoPane),
-          child: Stack(fit: StackFit.expand, children: children),
-        ),
-        currentIndex: shell.current,
-        goBranch: goBranch,
-      ),
+    final BranchArea area = BranchArea(
+      route: shell.route,
+      metrics: shell.panes[shell.current],
+      stackLength: shell.branchStacks[shell.current]?.length ?? 0,
+      onBuilt: (FoldablePanes panes, bool hasLayout) =>
+          _onAreaBuilt(shell, panes, hasLayout),
+      child: Stack(fit: StackFit.expand, children: children),
+    );
+    final FoldableShellState state = FoldableShellState(
+      child: area,
+      currentIndex: shell.current,
+      goBranch: goBranch,
+    );
+    // [BranchArea] là con trực tiếp của [FoldableShellState.child], nên
+    // trạng thái shell chỉ gán được khi state đã tồn tại; layout đọc state
+    // qua `FoldablePanes.shell` khi buildPanes chạy.
+    area.shell = state;
+    return FoldablePaneTransitionScope(
+      transition: shell.transitions,
+      child: shell.route.buildShell(context, state),
     );
   }
 
@@ -1399,11 +1460,20 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
   /// the tab area (marking them dirty is allowed while it builds). The routes
   /// of the branch also sync their opacity/barrier, which live in the
   /// navigator of the branch, a descendant as well.
-  void _onAreaBuilt(_Shell shell, FoldablePanes panes, bool twoPane) {
+  void _onAreaBuilt(_Shell shell, FoldablePanes panes, bool hasLayout) {
     final PaneMetrics metrics = shell.panes[panes.branchIndex];
+    metrics.frameMode = hasLayout;
+    // Nếu tab không còn layout bên trong (`null` từ buildPanes), xóa thông
+    // tin pane cũ trước khi các frame của khung này republish lại (hoặc
+    // không).
+    metrics.resetScaffoldSignals();
     metrics
       ..hasSecondary = panes.hasSecondary
       ..stackLength = shell.branchStacks[panes.branchIndex]?.length ?? 0;
+    final PaneSignals signals = metrics.signals.value;
+    final bool twoPane = signals.hasScaffold
+        ? signals.primaryVisible && signals.secondaryVisible
+        : hasLayout;
     if (metrics.twoPane.value != twoPane) {
       metrics.twoPane.value = twoPane;
       _syncBranchRoutes(shell, panes.branchIndex);
@@ -1516,6 +1586,29 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
       final Route<Object?>? route = entry.navigatorRoute;
       if (route is _BranchPageRoute<Object?>) route.syncPaneMode();
     }
+    // Một trang bắt đầu/kết thúc transition cũng được công bố qua
+    // [onTransitionStatus] của [_BranchPage]; gọi lại đây cho chắc giá trị
+    // không bị l saturated khi shell thay đổi branch.
+    _refreshTransitions(shell);
+  }
+
+  /// Recomputes whether a page transition is running on any branch and
+  /// publishes it to the layout of the tab through
+  /// [FoldablePaneTransitionScope].
+  void _refreshTransitions(_Shell shell) {
+    var running = false;
+    for (final stack in shell.branchStacks) {
+      if (stack == null) continue;
+      for (final entry in stack) {
+        final route = entry.navigatorRoute;
+        if (route is _BranchPageRoute<Object?> && route.isTransitioning) {
+          running = true;
+          break;
+        }
+      }
+      if (running) break;
+    }
+    if (shell.transitions.value != running) shell.transitions.value = running;
   }
 
   /// The back arrow of the *left* pane in a two-pane tab: pops the page drawn

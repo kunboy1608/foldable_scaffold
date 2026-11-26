@@ -3,7 +3,7 @@ import 'dart:ui'
 
 import 'package:flutter/widgets.dart' show Axis, EdgeInsets, TextDirection;
 import 'package:flutter_test/flutter_test.dart';
-import 'package:foldable_scaffold/src/foldable_breakpoints.dart';
+import 'package:foldable_core/foldable_core.dart';
 import 'package:foldable_scaffold/src/foldable_navigation.dart';
 import 'package:foldable_scaffold/src/foldable_scaffold_layout.dart';
 

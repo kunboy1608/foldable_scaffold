@@ -450,6 +450,68 @@ Display rules, for the stack of the tab currently shown:
   hits and semantics. In a settled one-pane tab, the page below the top is
   out of the screen and of the semantics, as with `MaterialPageRoute`.
 
+## Using with `foldable_scaffold`
+
+`foldable_router` decides the panes; `foldable_scaffold` draws them — with
+chrome (app bar, navigation bar/rail, divider, fold). Put the scaffold inside
+`buildPanes` of the shell, and let `buildShell` return only a thin frame
+(`Material(child: shell.child)`):
+
+```dart
+class MailShellRoute extends FoldableShellRoute {
+  const MailShellRoute();
+
+  @override
+  List<FoldableShellChildRoute> get branches =>
+      const [InboxRoute(), SentRoute(), DraftsRoute()];
+
+  @override
+  Widget buildShell(BuildContext context, FoldableShellState shell) =>
+      Material(child: shell.child);
+
+  @override
+  Widget? buildPanes(BuildContext context, FoldablePanes panes) =>
+      FoldableScaffold(
+        appBar: AppBar(title: Text('Tab ${shell.currentIndex}')),
+        navigationBuilder: (context, placement, constraints, padding) =>
+            placement.isSide
+                ? NavigationRail(
+                    selectedIndex: shell.currentIndex,
+                    onDestinationSelected: shell.goBranch,
+                    destinations: const [
+                      NavigationRailDestination(
+                        icon: Icon(Icons.mail_outline),
+                        selectedIcon: Icon(Icons.mail),
+                        label: Text('Inbox'),
+                      ),
+                    ],
+                  )
+                : NavigationBar(
+                    selectedIndex: shell.currentIndex,
+                    onDestinationSelected: shell.goBranch,
+                    destinations: const [
+                      NavigationDestination(
+                        icon: Icon(Icons.mail_outline),
+                        selectedIcon: Icon(Icons.mail),
+                        label: 'Inbox',
+                      ),
+                    ],
+                  ),
+        body: panes.primary,
+        secondaryBody:
+            panes.hasSecondary ? panes.secondary : const Center(child: Text('')),
+      );
+```
+
+The router then reads `FoldablePaneLayout` and `FoldableScaffoldScope`
+(provided by the scaffold through `foldable_core`) to know whether one or two
+panes are on screen and to slot each page into its frame's rectangle — no code
+in the pages themselves knows about panes.
+
+See [`example/lib/with_scaffold.dart`](example/lib/with_scaffold.dart) for a
+complete, runnable sample (three tabs, one pane on a phone, two panes on a
+tablet, plus a full-screen page pushed above the shell).
+
 ## `material_ui` vs `flutter/material.dart`
 
 In Flutter 3.47+ `package:material_ui/material_ui.dart` and the SDK's

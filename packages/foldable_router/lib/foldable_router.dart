@@ -25,3 +25,4 @@ export 'src/redirect_resolver.dart'
         RedirectLoopException,
         RedirectLimitException;
 export 'src/route_state.dart' show RouteState;
+export 'package:foldable_core/foldable_core.dart';

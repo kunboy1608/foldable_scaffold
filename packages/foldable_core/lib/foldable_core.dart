@@ -1,6 +1,9 @@
-/// Shared signals between `foldable_scaffold` and `foldable_router`.
+/// Shared signals and layout rules between `foldable_scaffold` and
+/// `foldable_router`.
 library;
 
+export 'src/foldable_breakpoints.dart';
+export 'src/foldable_fold.dart';
 export 'src/foldable_motion.dart';
 export 'src/foldable_pane_layout.dart';
 export 'src/foldable_pane_transition.dart';

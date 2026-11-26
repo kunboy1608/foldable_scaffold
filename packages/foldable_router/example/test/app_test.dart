@@ -423,9 +423,7 @@ void main() {
   // real pixels. Run on both platforms, whose transitions differ.
   // -------------------------------------------------------------------------
 
-  pixelTest('T1 re-opening the visible user changes no pixel', (
-    tester,
-  ) async {
+  pixelTest('T1 re-opening the visible user changes no pixel', (tester) async {
     setSize(tester, 1400, 900);
     final router = await pumpApp(tester);
     await tester.pumpAndSettle();
@@ -475,50 +473,49 @@ void main() {
     );
   });
 
-  pixelTest(
-    'T3 replacing the right user never draws outside the right pane',
-    (tester) async {
-      setSize(tester, 1400, 900);
-      var router = await pumpApp(tester);
-      await tester.pumpAndSettle();
-      await router.open(const UserRoute(id: '42'));
-      await tester.pumpAndSettle();
-      final Screenshot direct = await capture(tester);
+  pixelTest('T3 replacing the right user never draws outside the right pane', (
+    tester,
+  ) async {
+    setSize(tester, 1400, 900);
+    var router = await pumpApp(tester);
+    await tester.pumpAndSettle();
+    await router.open(const UserRoute(id: '42'));
+    await tester.pumpAndSettle();
+    final Screenshot direct = await capture(tester);
 
-      // [Users, User1] -> open(User42): watch every frame of the transition.
-      router = await pumpApp(tester);
-      await tester.pumpAndSettle();
-      await router.open(const UserRoute(id: '1'));
-      await tester.pumpAndSettle();
+    // [Users, User1] -> open(User42): watch every frame of the transition.
+    router = await pumpApp(tester);
+    await tester.pumpAndSettle();
+    await router.open(const UserRoute(id: '1'));
+    await tester.pumpAndSettle();
 
-      // The rectangle of the right pane (where the replaced page is drawn) and
-      // of the three list rows. The example tints the selected row, which is
-      // legitimate app chrome; every other pixel outside the right pane —
-      // app bar, list text and icons, the divider between the panes, the
-      // empty space below the rows — must stay identical to the settled image.
-      final Rect right = tester.getRect(find.byType(UserPage));
-      final Finder rows = find.byType(ListTile);
-      final List<Rect> rowRects = <Rect>[
-        for (var i = 0; i < rows.evaluate().length; i++)
-          tester.getRect(rows.at(i)),
-      ];
+    // The rectangle of the right pane (where the replaced page is drawn) and
+    // of the three list rows. The example tints the selected row, which is
+    // legitimate app chrome; every other pixel outside the right pane —
+    // app bar, list text and icons, the divider between the panes, the
+    // empty space below the rows — must stay identical to the settled image.
+    final Rect right = tester.getRect(find.byType(UserPage));
+    final Finder rows = find.byType(ListTile);
+    final List<Rect> rowRects = <Rect>[
+      for (var i = 0; i < rows.evaluate().length; i++)
+        tester.getRect(rows.at(i)),
+    ];
 
-      await router.open(const UserRoute(id: '42'));
-      await tester.pump();
-      final List<Screenshot> frames = <Screenshot>[await capture(tester)];
-      while (tester.binding.hasScheduledFrame && frames.length < 40) {
-        await tester.pump(const Duration(milliseconds: 16));
-        frames.add(await capture(tester));
-      }
-      await tester.pumpAndSettle();
+    await router.open(const UserRoute(id: '42'));
+    await tester.pump();
+    final List<Screenshot> frames = <Screenshot>[await capture(tester)];
+    while (tester.binding.hasScheduledFrame && frames.length < 40) {
+      await tester.pump(const Duration(milliseconds: 16));
+      frames.add(await capture(tester));
+    }
+    await tester.pumpAndSettle();
 
-      for (var i = 0; i < frames.length; i++) {
-        expect(
-          diffOutsideExcept(frames[i], direct, pane: right, except: rowRects),
-          0,
-          reason: 'a page was drawn outside the right pane in frame $i',
-        );
-      }
-    },
-  );
+    for (var i = 0; i < frames.length; i++) {
+      expect(
+        diffOutsideExcept(frames[i], direct, pane: right, except: rowRects),
+        0,
+        reason: 'a page was drawn outside the right pane in frame $i',
+      );
+    }
+  });
 }

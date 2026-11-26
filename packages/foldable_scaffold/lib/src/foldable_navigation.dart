@@ -1,7 +1,5 @@
+import 'package:foldable_core/foldable_core.dart';
 import 'package:flutter/widgets.dart';
-
-import 'foldable_breakpoints.dart';
-import 'foldable_fold.dart';
 
 /// The edge of the scaffold where the navigation is placed.
 ///

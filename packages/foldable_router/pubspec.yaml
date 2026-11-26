@@ -1,7 +1,7 @@
 name: foldable_router
 resolution: workspace
 description: "A Navigation 2.0 router where routes are plain Dart classes with query-string parameters, parent chains and async redirects."
-version: 0.2.0-dev.1
+version: 0.2.0-dev.2
 homepage:
 
 environment:
@@ -11,6 +11,8 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  foldable_core: ^0.1.0-dev.2
+  material_ui: ^1.1.0
 
 dev_dependencies:
   flutter_test:

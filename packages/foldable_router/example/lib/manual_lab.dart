@@ -6,7 +6,7 @@
 // The steps are in MANUAL_TESTS.md.
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 import 'package:foldable_router/foldable_router.dart';
 

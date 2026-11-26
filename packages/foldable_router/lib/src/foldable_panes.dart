@@ -4,6 +4,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter/widgets.dart';
 
+import 'package:foldable_core/foldable_core.dart';
+
 import 'foldable_route.dart';
 
 /// Which pane of a two-pane tab the calling page is shown in.
@@ -81,7 +83,8 @@ class FoldablePanes {
     required this.branchIndex,
     required this.constraints,
     required this.hasSecondary,
-    required this._metrics,
+    required this.metrics,
+    required this.shell,
   });
 
   /// Index, in [FoldableShellRoute.branches], of the tab these panes are for.
@@ -101,19 +104,25 @@ class FoldablePanes {
   /// reports with a [FlutterError] in debug builds.
   final bool hasSecondary;
 
-  final PaneMetrics _metrics;
+  /// The mutable layout state of the tab.
+  final PaneMetrics metrics;
+
+  /// Trạng thái shell chứa panes này, có sẵn `currentIndex`/`goBranch` để
+  /// layout được trả về từ `buildPanes` (ví dụ `FoldableScaffold`) có thể
+  /// dựng navigation theo chi nhánh hiện tại.
+  final FoldableShellState shell;
 
   /// The frame of the left pane. Must be placed by the app.
   ///
   /// See the class documentation for what a frame is (and is not).
   late final Widget primary = PaneFrame(
-    metrics: _metrics,
+    metrics: metrics,
     pane: FoldablePane.primary,
   );
 
   /// The frame of the right pane, required when [hasSecondary] is `true`.
   late final Widget secondary = PaneFrame(
-    metrics: _metrics,
+    metrics: metrics,
     pane: FoldablePane.secondary,
   );
 }
@@ -137,6 +146,27 @@ class PaneMetrics {
   /// [FoldableShellRoute.buildPanes] (before the pages rebuild in the same
   /// frame), after the panes and before the pages.
   final ValueNotifier<bool> twoPane = ValueNotifier<bool>(false);
+
+  /// Trang sẽ luôn được đặt vào hình chữ nhật của frame, bất kể stack có
+  /// bao nhiêu trang: true khi `buildPanes` trả về một layout (ví dụ
+  /// `FoldableScaffold`), false khi `buildPanes` trả về `null` (stack cổ
+  /// điển, trang lấp đầy vùng tab).
+  bool frameMode = false;
+
+  /// Thông tin bố cục pane do layout bên trong tab gửi về
+  /// (`FoldableScaffold` khi dùng), hoặc `PaneSignals.none` khi tab không
+  /// có layout bên trong. Router đọc thông tin này để đồng bộ `twoPane`
+  /// (hai pane chỉ khi cả hai đều hiển thị), trọng số trang và để trang
+  /// đọc được MediaQuery của pane.
+  final ValueNotifier<PaneSignals> signals = ValueNotifier<PaneSignals>(
+    PaneSignals.none,
+  );
+
+  /// Thông tin pane đang chờ áp dụng sau khung hiện tại (xem
+  /// [publishScaffold]).
+  PaneSignals? _pendingSignals;
+  bool _signalsPending = false;
+  bool _disposed = false;
 
   /// Whether the stack of the tab has at least two pages, as of the last
   /// time the panes were built.
@@ -224,14 +254,140 @@ class PaneMetrics {
       // after this call, in the same pass.
       return;
     }
-    _markSlotsNeedingLayout();
+    _scheduleSlotsRelayout();
+  }
+
+  /// Whether a post-frame relayout of the slots is already scheduled.
+  bool _slotsPending = false;
+
+  /// Đánh thức các slot trên hình chữ nhật mới sau khung hiện tại.
+  ///
+  /// Không đánh thức ngay: [publish] có thể chạy giữa lượt layout của một
+  /// nút render khác (frame tự layout khi vùng tab không chạy), và gọi
+  /// `markNeedsLayout` trên một slot nằm ngoài cây đang layout là lỗi.
+  void _scheduleSlotsRelayout() {
+    if (_slotsPending || _disposed) return;
+    _slotsPending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _slotsPending = false;
+      if (!_disposed) _markSlotsNeedingLayout();
+    });
   }
 
   /// Releases the observables of these metrics.
   void dispose() {
     twoPane.dispose();
+    signals.dispose();
     _area = null;
+    _disposed = true;
   }
+
+  /// Ghi nhận thông tin pane từ một frame vừa build.
+  ///
+  /// Không làm gì khi thông tin không đổi. Thông tin được áp dụng (và các
+  /// trang được xếp lại) sau khung hiện tại, tránh đánh thức widget giữa lúc
+  /// build/layout đang chạy.
+  void publishScaffold(PaneSignals value) {
+    final PaneSignals old = signals.value;
+    if (identical(old, value)) return;
+    final bool changed =
+        old.hasScaffold != value.hasScaffold ||
+        old.primaryVisible != value.primaryVisible ||
+        old.secondaryVisible != value.secondaryVisible ||
+        old.axis != value.axis ||
+        old.canSplit != value.canSplit ||
+        old.primaryMedia != value.primaryMedia ||
+        old.secondaryMedia != value.secondaryMedia;
+    if (!changed) return;
+    if (_disposed) return;
+    _pendingSignals = value;
+    if (_signalsPending) return;
+    _signalsPending = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _signalsPending = false;
+      if (_disposed) return;
+      signals.value = _pendingSignals!;
+      // Một pane đổi trạng thái hiển thị: xếp lại trang trên hình chữ nhật
+      // mới ngay trong khung sau.
+      _markSlotsNeedingLayout();
+    });
+  }
+
+  /// Xóa thông tin pane khi tab không còn layout bên trong (`null` từ
+  /// `buildPanes`).
+  void resetScaffoldSignals() => publishScaffold(PaneSignals.none);
+}
+
+/// Thông tin bố cục pane do layout bên trong tab gửi về, và qua đó router
+/// biết khi nào một hoặc hai pane đang thực sự hiển thị.
+///
+/// Được tạo bởi các frame ([PaneFrame]) từ `FoldablePaneLayout` và
+/// `FoldableScaffoldScope` (trong `foldable_core`) mà `FoldableScaffold`
+/// cung cấp quanh các pane của nó. Khi tab không dùng một layout có khai báo
+/// (một `Row` tự viết, hay `null`), [none] được dùng và router chạy theo quy
+/// tắc cổ điển (hai pane khi `buildPanes` trả về layout).
+@immutable
+class PaneSignals {
+  const PaneSignals._({
+    required this.hasScaffold,
+    required this.primaryVisible,
+    required this.secondaryVisible,
+    required this.axis,
+    required this.canSplit,
+    this.primaryMedia,
+    this.secondaryMedia,
+  });
+
+  /// Layout bên trong không khai báo pane (không có `FoldableScaffold`).
+  static const PaneSignals none = PaneSignals._(
+    hasScaffold: false,
+    primaryVisible: true,
+    secondaryVisible: false,
+    axis: Axis.horizontal,
+    canSplit: false,
+  );
+
+  /// Tạo thông tin từ một layout có khai báo pane.
+  factory PaneSignals.fromScaffold({
+    required bool primaryVisible,
+    required bool secondaryVisible,
+    required Axis axis,
+    required bool canSplit,
+    required MediaQueryData? primaryMedia,
+    required MediaQueryData? secondaryMedia,
+  }) {
+    return PaneSignals._(
+      hasScaffold: true,
+      primaryVisible: primaryVisible,
+      secondaryVisible: secondaryVisible,
+      axis: axis,
+      canSplit: canSplit,
+      primaryMedia: primaryMedia,
+      secondaryMedia: secondaryMedia,
+    );
+  }
+
+  /// Whether the layout declared its panes (`FoldableScaffold` above the
+  /// frames).
+  final bool hasScaffold;
+
+  /// Whether the body pane is shown.
+  final bool primaryVisible;
+
+  /// Whether the secondary body pane is shown.
+  final bool secondaryVisible;
+
+  /// The axis the panes are laid out along.
+  final Axis axis;
+
+  /// Whether the layout may split into two panes.
+  final bool canSplit;
+
+  /// The MediaQuery the layout gives the body pane, if any.
+  final MediaQueryData? primaryMedia;
+
+  /// The MediaQuery the layout gives the secondary body pane, if any.
+  final MediaQueryData? secondaryMedia;
 }
 
 /// What a page slot needs to know about the page it draws.
@@ -303,9 +459,10 @@ class PaneEpoch extends InheritedWidget {
 /// branches. [_PaneArea] lays the panes out first, reads the frames'
 /// rectangles, and only then lays the pages out on them — so a page is never
 /// positioned on a placeholder rectangle, not even for one frame.
+// ignore: must_be_immutable
 class BranchArea extends StatefulWidget {
   /// Creates the tab area.
-  const BranchArea({
+  BranchArea({
     super.key,
     required this.route,
     required this.metrics,
@@ -323,12 +480,20 @@ class BranchArea extends StatefulWidget {
   /// Length of the stack of the current branch.
   final int stackLength;
 
+  /// Trạng thái shell chứa tab này, có sẵn cho layout qua
+  /// `FoldablePanes.shell`. Do [BranchArea] là con trực tiếp của
+  /// [FoldableShellState.child], không thể tham chiếu state trong initializer
+  /// list, nên gán sau khi state được tạo.
+  // ignore: must_be_immutable
+  FoldableShellState? shell;
+
   /// The navigators of the branches (the pages are drawn above the panes).
   final Widget child;
 
   /// Called during the build with the panes of the tab and whether the shell
-  /// returned two panes.
-  final void Function(FoldablePanes panes, bool twoPane) onBuilt;
+  /// returned a layout (`true` means pages will be slotted into frames,
+  /// `false` means the classic full-screen stack).
+  final void Function(FoldablePanes panes, bool hasLayout) onBuilt;
 
   @override
   State<BranchArea> createState() => _BranchAreaState();
@@ -349,6 +514,7 @@ class _BranchAreaState extends State<BranchArea> {
           constraints: constraints,
           hasSecondary: widget.stackLength >= 2,
           metrics: widget.metrics,
+          shell: widget.shell!,
         );
         final Widget? layout = widget.route.buildPanes(context, panes);
         widget.onBuilt(panes, layout != null);
@@ -540,33 +706,57 @@ class PaneFrame extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     context.dependOnInheritedWidgetOfExactType<PaneEpoch>();
-    return _RawPaneFrame(metrics: metrics, pane: pane);
+    // Thông tin do layout bên trong tab khai báo (FoldableScaffold), nếu có:
+    // pane nào đang hiển thị, axis, và MediaQuery mà layout dành cho pane.
+    final FoldablePaneLayout? layout = FoldablePaneLayout.maybeOf(context);
+    final FoldableScaffoldScope? scope = FoldableScaffoldScope.maybeOf(context);
+    final MediaQueryData? media = MediaQuery.maybeOf(context);
+    final PaneSignals signals = layout == null
+        ? PaneSignals.none
+        : PaneSignals.fromScaffold(
+            primaryVisible: layout.primaryVisible,
+            secondaryVisible: layout.secondaryVisible,
+            axis: layout.axis,
+            canSplit: scope?.canSplit ?? false,
+            primaryMedia: pane == FoldablePane.primary ? media : null,
+            secondaryMedia: pane == FoldablePane.secondary ? media : null,
+          );
+    return _RawPaneFrame(metrics: metrics, pane: pane, signals: signals);
   }
 }
 
 class _RawPaneFrame extends LeafRenderObjectWidget {
-  const _RawPaneFrame({required this.metrics, required this.pane});
+  const _RawPaneFrame({
+    required this.metrics,
+    required this.pane,
+    required this.signals,
+  });
 
   final PaneMetrics metrics;
   final FoldablePane pane;
+  final PaneSignals signals;
 
   @override
   RenderObject createRenderObject(BuildContext context) =>
-      _RenderPaneFrame(metrics, pane);
+      _RenderPaneFrame(metrics, pane, signals);
 
   @override
   void updateRenderObject(BuildContext context, _RenderPaneFrame renderObject) {
     renderObject.updateMetrics(metrics, pane);
+    // Công bố thông tin pane (visible, axis, media) cho router ngay khi
+    // widget build, trước khi layout chạy, để trang biết ngay pane của mình.
+    renderObject.metrics.publishScaffold(signals);
     // The area was rebuilt: measure again, even if the widget is unchanged.
     renderObject.markNeedsLayout();
   }
 }
 
 class _RenderPaneFrame extends RenderBox {
-  _RenderPaneFrame(this.metrics, this.pane);
+  _RenderPaneFrame(this.metrics, this.pane, this.signals);
 
   PaneMetrics metrics;
   FoldablePane pane;
+  PaneSignals signals;
 
   /// Points this frame at [value], moving its frame-count registration.
   ///
@@ -737,6 +927,7 @@ class PanePageView extends StatelessWidget {
         listenable: Listenable.merge(<Listenable>[
           entry.position,
           metrics.twoPane,
+          metrics.signals,
         ]),
         child: content,
         builder: (BuildContext context, Widget? content) {
@@ -757,7 +948,7 @@ class PanePageView extends StatelessWidget {
                   // Heroes only fly in one-pane tabs; in a two-pane tab the
                   // page below stays visible, so a flight would double it.
                   enabled: !twoPane,
-                  child: content!,
+                  child: _wrapPaneEnvironment(context, content!),
                 ),
               ),
             ),
@@ -765,6 +956,29 @@ class PanePageView extends StatelessWidget {
         },
       ),
     );
+  }
+
+  /// Bọc nội dung trang bằng môi trường của pane mà trang đang nằm trong:
+  /// MediaQuery mà layout (ví dụ `FoldableScaffold`) dành cho pane, và các
+  /// scope `FoldablePaneLayout`/`FoldableScaffoldScope` để chính trang đọc
+  /// được pane nào đang hiện, axis và `canSplit`.
+  Widget _wrapPaneEnvironment(BuildContext context, Widget child) {
+    final PaneSignals signals = metrics.signals.value;
+    if (!signals.hasScaffold) return child;
+    final MediaQueryData? media = switch (entry.pane.value) {
+      FoldablePane.primary => signals.primaryMedia,
+      FoldablePane.secondary => signals.secondaryMedia,
+      FoldablePane.single => signals.primaryMedia ?? signals.secondaryMedia,
+    };
+    Widget page = child;
+    if (media != null) page = MediaQuery(data: media, child: page);
+    page = FoldablePaneLayout(
+      primaryVisible: signals.primaryVisible,
+      secondaryVisible: signals.secondaryVisible,
+      axis: signals.axis,
+      child: page,
+    );
+    return FoldableScaffoldScope(canSplit: signals.canSplit, child: page);
   }
 
   static void _clearPointer(PaneMetrics metrics) {

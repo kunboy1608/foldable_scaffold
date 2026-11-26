@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:foldable_router/foldable_router.dart';
 
 import 'pages/account_pages.dart';

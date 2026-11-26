@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:material_ui/material_ui.dart';
 import 'package:foldable_router/foldable_router.dart';
 
 /// How the status bar names a route on the stack: the shell has no URL of

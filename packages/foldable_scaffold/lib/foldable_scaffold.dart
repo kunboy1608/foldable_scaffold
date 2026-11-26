@@ -3,8 +3,6 @@ library;
 
 export 'package:foldable_core/foldable_core.dart';
 
-export 'src/foldable_breakpoints.dart';
-export 'src/foldable_fold.dart';
 export 'src/foldable_navigation.dart';
 export 'src/foldable_platform_scope.dart' show FoldablePlatformScope;
 export 'src/foldable_platform_source.dart';

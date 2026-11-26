@@ -61,7 +61,11 @@ class RedirectResolver {
   static List<FoldableRoute> chainOf(FoldableRoute route) {
     final chain = <FoldableRoute>[];
     for (FoldableRoute? r = route; r != null; r = r.parent) {
-      if (chain.contains(r)) {
+      // Dùng danh tính: cùng một đối tượng không thể xuất hiện hai lần trong
+      // chuỗi cha thực. So sánh theo giá trị (`==` so sánh `fullPath`) sẽ
+      // giả phát chu kỳ khi shell và nhánh gốc của nó cùng path (ví dụ cả hai
+      // là '/').
+      if (chain.any((e) => identical(e, r))) {
         throw StateError('Cycle in the parent chain of $route at $r');
       }
       chain.add(r);

@@ -8,8 +8,6 @@ import 'package:flutter/rendering.dart'
 import 'package:foldable_core/foldable_core.dart';
 import 'package:material_ui/material_ui.dart';
 
-import 'foldable_breakpoints.dart';
-import 'foldable_fold.dart';
 import 'foldable_navigation.dart';
 import 'foldable_scaffold_controller.dart';
 import 'foldable_scaffold_divider.dart';

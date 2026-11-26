@@ -1,3 +1,41 @@
+## 0.2.0-dev.2
+
+New:
+
+* Depends on `foldable_core` and `material_ui`: `FoldableBreakpoints` and
+  `FoldableFold` live in `foldable_core` now (both packages still re-export
+  them), and the router builds on `material_ui` instead of the SDK's
+  `package:flutter/material.dart`.
+* `FoldablePanes.shell`: the state of the shell holding the panes, so a
+  layout returned by `FoldableShellRoute.buildPanes` (typically a
+  `FoldableScaffold`) can read `currentIndex`/`goBranch` and build its
+  chrome from the tab that is showing.
+* `PaneMetrics.signals` (`PaneSignals`): what a frame inside a tab reports
+  back — whether `primary`/`secondary` are visible, the axis, `canSplit` and
+  the pane's `MediaQuery`. The router turns it into `twoPane`
+  (both panes visible), syncs each page route's opacity/barrier, and hands
+  the media back to pages through `FoldablePaneLayout` /
+  `FoldableScaffoldScope`.
+* `FoldablePaneTransitionScope` around the shell body: announces whether a
+  page transition is running (`PaneMetrics.transitions`), so `FoldableScaffold`
+  can switch panes instantly instead of resizing them on top of a page slide.
+* `FoldableRouter.paneOf(context)`: `FoldablePane.single` / `primary` /
+  `secondary` of the calling page, rebuilt when it changes.
+* `FoldableRouter.close(context)`: closes the calling page and every page
+  above it, in one stack update, in one-pane and two-pane tabs alike.
+
+Changed (behaviour, breaking in the pre-release):
+
+* The cycle check of parent chains compares route identity, not value:
+  `chainOf` no longer false-positives when a shell and its first branch
+  happen to have the same path (`'/'`).
+
+Deprecated:
+
+* `PaneMetrics._metrics`, `_area`, `stackLength`, `hasSecondary` are
+  internal now; use `metrics`, `publishScaffold`/`resetScaffoldSignals`,
+  `twoPane` and `signals` instead.
+
 ## 0.0.1
 
 * **Breaking:** `FoldableRoute.path` is replaced by `segment`: the part of the

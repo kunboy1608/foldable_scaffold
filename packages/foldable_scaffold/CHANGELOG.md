@@ -1,3 +1,21 @@
+## 0.1.0-dev.10
+
+Changed (behaviour, breaking in the pre-release):
+
+* `FoldableBreakpoints` and `FoldableFold` have moved to `foldable_core`.
+  `foldable_scaffold` still re-exports them (through `package:foldable_core`
+  and its own entry point), so imports keep working.
+* The whole package builds on `package:material_ui/material_ui.dart`; the
+  SDK's `package:flutter/material.dart` is no longer imported by the
+  library itself.
+
+New:
+
+* `example/lib/with_scaffold.dart` (`foldable_router`'s example): three tabs
+  in a shell, one pane on a phone, two panes on a tablet, chrome from
+  `FoldableScaffold`, and a full-screen page pushed above the shell — with
+  `test/with_scaffold_test.dart` covering both layouts.
+
 ## 0.1.0-dev.9
 
 Changed (behaviour, breaking in the pre-release):

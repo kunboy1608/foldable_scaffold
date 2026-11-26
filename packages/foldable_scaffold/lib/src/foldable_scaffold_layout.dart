@@ -1,10 +1,9 @@
 import 'dart:math' as math;
 import 'dart:ui' show DisplayFeature, DisplayFeatureType;
 
-import 'package:flutter/material.dart';
+import 'package:foldable_core/foldable_core.dart';
+import 'package:material_ui/material_ui.dart';
 
-import 'foldable_breakpoints.dart';
-import 'foldable_fold.dart';
 import 'foldable_navigation.dart';
 
 /// The result of the "outer frame" layout step: what the scaffold's width,

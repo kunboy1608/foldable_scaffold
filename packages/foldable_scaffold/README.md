@@ -1,7 +1,7 @@
 # foldable_scaffold
 
 > [!WARNING]
-> **Experimental.** This is a prerelease (`0.1.0-dev.9`). The API will change
+> **Experimental.** This is a prerelease (`0.1.0-dev.10`). The API will change
 > without notice and the package is not ready for production use.
 
 A [Scaffold](https://pub.dev/documentation/material_ui/latest/material_ui/Scaffold-class.html)
@@ -14,7 +14,7 @@ but a `FoldableScaffold` works on its own.
 ## Install
 
 ```sh
-flutter pub add foldable_scaffold:^0.1.0-dev.9
+flutter pub add foldable_scaffold:^0.1.0-dev.10
 ```
 
 ## Usage
@@ -93,8 +93,8 @@ While it has no width, though, nothing of it is seen or reachable: it does not
 take focus (Tab or a screen reader), it is left out of the semantics tree, it
 does not take pointer events, and its tickers (animations) are muted. This only
 kicks in once the pane has actually collapsed to zero width: a pane that is
-sliding in or out still has a non-zero width and stays fully live, so the page
-slides of `FoldableNavigator` are never cut short.
+sliding in or out still has a non-zero width and stays fully live, so a page
+switch in `foldable_router` is never cut short.
 
 ## Layout rules
 
@@ -399,9 +399,10 @@ breakpoints: const FoldableBreakpoints.handheld(split: 700),
   A pane that still ends up narrower than `minBodySize`, because the available
   width cannot hold two of them, collapses into the other one.
 * Switching the one visible pane is instant while `paneTransition` is true, so
-  a page slide does not run a pane resize on top of it.
-  `FoldablePaneTransitionScope` provides that signal automatically when a
-  `FoldableNavigator` builds the scaffold.
+  a page slide does not run a pane resize on top of it. The router package
+  (`foldable_router`) announces a running page transition through
+  `FoldablePaneTransitionScope`, and `FoldableScaffold` uses that signal
+  automatically.
 
 ## Insets
 
