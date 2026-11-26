@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:foldable_router/foldable_router.dart';
+import 'package:foldable_router_example/session.dart';
 import 'package:foldable_router_example/with_scaffold.dart';
 import 'package:foldable_scaffold/foldable_scaffold.dart';
 
@@ -58,6 +59,8 @@ FoldablePaneRects? _rectsOf(WidgetTester tester) {
 }
 
 void main() {
+  setUp(session.reset);
+
   testWidgets('narrow window: one pane, no secondary', (tester) async {
     await _pumpApp(tester, size: _narrow);
     expect(_rectsOf(tester)?.isSplit, isFalse);

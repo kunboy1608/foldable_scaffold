@@ -14,6 +14,11 @@ import 'rects_test_harness.dart';
 
 class PaneConfig {
   bool twoPane = false;
+  Axis axis = Axis.horizontal;
+  double? secondaryFraction = 0.6;
+  double? secondaryExtent;
+  double dividerExtent = 24;
+  Size? hostSize;
 }
 
 final PaneConfig paneConfig = PaneConfig();
@@ -31,8 +36,10 @@ class TwoPaneShell extends FoldableShellRoute {
   Widget buildShell(BuildContext context, FoldableShellState shell) => Scaffold(
     body: RectsTestHarness(
       enabled: paneConfig.twoPane,
-      dividerExtent: 24,
-      secondaryFraction: 0.6,
+      axis: paneConfig.axis,
+      dividerExtent: paneConfig.dividerExtent,
+      secondaryExtent: paneConfig.secondaryExtent,
+      secondaryFraction: paneConfig.secondaryFraction,
       emptySecondary: shell.hasSecondary
           ? null
           : const Center(
@@ -320,17 +327,22 @@ FoldableRouter createRouter() {
 
 Future<FoldableRouter> pumpApp(WidgetTester tester) async {
   final router = createRouter();
-  await tester.pumpWidget(
-    MaterialApp.router(routerConfig: router.routerConfig),
-  );
+  await rebuild(tester, router);
   await tester.pumpAndSettle();
   return router;
 }
 
 /// Rebuilds the app once so the area is rebuilt with the current mode.
 Future<void> rebuild(WidgetTester tester, FoldableRouter router) async {
+  final app = MaterialApp.router(routerConfig: router.routerConfig);
+  final size = paneConfig.hostSize;
   await tester.pumpWidget(
-    MaterialApp.router(routerConfig: router.routerConfig),
+    size == null
+        ? app
+        : Align(
+            alignment: Alignment.topLeft,
+            child: SizedBox(width: size.width, height: size.height, child: app),
+          ),
   );
 }
 
@@ -454,7 +466,13 @@ void androidTest(String description, WidgetTesterCallback callback) {
 
 void main() {
   setUp(() {
-    paneConfig.twoPane = false;
+    paneConfig
+      ..twoPane = false
+      ..axis = Axis.horizontal
+      ..secondaryFraction = 0.6
+      ..secondaryExtent = null
+      ..dividerExtent = 24
+      ..hostSize = null;
     _notifications = 0;
     guardedPops.clear();
     reportedHandlesBack.clear();
@@ -464,6 +482,89 @@ void main() {
   tearDown(() {
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
         .setMockMethodCallHandler(SystemChannels.platform, null);
+  });
+
+  group('a missing secondary rectangle is one pane', () {
+    for (final scenario
+        in <
+          ({
+            String name,
+            Axis axis,
+            double? fraction,
+            double? extent,
+            Size? size,
+            double divider,
+          })
+        >[
+          (
+            name: 'zero fraction',
+            axis: Axis.horizontal,
+            fraction: 0,
+            extent: null,
+            size: null,
+            divider: 24,
+          ),
+          (
+            name: 'zero extent',
+            axis: Axis.horizontal,
+            fraction: null,
+            extent: 0,
+            size: null,
+            divider: 24,
+          ),
+          (
+            // The divider alone fills the host: no room is left for a second
+            // pane, which is what a narrow window produces.
+            name: 'no room in a narrow host',
+            axis: Axis.horizontal,
+            fraction: 0.5,
+            extent: null,
+            size: const Size(360, 600),
+            divider: 360,
+          ),
+          (
+            name: 'stacked zero secondary',
+            axis: Axis.vertical,
+            fraction: 0,
+            extent: null,
+            size: null,
+            divider: 24,
+          ),
+        ]) {
+      testWidgets('${scenario.name}: the top page fills the primary pane and '
+          'Hero flies', (tester) async {
+        paneConfig
+          ..twoPane = true
+          ..axis = scenario.axis
+          ..secondaryFraction = scenario.fraction
+          ..secondaryExtent = scenario.extent
+          ..dividerExtent = scenario.divider
+          ..hostSize = scenario.size;
+        await pumpApp(tester);
+        final rects = FoldablePaneRectsScope.rectsOf(
+          tester.element(find.byKey(const Key('page users'))),
+        );
+        expect(rects?.secondary, isNull);
+        expect(rects?.primary, isNotNull);
+
+        await tester.tap(find.text('User 7'));
+        await tester.pump();
+        await tester.pump(const Duration(milliseconds: 100));
+        // The router treats the missing secondary as one pane, so Hero is not
+        // disabled and the page flies in.
+        expect(find.byKey(const Key('hero shuttle')), findsOneWidget);
+
+        await tester.pumpAndSettle();
+        final page = find.byKey(const Key('page user-7'), skipOffstage: false);
+        expect(
+          FoldableRouter.paneOf(tester.element(page)),
+          FoldablePane.single,
+        );
+        expect(tester.getRect(page), rects!.primary);
+        expect(page.hitTestable(), findsOneWidget);
+        expect(tester.takeException(), isNull);
+      });
+    }
   });
 
   group('step 2: display rules', () {
