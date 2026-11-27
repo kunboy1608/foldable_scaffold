@@ -312,26 +312,36 @@ class PaneMetrics {
   /// Không làm gì khi thông tin không đổi. Thông tin được áp dụng (và các
   /// trang được xếp lại) sau khung hiện tại, tránh đánh thức widget giữa lúc
   /// build/layout đang chạy.
-  void publishScaffold(PaneSignals value) {
-    final PaneSignals old = signals.value;
-    if (identical(old, value)) return;
-    final bool changed =
-        old.hasScaffold != value.hasScaffold ||
-        old.primaryVisible != value.primaryVisible ||
-        old.secondaryVisible != value.secondaryVisible ||
-        old.axis != value.axis ||
-        old.canSplit != value.canSplit ||
-        old.primaryMedia != value.primaryMedia ||
-        old.secondaryMedia != value.secondaryMedia;
-    if (!changed) return;
+  void publishScaffold(PaneSignals value, {FoldablePane? from}) {
     if (_disposed) return;
+    // What this value replaces: the one waiting for the end of the frame if
+    // there is one (the reset of the area, the other frame), else the one
+    // the pages have.
+    final PaneSignals base = _pendingSignals ?? signals.value;
+    // A frame only knows the media of its own pane: keep what the other
+    // frame published, or the two would overwrite each other every frame
+    // and the pages would switch between two environments.
+    if (from != null && value.hasScaffold && base.hasScaffold) {
+      value = value._withMedia(
+        primaryMedia: from == FoldablePane.primary
+            ? value.primaryMedia
+            : base.primaryMedia,
+        secondaryMedia: from == FoldablePane.secondary
+            ? value.secondaryMedia
+            : base.secondaryMedia,
+      );
+    }
+    if (value._sameAs(base)) return;
     _pendingSignals = value;
     if (_signalsPending) return;
     _signalsPending = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _signalsPending = false;
-      if (_disposed) return;
-      signals.value = _pendingSignals!;
+      final PaneSignals? pending = _pendingSignals;
+      _pendingSignals = null;
+      if (_disposed || pending == null) return;
+      if (pending._sameAs(signals.value)) return;
+      signals.value = pending;
       // Một pane đổi trạng thái hiển thị: xếp lại trang trên hình chữ nhật
       // mới ngay trong khung sau.
       _markSlotsNeedingLayout();
@@ -400,6 +410,29 @@ class PaneSignals {
     );
   }
 
+  bool _sameAs(PaneSignals other) =>
+      identical(this, other) ||
+      (hasScaffold == other.hasScaffold &&
+          primaryVisible == other.primaryVisible &&
+          secondaryVisible == other.secondaryVisible &&
+          axis == other.axis &&
+          canSplit == other.canSplit &&
+          primaryMedia == other.primaryMedia &&
+          secondaryMedia == other.secondaryMedia);
+
+  PaneSignals _withMedia({
+    required MediaQueryData? primaryMedia,
+    required MediaQueryData? secondaryMedia,
+  }) => PaneSignals._(
+    hasScaffold: hasScaffold,
+    primaryVisible: primaryVisible,
+    secondaryVisible: secondaryVisible,
+    axis: axis,
+    canSplit: canSplit,
+    primaryMedia: primaryMedia,
+    secondaryMedia: secondaryMedia,
+  );
+
   /// Whether the layout declared its panes (`FoldableScaffold` above the
   /// frames).
   final bool hasScaffold;
@@ -444,6 +477,10 @@ abstract class PaneEntryRef {
 
   /// Whether the page was hidden (not drawn) when it left its stack.
   bool get frozenHidden;
+
+  /// Keeps the content of the page (its state, the focus and the text input
+  /// connection of a field being edited) when the wrappers around it change.
+  GlobalKey get contentKey;
 }
 
 /// Makes the pane of a page readable (and watchable) by its content.
@@ -770,15 +807,20 @@ class _RawPaneFrame extends LeafRenderObjectWidget {
   final PaneSignals signals;
 
   @override
-  RenderObject createRenderObject(BuildContext context) =>
-      _RenderPaneFrame(metrics, pane, signals);
+  RenderObject createRenderObject(BuildContext context) {
+    // Published from the first build too: a page must not get its pane
+    // environment only at the next rebuild (the on-screen keyboard, say),
+    // which would change the wrappers around it.
+    metrics.publishScaffold(signals, from: pane);
+    return _RenderPaneFrame(metrics, pane, signals);
+  }
 
   @override
   void updateRenderObject(BuildContext context, _RenderPaneFrame renderObject) {
     renderObject.updateMetrics(metrics, pane);
     // Công bố thông tin pane (visible, axis, media) cho router ngay khi
     // widget build, trước khi layout chạy, để trang biết ngay pane của mình.
-    renderObject.metrics.publishScaffold(signals);
+    renderObject.metrics.publishScaffold(signals, from: pane);
     // The area was rebuilt: measure again, even if the widget is unchanged.
     renderObject.markNeedsLayout();
   }
@@ -1042,7 +1084,8 @@ class PanePageView extends StatelessWidget {
           metrics.twoPane,
           metrics.signals,
         ]),
-        child: content,
+        // The same key whatever wraps the content (see _wrapPaneEnvironment).
+        child: KeyedSubtree(key: entry.contentKey, child: content),
         builder: (BuildContext context, Widget? content) {
           final bool twoPane = metrics.twoPane.value;
           final bool hidden =
@@ -1078,6 +1121,8 @@ class PanePageView extends StatelessWidget {
   Widget _wrapPaneEnvironment(BuildContext context, Widget child) {
     final PaneSignals signals = metrics.signals.value;
     if (!signals.hasScaffold) return child;
+    // Always a MediaQuery here, so the wrappers keep their shape while the
+    // media of the pane comes and goes.
     final MediaQueryData? media = switch (entry.pane.value) {
       FoldablePane.primary => signals.primaryMedia,
       FoldablePane.secondary => signals.secondaryMedia,
@@ -1086,8 +1131,10 @@ class PanePageView extends StatelessWidget {
             ? signals.secondaryMedia ?? signals.primaryMedia
             : signals.primaryMedia ?? signals.secondaryMedia,
     };
-    Widget page = child;
-    if (media != null) page = MediaQuery(data: media, child: page);
+    Widget page = MediaQuery(
+      data: media ?? MediaQuery.of(context),
+      child: child,
+    );
     page = FoldablePaneLayout(
       primaryVisible: signals.primaryVisible,
       secondaryVisible: signals.secondaryVisible,

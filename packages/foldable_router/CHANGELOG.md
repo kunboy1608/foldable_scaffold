@@ -55,6 +55,16 @@ Fixed:
   out under the edge of its pane area no longer shows its page over the
   navigation rail.
 
+* A page in a tab drawn by a layout keeps its state and focus when the pane
+  facts change. The frames now publish them from their first build, each frame
+  only replaces the media of its own pane (the two used to overwrite each
+  other every frame), a publish is compared with the value waiting for the
+  end of the frame, and the content of a page keeps a `GlobalKey` under a
+  `MediaQuery` that is always there. Before, with two panes on screen, the
+  on-screen keyboard rebuilt the page it was typed in: the field lost its
+  focus and the keyboard went down again (seen on iPhone Duo and Galaxy Z
+  Fold), and the page moved up and down while the keyboard slid in.
+
 Deprecated:
 
 * `PaneMetrics._metrics`, `_area`, `stackLength`, `hasSecondary` are

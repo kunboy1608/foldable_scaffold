@@ -25,6 +25,9 @@ class _Entry implements PaneEntryRef {
 
   late final ValueKey<int> key = ValueKey<int>(id);
 
+  @override
+  final GlobalKey contentKey = GlobalKey();
+
   Future<Object?> get result => _result.future;
 
   void complete([FutureOr<Object?> value]) {

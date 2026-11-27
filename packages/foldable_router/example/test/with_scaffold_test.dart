@@ -1,3 +1,5 @@
+import 'dart:ui' show DisplayFeature, DisplayFeatureState, DisplayFeatureType;
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:material_ui/material_ui.dart';
 import 'package:foldable_router/foldable_router.dart';
@@ -293,4 +295,57 @@ void main() {
       );
     });
   }
+
+  testWidgets(
+    'hai pane trên máy gập: bàn phím hiện dần, ô nhập giữ focus và đi lên đều',
+    variant: const TargetPlatformVariant(<TargetPlatform>{
+      TargetPlatform.android,
+      TargetPlatform.iOS,
+    }),
+    (WidgetTester tester) async {
+      // Màn trong của một máy gập mở phẳng, đường gập ở giữa.
+      const Size size = Size(884, 1104);
+      tester.view.devicePixelRatio = 1.0;
+      tester.view.physicalSize = size;
+      tester.view.displayFeatures = const [
+        DisplayFeature(
+          bounds: Rect.fromLTRB(442, 0, 442, 1104),
+          type: DisplayFeatureType.fold,
+          state: DisplayFeatureState.postureFlat,
+        ),
+      ];
+      tester.view.padding = const FakeViewPadding(top: 40, bottom: 48);
+      tester.view.viewPadding = const FakeViewPadding(top: 40, bottom: 48);
+      addTearDown(tester.view.reset);
+      router = createRouter();
+      await tester.pumpWidget(WithScaffoldApp(router: router));
+      await settle(tester);
+      await openRoute(tester, const UserRoute(id: '7'));
+      expect(paneLayoutOf(tester).primaryVisible, isTrue);
+      expect(paneLayoutOf(tester).secondaryVisible, isTrue);
+
+      final Finder note = find.byKey(const Key('user-note'));
+      EditableTextState field() => tester.state<EditableTextState>(
+        find.descendant(of: note, matching: find.byType(EditableText)),
+      );
+      await tester.tapAt(tester.getRect(note).centerLeft + const Offset(20, 0));
+      await tester.pump();
+      final EditableTextState first = field();
+      expect(first.widget.focusNode.hasFocus, isTrue);
+      final double top = tester.getRect(note).top;
+
+      // Bàn phím trượt lên qua nhiều khung, như trên máy thật.
+      for (var i = 1; i <= 10; i++) {
+        tester.view.viewInsets = FakeViewPadding(bottom: 35.0 * i);
+        await tester.pump(const Duration(milliseconds: 16));
+        // Không dựng lại trang (mất focus làm bàn phím tụt xuống), và ô
+        // nhập đi lên đúng bằng phần bàn phím đã chiếm, không giật.
+        expect(identical(field(), first), isTrue, reason: 'khung $i');
+        expect(first.widget.focusNode.hasFocus, isTrue, reason: 'khung $i');
+        expect(tester.getRect(note).top, top - 35.0 * i, reason: 'khung $i');
+      }
+      await tester.pumpAndSettle();
+      expect(first.widget.focusNode.hasFocus, isTrue);
+    },
+  );
 }
