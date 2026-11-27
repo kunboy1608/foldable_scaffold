@@ -1654,6 +1654,7 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
       delegate: FoldablePaneLayoutDelegate(
         geometry: geometry,
         textDirection: frame.textDirection,
+        minPaneExtent: _minBodySize,
       ),
       children: [
         LayoutId(

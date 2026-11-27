@@ -30,6 +30,31 @@ Changed (behaviour, breaking in the pre-release):
   `chainOf` no longer false-positives when a shell and its first branch
   happen to have the same path (`'/'`).
 
+Fixed:
+
+* A page whose frame the layout collapsed to an empty rectangle (a
+  `FoldableScaffold` showing only the secondary body in one pane) is hidden
+  like a page deeper in the stack. It used to be laid over the whole tab area,
+  where it covered the navigation and app bar and took their taps.
+* A tab drawn by a layout keeps its pages in the frames in one pane too. When
+  the layout declared a single visible pane (`FoldableScaffold`), the pages
+  used to fill the whole tab area after the first rebuild (a window resize)
+  and hid the navigation of the scaffold.
+* `twoPane` follows the panes the layout reports as soon as it reports them,
+  not only when the tab area rebuilds: a `FoldableScaffold` showing one pane
+  is no longer treated as two panes until the next resize.
+* No modal barrier in a tab drawn by a layout: in one pane it covered the
+  whole tab area and took the taps of the layout's chrome.
+* A frame moved by an ancestor without being laid out (a pane sliding while
+  the navigation of a `FoldableScaffold` moves from the side to the bottom)
+  is measured again after the frame, and its page follows it instead of
+  staying a few pixels off.
+* A page is cut to the visible part of its frame (the frame cut by the clips
+  of the layout above it): it is laid out on the whole frame, but painted and
+  hit-tested only where the frame is seen. A `FoldableScaffold` pane sliding
+  out under the edge of its pane area no longer shows its page over the
+  navigation rail.
+
 Deprecated:
 
 * `PaneMetrics._metrics`, `_area`, `stackLength`, `hasSecondary` are

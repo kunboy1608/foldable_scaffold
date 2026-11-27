@@ -211,6 +211,31 @@ class PaneMetrics {
 
   void _unregisterSlot(_RenderPaneSlot slot) => _slots.remove(slot);
 
+  /// The frame of each pane currently in the tree, to measure what of it is
+  /// visible.
+  final Map<FoldablePane, _RenderPaneFrame> _frames =
+      <FoldablePane, _RenderPaneFrame>{};
+
+  /// What of each frame the slots last painted, to repaint them when it
+  /// changes on its own (see [_RenderPaneFrame._checkFrames]).
+  final Map<FoldablePane, Rect?> _paintedVisible = <FoldablePane, Rect?>{};
+
+  /// The part of the frame of [pane] that is visible, in the coordinates of
+  /// the tab area: its rectangle cut by the clips of the layout above it (a
+  /// `FoldableScaffold` clips its panes). Null when there is no frame to
+  /// measure. Only valid outside layout (the slots read it when they paint).
+  Rect? visibleRectFor(FoldablePane pane) {
+    final _RenderPaneFrame? frame = _frames[pane];
+    if (frame == null || !frame.attached) return null;
+    return frame._visibleRect();
+  }
+
+  void _markSlotsNeedingPaint() {
+    for (final _RenderPaneSlot slot in _slots.toList()) {
+      if (slot.attached) slot.markNeedsPaint();
+    }
+  }
+
   void _markSlotsNeedingLayout() {
     for (final _RenderPaneSlot slot in _slots.toList()) {
       if (slot.attached) slot.markNeedsLayout();
@@ -317,6 +342,14 @@ class PaneMetrics {
   /// `buildPanes`).
   void resetScaffoldSignals() => publishScaffold(PaneSignals.none);
 }
+
+/// The frame a page of a one-pane tab is drawn in when the tab has a layout
+/// ([PaneMetrics.frameMode]): the top page of a stack of two or more pages in
+/// the secondary frame, every other page in the primary one.
+FoldablePane singleFrameFor(int position, PaneMetrics metrics) =>
+    position == 0 && metrics.stackLength >= 2
+    ? FoldablePane.secondary
+    : FoldablePane.primary;
 
 /// Thông tin bố cục pane do layout bên trong tab gửi về, và qua đó router
 /// biết khi nào một hoặc hai pane đang thực sự hiển thị.
@@ -777,9 +810,45 @@ class _RenderPaneFrame extends RenderBox {
         value.secondaryFrames++;
       }
     }
-    metrics = value;
-    pane = paneValue;
+    if (attached) {
+      _forgetFrame();
+      metrics = value;
+      pane = paneValue;
+      metrics._frames[pane] = this;
+    } else {
+      metrics = value;
+      pane = paneValue;
+    }
     value.reportedMissing = false;
+  }
+
+  void _forgetFrame() {
+    if (identical(metrics._frames[pane], this)) metrics._frames.remove(pane);
+  }
+
+  /// The visible part of this frame in the coordinates of the area: its box
+  /// cut by every clip between it and the area. Read outside layout only (the
+  /// clips are described from the sizes of the ancestors).
+  Rect? _visibleRect() {
+    final _RawPaneArea? area = metrics._area;
+    if (area == null || !area.attached || !hasSize) return null;
+    Rect visible = Offset.zero & size;
+    RenderObject child = this;
+    while (!identical(child, area)) {
+      final RenderObject? parent = child.parent;
+      if (parent == null) return null; // Not under the area (detaching).
+      final Rect? clip = parent.describeApproximatePaintClip(child);
+      if (clip != null) visible = visible.intersect(clip);
+      final ParentData? parentData = child.parentData;
+      if (parentData is BoxParentData) {
+        visible = visible.shift(parentData.offset);
+      }
+      child = parent;
+    }
+    if (visible.width <= 0 || visible.height <= 0) {
+      return Rect.fromLTWH(visible.left, visible.top, 0, 0);
+    }
+    return visible;
   }
 
   /// The size this frame had at its last layout.
@@ -832,8 +901,14 @@ class _RenderPaneFrame extends RenderBox {
     // offsets up to the area are final here (the area and every node between
     // are clean, otherwise they would be laying us out), so publish the real
     // rectangle now and let the affected pages catch up in this same frame.
+    _publishOwnRect();
+  }
+
+  /// Publishes the rectangle of this frame, measured from the layout offsets
+  /// up to the area, unless the area is laying out (it publishes it then).
+  void _publishOwnRect() {
     final _RawPaneArea? area = metrics._area;
-    if (area == null || !area.attached || area.isLayingOut) return;
+    if (area == null || !area.attached || area.isLayingOut || !hasSize) return;
     Offset offset = Offset.zero;
     RenderObject? node = this;
     while (node != null && !identical(node, area)) {
@@ -853,6 +928,8 @@ class _RenderPaneFrame extends RenderBox {
   @override
   void attach(PipelineOwner owner) {
     super.attach(owner);
+    _watch(this);
+    metrics._frames[pane] = this;
     if (pane == FoldablePane.primary) {
       metrics.primaryFrames++;
     } else {
@@ -868,7 +945,43 @@ class _RenderPaneFrame extends RenderBox {
     } else {
       metrics.secondaryFrames--;
     }
+    _attachedFrames.remove(this);
+    _forgetFrame();
     super.detach();
+  }
+
+  /// The frames in the tree, checked after every frame by [_checkFrames].
+  static final Set<_RenderPaneFrame> _attachedFrames = <_RenderPaneFrame>{};
+  static bool _checkInstalled = false;
+
+  static void _watch(_RenderPaneFrame frame) {
+    _attachedFrames.add(frame);
+    if (_checkInstalled) return;
+    _checkInstalled = true;
+    WidgetsBinding.instance.addPersistentFrameCallback(_checkFrames);
+  }
+
+  /// Runs after the layout and paint of every frame.
+  ///
+  /// A frame publishes its rectangle when it lays out, or when its area does.
+  /// An ancestor may still move it without laying either of them out: a
+  /// layout that animates the position of a pane whose size stays the same
+  /// (the panes of a `FoldableScaffold` sliding while its navigation moves
+  /// from the side to the bottom) only changes an offset. Measuring the frames
+  /// again here catches that move; the pages follow on the next frame instead
+  /// of staying where the frame was.
+  static void _checkFrames(Duration timeStamp) {
+    for (final _RenderPaneFrame frame in _attachedFrames.toList()) {
+      if (!frame.attached) continue;
+      frame._publishOwnRect();
+      // The clip of a frame can change without the frame moving (a pane
+      // that slides under the edge of the layout): repaint the pages then.
+      final PaneMetrics metrics = frame.metrics;
+      if (!metrics._paintedVisible.containsKey(frame.pane)) continue;
+      if (metrics._paintedVisible[frame.pane] != frame._visibleRect()) {
+        metrics._markSlotsNeedingPaint();
+      }
+    }
   }
 
   // A frame is invisible and transparent to taps: it is only a measurement.
@@ -968,7 +1081,10 @@ class PanePageView extends StatelessWidget {
     final MediaQueryData? media = switch (entry.pane.value) {
       FoldablePane.primary => signals.primaryMedia,
       FoldablePane.secondary => signals.secondaryMedia,
-      FoldablePane.single => signals.primaryMedia ?? signals.secondaryMedia,
+      FoldablePane.single =>
+        singleFrameFor(entry.position.value, metrics) == FoldablePane.secondary
+            ? signals.secondaryMedia ?? signals.primaryMedia
+            : signals.primaryMedia ?? signals.secondaryMedia,
     };
     Widget page = child;
     if (media != null) page = MediaQuery(data: media, child: page);
@@ -1180,10 +1296,20 @@ class _RenderPaneSlot extends RenderShiftedBox {
       parentData.offset = Offset.zero;
       return;
     }
-    final Rect? rect = pane == FoldablePane.single
-        ? null
-        : metrics.rectFor(pane);
-    if (rect == null || !rect.size.isFinite || rect.isEmpty) {
+    final Rect? rect = _rectFor(pane);
+    _framePane = rect == null ? null : _framePaneFor(pane);
+    if (rect != null && rect.size.isFinite && rect.isEmpty) {
+      // The frame is placed but collapsed: the layout hides that pane (a
+      // FoldableScaffold showing only the secondary body in one pane). The
+      // page is hidden like a page deeper in the stack, not spread over the
+      // whole area, where it would cover the chrome (navigation, app bar)
+      // and take its taps.
+      _visible = false;
+      child.layout(constraints, parentUsesSize: false);
+      parentData.offset = Offset.zero;
+      return;
+    }
+    if (rect == null || !rect.size.isFinite) {
       // No rectangle (yet): the page takes the whole area. This happens for
       // one frame if the app did not place the frame it needs (reported as an
       // error in debug) and while a page animates out of a pane whose frame
@@ -1198,6 +1324,32 @@ class _RenderPaneSlot extends RenderShiftedBox {
     // layout and paint.
     child.layout(BoxConstraints.tight(rect.size));
     parentData.offset = rect.topLeft;
+  }
+
+  /// The rectangle [pane] is drawn in, or null for the whole area.
+  ///
+  /// A one-pane tab without a layout fills the whole area, like the pages of
+  /// the root navigator. A one-pane tab drawn by a layout (`buildPanes`
+  /// returned one, say a `FoldableScaffold` showing a single pane) still puts
+  /// its pages in the frames, or they would cover the chrome of the layout:
+  /// the top page of a stack of two or more sits in the secondary frame, the
+  /// others in the primary one. A frame the layout collapsed hides its page.
+  /// The frame whose rectangle the page was laid out on, or null when it
+  /// fills the whole area. Its visible part clips the page when it paints.
+  FoldablePane? _framePane;
+
+  /// What the page was clipped to when it last painted, in the coordinates of
+  /// this slot, for hit testing.
+  Rect? _paintClip;
+
+  FoldablePane _framePaneFor(FoldablePane pane) => pane != FoldablePane.single
+      ? pane
+      : singleFrameFor(entry.position.value, metrics);
+
+  Rect? _rectFor(FoldablePane pane) {
+    if (pane != FoldablePane.single) return metrics.rectFor(pane);
+    if (!metrics.frameMode) return null;
+    return metrics.rectFor(singleFrameFor(entry.position.value, metrics));
   }
 
   /// The offset of the page, as assigned during layout.
@@ -1218,6 +1370,9 @@ class _RenderPaneSlot extends RenderShiftedBox {
     if (!_visible) return false;
     final RenderBox? child = this.child;
     if (child == null) return false;
+    // Only the part of the page that was painted takes taps.
+    final Rect? clip = _paintClip;
+    if (_clip && clip != null && !clip.contains(position)) return false;
     return result.addWithPaintOffset(
       offset: _childOrigin(),
       position: position,
@@ -1249,7 +1404,22 @@ class _RenderPaneSlot extends RenderShiftedBox {
       // child's box: the transition is laid out on it. Clipping it keeps the
       // parts a transition moves outside (a slide, a scale, ...) from
       // reaching the other pane.
-      final Rect clipRect = origin & child.size;
+      //
+      // The page is also cut to the visible part of its frame: a layout that
+      // clips its panes (a FoldableScaffold sliding a pane out under its
+      // edge) keeps the page from showing over its chrome.
+      Rect clipRect = origin & child.size;
+      final FoldablePane? framePane = _framePane;
+      if (framePane != null) {
+        final Rect? visible = metrics.visibleRectFor(framePane);
+        metrics._paintedVisible[framePane] = visible;
+        if (visible != null) clipRect = clipRect.intersect(visible);
+      }
+      if (clipRect.width <= 0 || clipRect.height <= 0) {
+        _paintClip = Rect.zero;
+        return;
+      }
+      _paintClip = clipRect;
       context.pushClipRect(
         needsCompositing,
         offset,

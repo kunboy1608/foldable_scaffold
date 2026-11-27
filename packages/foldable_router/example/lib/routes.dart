@@ -10,6 +10,15 @@ import 'pages/shell_page.dart';
 import 'pages/users_pages.dart';
 import 'session.dart';
 
+/// The shell the tabs of the running app live in.
+///
+/// The routes and pages of this file are shared by two apps: `main.dart` uses
+/// [MainShellRoute], `with_scaffold.dart` a shell drawn by `FoldableScaffold`.
+/// The roots of the branches (Home, Users, Profile) take this shell as their
+/// parent, so a page that opens `UserRoute(id: '7')` stays in the shell of the
+/// app it runs in. Set by [createExampleRouter].
+FoldableShellRoute appShell = const MainShellRoute();
+
 /// The shell: a bottom [NavigationBar] around three branches. Home, Users
 /// and Profile are the roots of the branches; routes whose parent chain runs
 /// through one of them (UserRoute, SettingsRoute) are shown inside that tab.
@@ -59,7 +68,7 @@ class HomeRoute extends FoldableShellChildRoute {
   String get segment => '';
 
   @override
-  FoldableShellParent get parent => const MainShellRoute();
+  FoldableShellParent get parent => appShell;
 
   // Slow on first launch only: this is what makes `pendingBuilder` visible.
   // It runs again when the shell re-checks the Home branch (goBranch,
@@ -84,7 +93,7 @@ class UsersRoute extends FoldableShellChildRoute {
   String get segment => 'users';
 
   @override
-  FoldableShellParent get parent => const MainShellRoute();
+  FoldableShellParent get parent => appShell;
 
   @override
   Widget build(BuildContext context) => const UsersPage();
@@ -133,7 +142,7 @@ class ProfileRoute extends FoldableShellChildRoute {
   String get segment => 'profile';
 
   @override
-  FoldableShellParent get parent => const MainShellRoute();
+  FoldableShellParent get parent => appShell;
 
   // The auth guard. Redirects run from the root ancestor down, so this also
   // protects every route that has ProfileRoute in its parent chain.
@@ -193,10 +202,17 @@ final Map<String, FoldableRouteFactory> routeTable = {
   '/pick-color': (params) => const ColorPickerRoute(),
 };
 
-FoldableRouter createRouter() => FoldableRouter(
-  initial: const MainShellRoute(),
-  routes: routeTable,
-  notFoundBuilder: (context, uri) => NotFoundPage(uri: uri),
-  // Shown on first launch while the first redirect is pending.
-  pendingBuilder: (context) => const SplashPage(),
-);
+/// The router of `main.dart`: the tabs in [MainShellRoute].
+FoldableRouter createRouter() => createExampleRouter(const MainShellRoute());
+
+/// A router for the shared routes, with the tabs in [shell] (see [appShell]).
+FoldableRouter createExampleRouter(FoldableShellRoute shell) {
+  appShell = shell;
+  return FoldableRouter(
+    initial: shell,
+    routes: routeTable,
+    notFoundBuilder: (context, uri) => NotFoundPage(uri: uri),
+    // Shown on first launch while the first redirect is pending.
+    pendingBuilder: (context) => const SplashPage(),
+  );
+}

@@ -31,7 +31,9 @@ $F/flutter test                           # package; cũng example/, ../foldable
 $F/dart doc --dry-run; rm -rf doc         # phải 0 warning; xoá doc/ do lệnh tạo ra
 ```
 
-Mốc gần nhất: package 435 test, example 8, foldable_router 232, foldable_core 4, tất cả pass.
+Mốc gần nhất: package 438 test, example 8, foldable_router 236, foldable_core 4, tất cả pass.
+
+Pane đang co/mở (extent giữa 0 và đích) được layout ít nhất `minBodySize`, neo cạnh phía divider, trượt ra dưới `ClipRect` (`FoldablePaneLayoutDelegate.minPaneExtent`); pane ẩn hẳn vẫn rộng 0. Router cắt trang theo phần frame nhìn thấy (`PaneMetrics.visibleRectFor`).
 
 ## 4. Cấu trúc code (`lib/src`)
 

@@ -343,8 +343,12 @@ class _BranchPageRoute<T> extends PageRoute<T> with FoldablePageRouteMixin<T> {
   /// One pane: the material barrier, as in [MaterialPageRoute]. Two panes: no
   /// barrier at all, so the left pane is reachable (taps, semantics). The
   /// barrier entry stays: only its content changes.
+  ///
+  /// A tab drawn by a layout (`buildPanes` returned one) has no barrier
+  /// either, even with one pane: the barrier covers the whole tab area, and
+  /// the chrome of the layout (navigation, app bar) lies below the pages.
   @override
-  Widget buildModalBarrier() => _metrics.twoPane.value
+  Widget buildModalBarrier() => _metrics.twoPane.value || _metrics.frameMode
       ? const SizedBox.shrink()
       : super.buildModalBarrier();
 
@@ -1131,6 +1135,13 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
         branches,
         onTopRouteChanged: _scheduleBackStateRefresh,
       );
+      final _Shell created = shell;
+      for (var i = 0; i < created.panes.length; i++) {
+        final int branchIndex = i;
+        created.panes[i].signals.addListener(
+          () => _onPaneSignals(created, branchIndex),
+        );
+      }
     }
     // Ancestors above the shell: keep the unchanged bottom.
     final ancestors = chain.sublist(0, shellIndex);
@@ -1462,6 +1473,7 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
   /// navigator of the branch, a descendant as well.
   void _onAreaBuilt(_Shell shell, FoldablePanes panes, bool hasLayout) {
     final PaneMetrics metrics = shell.panes[panes.branchIndex];
+    final bool frameModeChanged = metrics.frameMode != hasLayout;
     metrics.frameMode = hasLayout;
     // Nếu tab không còn layout bên trong (`null` từ buildPanes), xóa thông
     // tin pane cũ trước khi các frame của khung này republish lại (hoặc
@@ -1470,16 +1482,40 @@ class FoldableRouterDelegate extends RouterDelegate<Uri> with ChangeNotifier {
     metrics
       ..hasSecondary = panes.hasSecondary
       ..stackLength = shell.branchStacks[panes.branchIndex]?.length ?? 0;
-    final PaneSignals signals = metrics.signals.value;
-    final bool twoPane = signals.hasScaffold
-        ? signals.primaryVisible && signals.secondaryVisible
-        : hasLayout;
+    final bool twoPane = _twoPaneOf(metrics);
     if (metrics.twoPane.value != twoPane) {
       metrics.twoPane.value = twoPane;
+      _syncBranchRoutes(shell, panes.branchIndex);
+    } else if (frameModeChanged) {
+      // The barrier depends on the frame mode as well (see
+      // _BranchPageRoute.buildModalBarrier).
       _syncBranchRoutes(shell, panes.branchIndex);
     }
     _refreshPaneAssignments(shell);
     _scheduleFrameChecks(metrics);
+  }
+
+  /// Whether the tab of [metrics] shows two panes: both panes visible when a
+  /// layout declares them (`FoldableScaffold`), otherwise whenever
+  /// `buildPanes` returned a layout.
+  static bool _twoPaneOf(PaneMetrics metrics) {
+    final PaneSignals signals = metrics.signals.value;
+    return signals.hasScaffold
+        ? signals.primaryVisible && signals.secondaryVisible
+        : metrics.frameMode;
+  }
+
+  /// The layout of a tab reported new pane facts (after the frame that built
+  /// it): the tab may have gone from two panes to one or back without the
+  /// tab area rebuilding, so the mode is brought in line here too.
+  void _onPaneSignals(_Shell shell, int branchIndex) {
+    if (_disposed || !identical(_shell, shell)) return;
+    final PaneMetrics metrics = shell.panes[branchIndex];
+    final bool twoPane = _twoPaneOf(metrics);
+    if (metrics.twoPane.value == twoPane) return;
+    metrics.twoPane.value = twoPane;
+    _syncBranchRoutes(shell, branchIndex);
+    _refreshPaneAssignments(shell);
   }
 
   /// Schedules, after the frame that built the tab area, the report of frames

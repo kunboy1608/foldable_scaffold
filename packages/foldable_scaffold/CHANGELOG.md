@@ -9,6 +9,15 @@ Changed (behaviour, breaking in the pre-release):
   SDK's `package:flutter/material.dart` is no longer imported by the
   library itself.
 
+* A pane that collapses or expands (its extent animating between zero and
+  its target, when the window crosses the split width say) slides out under
+  the edge of the pane area instead of squeezing its content: the content is
+  laid out at least `minBodySize` wide (tall when stacked, capped by the pane
+  area), aligned on the side of the divider, and clipped. Before, it went
+  through every width down to a few pixels, and content such as a `ListTile`
+  with a `leading` failed its layout assertions. A hidden pane is still laid
+  out at zero.
+
 New:
 
 * `example/lib/with_scaffold.dart` (`foldable_router`'s example): three tabs
