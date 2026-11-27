@@ -247,4 +247,50 @@ void main() {
       expect(find.byType(NavigationRail), findsOneWidget);
     },
   );
+
+  for (final (name, size) in [('hẹp', _narrow), ('rộng', _wide)]) {
+    testWidgets('màn $name: bàn phím ảo không che ô nhập ở đáy trang', (
+      WidgetTester tester,
+    ) async {
+      await pumpApp(tester, size: size);
+      await openRoute(tester, const UserRoute(id: '7'));
+
+      final Finder note = find.byKey(const Key('user-note'));
+      await tester.tap(note);
+      await tester.pump();
+
+      // Bàn phím hiện lên: cửa sổ còn size.height - 300 phía trên nó.
+      const double keyboard = 300;
+      tester.view.viewInsets = const FakeViewPadding(bottom: keyboard);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(
+        tester.getRect(note).bottom,
+        lessThanOrEqualTo(size.height - keyboard),
+      );
+      // Trang không trừ bàn phím lần nữa: scaffold đã thu vùng pane.
+      expect(MediaQuery.viewInsetsOf(tester.element(note)).bottom, 0);
+      expect(
+        tester.getRect(find.byType(UserPage)).bottom,
+        lessThanOrEqualTo(size.height - keyboard),
+      );
+      if (size == _wide) {
+        // Hai pane: danh sách bên trái cũng thu lại, không bị đè.
+        expect(
+          tester.getRect(find.byType(UsersPage)).bottom,
+          lessThanOrEqualTo(size.height - keyboard),
+        );
+      }
+
+      // Bàn phím ẩn: trang trở lại chiều cao cũ.
+      tester.view.resetViewInsets();
+      await tester.pumpAndSettle();
+      expect(
+        tester.getRect(find.byType(UserPage)).bottom,
+        greaterThan(size.height - keyboard),
+      );
+    });
+  }
 }

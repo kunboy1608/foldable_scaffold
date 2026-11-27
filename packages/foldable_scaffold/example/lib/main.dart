@@ -341,6 +341,16 @@ class _ScaffoldExampleState extends State<ScaffoldExample> {
                           'This pane is ${constraints.maxWidth.round()} wide.',
                         ),
                         const Spacer(),
+                        // At the bottom of the pane: tapping it brings up the
+                        // on-screen keyboard, which must not cover it.
+                        const TextField(
+                          key: Key('reply'),
+                          decoration: InputDecoration(
+                            labelText: 'Reply',
+                            border: OutlineInputBorder(),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
                         FilledButton.tonal(
                           onPressed: () => _update(() => _message = null),
                           child: const Text('Close the message'),
@@ -401,7 +411,14 @@ class _ComposeSheet extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
           child: Row(
             children: [
-              const Expanded(child: Text('New message')),
+              // The bottom sheet stays above the on-screen keyboard.
+              const Expanded(
+                child: TextField(
+                  key: Key('compose'),
+                  autofocus: true,
+                  decoration: InputDecoration(hintText: 'New message'),
+                ),
+              ),
               TextButton(onPressed: onDone, child: const Text('Discard')),
               FilledButton(
                 onPressed: () {

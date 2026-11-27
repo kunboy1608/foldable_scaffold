@@ -69,24 +69,51 @@ class UserPage extends StatelessWidget {
       // The automatic back button pops to whatever is below: the users list
       // after open, Home after push.
       appBar: AppBar(title: Text('User $id')),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            UserAvatar(id: id, radius: 64),
-            const SizedBox(height: 16),
-            Text('User $id', style: Theme.of(context).textTheme.headlineMedium),
-            const SizedBox(height: 16),
-            OutlinedButton(
-              onPressed: () => router.pop(),
-              child: const Text('pop()'),
+      body: Column(
+        children: [
+          // Scrolls when the on-screen keyboard leaves little room.
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.all(16),
+              child: Center(
+                child: Column(
+                  children: [
+                    UserAvatar(id: id, radius: 64),
+                    const SizedBox(height: 16),
+                    Text(
+                      'User $id',
+                      style: Theme.of(context).textTheme.headlineMedium,
+                    ),
+                    const SizedBox(height: 16),
+                    OutlinedButton(
+                      onPressed: () => router.pop(),
+                      child: const Text('pop()'),
+                    ),
+                    TextButton(
+                      onPressed: () => router.open(const HomeRoute()),
+                      child: const Text('open(HomeRoute())'),
+                    ),
+                  ],
+                ),
+              ),
             ),
-            TextButton(
-              onPressed: () => router.open(const HomeRoute()),
-              child: const Text('open(HomeRoute())'),
+          ),
+          // At the very bottom on purpose: tapping it brings up the on-screen
+          // keyboard, which must not cover it (in one pane and in two).
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: TextField(
+                key: const Key('user-note'),
+                decoration: InputDecoration(
+                  labelText: 'Note about user $id',
+                  border: const OutlineInputBorder(),
+                ),
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
