@@ -30,6 +30,20 @@ class LoginPage extends StatelessWidget {
                   : 'You need to log in to see $from',
             ),
             const SizedBox(height: 16),
+            // A page above the shell, full screen: the keyboard pushes the
+            // page itself, not a pane.
+            const SizedBox(
+              width: 280,
+              child: TextField(
+                key: Key('login-name'),
+                autofillHints: [AutofillHints.username],
+                decoration: InputDecoration(
+                  labelText: 'Name',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
             FilledButton(
               key: const Key('login'),
               onPressed: () {
@@ -101,19 +115,42 @@ class SettingsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings (protected by parent)')),
-      body: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Guarded by ProfileRoute.redirect.'),
-            const SizedBox(height: 16),
-            OutlinedButton(
-              key: const Key('logout'),
-              onPressed: () => _logout(context),
-              child: const Text('Log out + refresh()'),
+      body: Column(
+        children: [
+          Expanded(
+            child: Center(
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    const Text('Guarded by ProfileRoute.redirect.'),
+                    const SizedBox(height: 16),
+                    OutlinedButton(
+                      key: const Key('logout'),
+                      onPressed: () => _logout(context),
+                      child: const Text('Log out + refresh()'),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ],
-        ),
+          ),
+          // At the bottom of a one-pane tab: above the on-screen keyboard
+          // once it shows, the navigation bar staying behind it.
+          const SafeArea(
+            top: false,
+            child: Padding(
+              padding: EdgeInsets.fromLTRB(16, 8, 16, 16),
+              child: TextField(
+                key: Key('settings-name'),
+                decoration: InputDecoration(
+                  labelText: 'Display name',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }

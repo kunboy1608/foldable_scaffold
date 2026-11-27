@@ -145,6 +145,9 @@ class _ScaffoldExampleState extends State<ScaffoldExample> {
   int _tab = 0;
   String? _message = 'The first message';
 
+  /// What is typed in the search field of the list.
+  String _query = '';
+
   /// Moves the divider of the scaffold: the reset button in the app bar.
   final _controller = FoldableScaffoldController();
   SimulatedFold _fold = SimulatedFold.device;
@@ -313,12 +316,29 @@ class _ScaffoldExampleState extends State<ScaffoldExample> {
               body: ListView(
                 children: [
                   const _LayoutCard(),
-                  for (final message in _mailboxes[_tab].$3)
-                    ListTile(
-                      selected: message == _message,
-                      title: Text(message),
-                      onTap: () => _update(() => _message = message),
+                  // At the top of the body, the left pane when there are two:
+                  // the on-screen keyboard must not take the focus away.
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 8),
+                    child: TextField(
+                      key: const Key('search'),
+                      onChanged: (value) => _update(() => _query = value),
+                      decoration: const InputDecoration(
+                        prefixIcon: Icon(Icons.search),
+                        hintText: 'Search messages',
+                        border: OutlineInputBorder(),
+                      ),
                     ),
+                  ),
+                  for (final message in _mailboxes[_tab].$3)
+                    if (message.toLowerCase().contains(
+                      _query.trim().toLowerCase(),
+                    ))
+                      ListTile(
+                        selected: message == _message,
+                        title: Text(message),
+                        onTap: () => _update(() => _message = message),
+                      ),
                 ],
               ),
               hasSecondaryBody: _message != null,

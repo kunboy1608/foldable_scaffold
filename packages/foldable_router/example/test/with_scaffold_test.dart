@@ -348,4 +348,66 @@ void main() {
       expect(first.widget.focusNode.hasFocus, isTrue);
     },
   );
+
+  testWidgets(
+    'hai pane: ô tìm kiếm ở pane trái giữ focus khi bàn phím hiện, và lọc danh sách',
+    variant: const TargetPlatformVariant(<TargetPlatform>{
+      TargetPlatform.android,
+      TargetPlatform.iOS,
+    }),
+    (WidgetTester tester) async {
+      await pumpApp(tester, size: _wide);
+      await openRoute(tester, const UserRoute(id: '7'));
+      expect(paneLayoutOf(tester).primaryVisible, isTrue);
+
+      final Finder search = find.byKey(const Key('users-search'));
+      EditableTextState field() => tester.state<EditableTextState>(
+        find.descendant(of: search, matching: find.byType(EditableText)),
+      );
+      await tester.tap(search);
+      await tester.pump();
+      final EditableTextState first = field();
+      for (var i = 1; i <= 8; i++) {
+        tester.view.viewInsets = FakeViewPadding(bottom: 35.0 * i);
+        await tester.pump(const Duration(milliseconds: 16));
+        expect(identical(field(), first), isTrue, reason: 'khung $i');
+        expect(first.widget.focusNode.hasFocus, isTrue, reason: 'khung $i');
+      }
+      await tester.pumpAndSettle();
+
+      await tester.enterText(search, '42');
+      await tester.pump();
+      expect(find.text('User 42'), findsOneWidget);
+      expect(find.text('User 1'), findsNothing);
+      // Chi tiết bên phải không đổi.
+      expect(router.stack.last, const UserRoute(id: '7'));
+      tester.view.resetViewInsets();
+    },
+  );
+
+  for (final (name, route, key) in [
+    ('Settings (tab một pane)', const SettingsRoute(), 'settings-name'),
+    ('Login (trang trên shell)', const LoginRoute(), 'login-name'),
+  ]) {
+    testWidgets('màn hẹp: bàn phím không che ô nhập của $name', (
+      WidgetTester tester,
+    ) async {
+      session.login();
+      await pumpApp(tester, size: _narrow);
+      await openRoute(tester, route);
+      final Finder input = find.byKey(Key(key));
+      await tester.tap(input);
+      await tester.pump();
+      tester.view.viewInsets = const FakeViewPadding(bottom: 300);
+      addTearDown(tester.view.resetViewInsets);
+      await tester.pumpAndSettle();
+
+      expect(tester.takeException(), isNull);
+      expect(tester.getRect(input).bottom, lessThanOrEqualTo(800 - 300));
+      final EditableTextState editable = tester.state<EditableTextState>(
+        find.descendant(of: input, matching: find.byType(EditableText)),
+      );
+      expect(editable.widget.focusNode.hasFocus, isTrue);
+    });
+  }
 }

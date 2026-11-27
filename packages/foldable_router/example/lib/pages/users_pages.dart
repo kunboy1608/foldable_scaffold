@@ -3,8 +3,19 @@ import 'package:foldable_router/foldable_router.dart';
 
 import '../routes.dart';
 
-class UsersPage extends StatelessWidget {
+class UsersPage extends StatefulWidget {
   const UsersPage({super.key});
+
+  @override
+  State<UsersPage> createState() => _UsersPageState();
+}
+
+class _UsersPageState extends State<UsersPage> {
+  static const _ids = ['1', '7', '42'];
+
+  /// What is typed in the search field: the list keeps the users whose name
+  /// contains it. The page keeps it while it moves between panes.
+  String _query = '';
 
   /// The user currently shown in the right pane, if the tab has two panes.
   static String? _selectedUserId(FoldableRouter router, bool twoPane) {
@@ -33,9 +44,27 @@ class UsersPage extends StatelessWidget {
         listenable: router,
         builder: (context, _) {
           final String? selected = _selectedUserId(router, twoPane);
+          final ids = [
+            for (final id in _ids)
+              if ('user $id'.contains(_query.trim().toLowerCase())) id,
+          ];
           return ListView(
             children: [
-              for (final id in const ['1', '7', '42'])
+              // At the top of the list, in the left pane of a two-pane tab:
+              // the on-screen keyboard must not take the focus away from it.
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 8, 16, 8),
+                child: TextField(
+                  key: const Key('users-search'),
+                  onChanged: (value) => setState(() => _query = value),
+                  decoration: const InputDecoration(
+                    prefixIcon: Icon(Icons.search),
+                    hintText: 'Search users',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ),
+              for (final id in ids)
                 ListTile(
                   // The whole row is tinted when the user is open in the
                   // right pane of a two-pane tab.
