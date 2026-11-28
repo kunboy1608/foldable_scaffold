@@ -358,9 +358,37 @@ class _BranchPageRoute<T> extends PageRoute<T> with FoldablePageRouteMixin<T> {
   /// The delegated transition (used by the predictive back gesture for the
   /// route below) is only needed in one-pane tabs: in a two-pane tab the left
   /// pane must not move.
+  ///
+  /// The route below reads this getter once, when this route is pushed, and
+  /// keeps the builder (`ModalRoute.receivedTransition`). The tab is usually
+  /// still one pane at that moment and only becomes two panes a frame later,
+  /// once the layout shows the secondary body. So the mode is checked when
+  /// the builder runs, not here: a builder kept from a one-pane push must not
+  /// leave the left pane shifted (a Cupertino parallax of a third of the tab
+  /// area) after the tab has turned into two panes. Returning `null` from the
+  /// builder makes the route below draw its own transitions, whose secondary
+  /// animation is already dismissed in a two-pane tab (see [buildTransitions]).
   @override
-  DelegatedTransitionBuilder? get delegatedTransition =>
-      _metrics.twoPane.value ? null : super.delegatedTransition;
+  DelegatedTransitionBuilder? get delegatedTransition {
+    final DelegatedTransitionBuilder? onePane = super.delegatedTransition;
+    if (onePane == null) return null;
+    return (
+      BuildContext context,
+      Animation<double> animation,
+      Animation<double> secondaryAnimation,
+      bool allowSnapshotting,
+      Widget? child,
+    ) {
+      if (_metrics.twoPane.value) return null;
+      return onePane(
+        context,
+        animation,
+        secondaryAnimation,
+        allowSnapshotting,
+        child,
+      );
+    };
+  }
 
   @override
   Widget buildContent(BuildContext context) => PanePageView(

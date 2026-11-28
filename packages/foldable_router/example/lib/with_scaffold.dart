@@ -18,6 +18,12 @@ final _tabLabels = <String>['Home', 'Users', 'Profile'];
 /// From this width the Users tab shows the list and the detail side by side.
 const double _split = 840;
 
+/// The navigation of every tab's scaffold: the same key for all of them, so
+/// the `NavigationBar` (or `NavigationRail`) is moved, with its state, from the
+/// scaffold of the old tab to the one of the new tab, and its indicator slides
+/// to the new tab instead of the bar being built again.
+final GlobalKey _navigationKey = GlobalKey(debugLabel: 'tab navigation');
+
 void main() {
   usePathUrlStrategy();
   final router = createRouter();
@@ -79,6 +85,8 @@ class ScaffoldShellRoute extends FoldableShellRoute {
       // One scaffold per tab: its pane layout and animations belong to that
       // tab, and are not carried over to the next tab.
       key: ValueKey<int>(panes.branchIndex),
+      // ...but one navigation for all of them (see [_navigationKey]).
+      navigationKey: _navigationKey,
       breakpoints: isUsers
           ? const FoldableBreakpoints(split: _split)
           : const FoldableBreakpoints(split: double.infinity),

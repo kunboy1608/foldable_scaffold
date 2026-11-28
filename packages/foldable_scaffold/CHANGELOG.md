@@ -18,8 +18,34 @@ Changed (behaviour, breaking in the pre-release):
   with a `leading` failed its layout assertions. A hidden pane is still laid
   out at zero.
 
+* `extendBody` also applies to a navigation beside the panes: the pane next
+  to the rail (both when they are stacked around a horizontal fold, the one
+  shown in a single-pane layout) extends under it to the edge of the
+  scaffold, and its `MediaQuery.padding` on that side is the width of the
+  navigation slot, system inset included. The divider, the fold and the
+  other pane do not move. A navigation above the panes is not affected.
+* The side navigation slots are now laid out in a `Stack` above the panes
+  (painted after them and hit before them) instead of a `Row`; both slots
+  animate their width together.
+
+Fixed:
+
+* With `extendBody`, a navigation below (or beside) the panes was covered by
+  what is drawn above the scaffold in the same route, such as the pages that
+  `foldable_router` puts in the panes, which then also took its taps. The
+  navigation is still laid out in its slot, but painted and hit-tested from
+  the closest `Overlay` (an `OverlayPortal`, right above the route of the
+  scaffold and below later routes and dialogs). Without an `Overlay`, or
+  while its tickers are muted, it is painted in place.
+
 New:
 
+* `FoldableScaffold.navigationKey`: a `GlobalKey` for the navigation. Passing
+  the same key to the scaffold of every tab moves the navigation, with its
+  state, to the new scaffold, so a `NavigationBar` or `NavigationRail`
+  animates its indicator to the new tab instead of being built again. The key
+  is only ever in the slot where the navigation is now, also while it moves
+  from one edge to another.
 * `example/lib/with_scaffold.dart` (`foldable_router`'s example): three tabs
   in a shell, one pane on a phone, two panes on a tablet, chrome from
   `FoldableScaffold`, and a full-screen page pushed above the shell — with

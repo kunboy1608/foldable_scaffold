@@ -632,6 +632,39 @@ class PaneGeometryTween extends Tween<PaneGeometry> {
   }
 }
 
+/// Which pane is on the left and on the right edge of the pane area, for a
+/// navigation beside it that the panes extend under
+/// (`FoldableScaffold.extendBody`).
+///
+/// Side by side, the left edge goes to the first shown pane from the left (the
+/// body in left-to-right text, the secondary body in right-to-left text, the
+/// other one when that one is hidden), and the right edge to the first one
+/// from the right. Stacked around a horizontal fold both panes span the width,
+/// so both have both edges. A hidden pane (zero extent) has none.
+({bool primaryLeft, bool primaryRight, bool secondaryLeft, bool secondaryRight})
+paneOuterEdges(PaneGeometry geometry, TextDirection textDirection) {
+  final primary = geometry.primaryVisible;
+  final secondary = geometry.secondaryVisible;
+  if (geometry.axis == Axis.vertical) {
+    return (
+      primaryLeft: primary,
+      primaryRight: primary,
+      secondaryLeft: secondary,
+      secondaryRight: secondary,
+    );
+  }
+  final primaryOnLeft = textDirection == TextDirection.ltr;
+  // The pane on a side, or the other one when it is hidden.
+  final leftIsPrimary = primaryOnLeft ? primary : !secondary && primary;
+  final rightIsPrimary = primaryOnLeft ? !secondary && primary : primary;
+  return (
+    primaryLeft: leftIsPrimary,
+    primaryRight: rightIsPrimary,
+    secondaryLeft: !leftIsPrimary && secondary,
+    secondaryRight: !rightIsPrimary && secondary,
+  );
+}
+
 /// Positions the primary pane, the divider and the secondary pane along the
 /// axis of the [geometry].
 ///
@@ -647,11 +680,19 @@ class PaneGeometryTween extends Tween<PaneGeometry> {
 /// divider: it slides out under the edge of the pane area, which clips it,
 /// instead of squeezing its content down to a few pixels. The other pane is
 /// not covered. A hidden pane (zero extent) is laid out at zero.
+///
+/// [extendLeft] and [extendRight] make the panes on the outer edges of the
+/// area (see [paneOuterEdges]) reach that much further on the left and the
+/// right, outside the area, under a navigation beside it
+/// (`FoldableScaffold.extendBody`). Only the content grows: where each pane
+/// and the divider are does not change.
 class FoldablePaneLayoutDelegate extends MultiChildLayoutDelegate {
   FoldablePaneLayoutDelegate({
     required this.geometry,
     required this.textDirection,
     this.minPaneExtent = 0,
+    this.extendLeft = 0,
+    this.extendRight = 0,
   });
 
   final PaneGeometry geometry;
@@ -661,8 +702,15 @@ class FoldablePaneLayoutDelegate extends MultiChildLayoutDelegate {
   /// laid out at: [FoldableScaffold.minBodySize].
   final double minPaneExtent;
 
+  /// How far the pane on the left edge of the area reaches past it.
+  final double extendLeft;
+
+  /// How far the pane on the right edge of the area reaches past it.
+  final double extendRight;
+
   @override
   void performLayout(Size size) {
+    final outerEdges = paneOuterEdges(geometry, textDirection);
     final axis = geometry.axis;
     final isHorizontal = axis == Axis.horizontal;
     final extent = isHorizontal ? size.width : size.height;
@@ -689,6 +737,8 @@ class FoldablePaneLayoutDelegate extends MultiChildLayoutDelegate {
       double paneExtent, {
       double minExtent = 0,
       bool facesDividerAtPlacementEnd = false,
+      bool reachesLeft = false,
+      bool reachesRight = false,
     }) {
       if (!hasChild(slot)) return;
       // A hidden pane (zero extent) stays laid out at zero, as documented on
@@ -697,12 +747,19 @@ class FoldablePaneLayoutDelegate extends MultiChildLayoutDelegate {
       final contentExtent = paneExtent > 0 && paneExtent < minExtent
           ? minExtent
           : paneExtent;
+      // What a pane on an outer edge adds under a navigation beside the area,
+      // on the left and on the right.
+      final growLeft = reachesLeft ? extendLeft : 0.0;
+      final growRight = reachesRight ? extendRight : 0.0;
       layoutChild(
         slot,
         isHorizontal
-            ? BoxConstraints.tightFor(width: contentExtent, height: crossExtent)
+            ? BoxConstraints.tightFor(
+                width: contentExtent + growLeft + growRight,
+                height: crossExtent,
+              )
             : BoxConstraints.tightFor(
-                width: crossExtent,
+                width: crossExtent + growLeft + growRight,
                 height: contentExtent,
               ),
       );
@@ -717,7 +774,9 @@ class FoldablePaneLayoutDelegate extends MultiChildLayoutDelegate {
           : paneStart;
       positionChild(
         slot,
-        isHorizontal ? Offset(contentStart, 0) : Offset(0, contentStart),
+        isHorizontal
+            ? Offset(contentStart - growLeft, 0)
+            : Offset(-growLeft, contentStart),
       );
       if (!fromEnd) position += paneExtent;
     }
@@ -727,12 +786,16 @@ class FoldablePaneLayoutDelegate extends MultiChildLayoutDelegate {
       geometry.primaryExtent * scale,
       minExtent: minContentExtent,
       facesDividerAtPlacementEnd: true,
+      reachesLeft: outerEdges.primaryLeft,
+      reachesRight: outerEdges.primaryRight,
     );
     place(PaneSlot.divider, geometry.dividerExtent * scale);
     place(
       PaneSlot.secondary,
       geometry.secondaryExtent * scale,
       minExtent: minContentExtent,
+      reachesLeft: outerEdges.secondaryLeft,
+      reachesRight: outerEdges.secondaryRight,
     );
   }
 
@@ -743,6 +806,8 @@ class FoldablePaneLayoutDelegate extends MultiChildLayoutDelegate {
         geometry.dividerExtent != oldDelegate.geometry.dividerExtent ||
         geometry.secondaryExtent != oldDelegate.geometry.secondaryExtent ||
         minPaneExtent != oldDelegate.minPaneExtent ||
+        extendLeft != oldDelegate.extendLeft ||
+        extendRight != oldDelegate.extendRight ||
         textDirection != oldDelegate.textDirection;
   }
 }

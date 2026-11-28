@@ -9,6 +9,7 @@ import 'package:foldable_core/foldable_core.dart';
 import 'package:material_ui/material_ui.dart';
 
 import 'foldable_navigation.dart';
+import 'foldable_navigation_overlay.dart';
 import 'foldable_scaffold_controller.dart';
 import 'foldable_scaffold_divider.dart';
 import 'foldable_scaffold_layout.dart';
@@ -134,6 +135,7 @@ class FoldableScaffold extends StatefulWidget {
     this.bottomNavigationBarBuilder,
     this.navigationBuilder,
     this.navigationPlacement,
+    this.navigationKey,
     this.hasSecondaryBody,
     this.primary = true,
     this.extendBody = false,
@@ -302,8 +304,34 @@ class FoldableScaffold extends StatefulWidget {
   ///
   /// The navigation is a different widget for each edge, so its state does not
   /// move with it from one edge to another: keep what matters (the selected
-  /// tab) in your own state, or give the widget a `GlobalKey`.
+  /// tab) in your own state. To keep the state of the navigation when the
+  /// whole scaffold is replaced, see [navigationKey].
   final FoldableNavigationBuilder? navigationBuilder;
+
+  /// A key for the navigation, to keep its state when this scaffold is
+  /// replaced by another one.
+  ///
+  /// An app that builds one scaffold per tab (as `foldable_router` does with a
+  /// `FoldableScaffold` keyed by tab in `buildPanes`) gets a new scaffold, and
+  /// so a new navigation, on every tab switch: a `NavigationBar` or a
+  /// `NavigationRail` built from scratch shows the new tab at once, without
+  /// the indicator moving from the old tab to the new one. Give the scaffold
+  /// of every tab the same [GlobalKey] (a `static final` or a top-level one,
+  /// created once) and the navigation is moved, with its state, from the old
+  /// scaffold to the new one: it gets the new `selectedIndex` as an update and
+  /// animates to it. The scaffolds can keep keys of their own, so their pane
+  /// layout stays per tab.
+  ///
+  /// The key goes on the widget that holds what [navigationBuilder],
+  /// [primaryNavigation] (or its builder) or [bottomNavigationBar] (or its
+  /// builder) returns, in the one slot where the navigation is now: a rail
+  /// that is still shrinking on the side the navigation left is a copy
+  /// without the key, and so is a bottom bar that is fading out. So, like any
+  /// [GlobalKey], it may be used by one scaffold at a time only, and the state
+  /// is kept as long as the navigation stays the same widget type: a
+  /// `NavigationBar` that becomes a `NavigationRail` when the navigation moves
+  /// to a side is a new widget.
+  final GlobalKey? navigationKey;
 
   /// Decides where the navigation goes: below, above or beside the panes, and
   /// how wide a side navigation is.
@@ -331,7 +359,38 @@ class FoldableScaffold extends StatefulWidget {
   /// [Scaffold.primary].
   final bool primary;
 
-  /// Forwarded to [Scaffold.extendBody].
+  /// Whether the panes extend under the navigation below them or beside them,
+  /// so the content shows through a translucent navigation, like
+  /// [Scaffold.extendBody].
+  ///
+  /// * **Below** the panes, it is forwarded to [Scaffold.extendBody]: the body
+  ///   reaches the bottom of the scaffold and its `MediaQuery.padding.bottom`
+  ///   is the height of the bottom navigation.
+  /// * **Beside** the panes (a rail on the left or the right), only the pane
+  ///   next to the navigation extends, under it, to the edge of the scaffold:
+  ///   the body or the secondary body, the one shown in a single-pane layout,
+  ///   or both when they are stacked around a horizontal fold. Its
+  ///   `MediaQuery.padding` on that side is the width of the navigation slot
+  ///   (which includes the system inset it covers). Where the divider is, the
+  ///   fold, the hinge and the width of the other pane do not change.
+  /// * **Above** the panes, nothing changes.
+  ///
+  /// The widgets of the pane decide whether they draw into that padding (a
+  /// list that scrolls under the navigation) or stay out of it (a [SafeArea]).
+  ///
+  /// The navigation is painted above the panes, and also above what is drawn
+  /// over the scaffold in the same route, such as the pages that
+  /// `foldable_router` puts in the panes from above the layout: it is still
+  /// laid out in its slot, but painted and hit from the closest [Overlay],
+  /// right above the overlay entry of the scaffold (its route) and below the
+  /// routes and dialogs that come after it. Without an [Overlay] above the
+  /// scaffold, or while its tickers are muted (inside an [Offstage], for
+  /// example), it is painted in place, above the panes of the scaffold only.
+  /// An opacity or a clip of the route around the scaffold (during a fade
+  /// transition, say) does not apply to it while it is painted from the
+  /// overlay; its position does.
+  ///
+  /// Defaults to false, like [Scaffold.extendBody].
   final bool extendBody;
 
   /// Forwarded to [Scaffold.extendBodyBehindAppBar].
@@ -1183,11 +1242,17 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
             controller: _controller,
             child: FoldableScaffoldScope(
               canSplit: frame.canSplit,
-              child: _buildScaffold(
-                context: context,
-                frame: frame,
-                padding: padding,
-                paneAnimationDuration: paneAnimationDuration,
+              child: _NavigationKeyScope(
+                navigationKey: widget.navigationKey,
+                owner: _hasNavigationOn(frame.navigationEdge)
+                    ? frame.navigationEdge
+                    : FoldableNavigationEdge.none,
+                child: _buildScaffold(
+                  context: context,
+                  frame: frame,
+                  padding: padding,
+                  paneAnimationDuration: paneAnimationDuration,
+                ),
               ),
             ),
           ),
@@ -1261,50 +1326,121 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
   }) {
     // Physical order: the navigation is on the left or the right of the panes
     // whatever the text direction. Which side is the placement's business.
-    return Row(
-      textDirection: TextDirection.ltr,
-      children: [
-        _buildSideNavigation(
-          edge: FoldableNavigationEdge.left,
-          frame: frame,
-          padding: padding,
-          paneAnimationDuration: paneAnimationDuration,
+    // Both slots animate together, and the panes know their widths on every
+    // frame: a pane that extends under the navigation follows it.
+    return TweenAnimationBuilder<Offset>(
+      tween: Tween(
+        end: Offset(
+          // Zero without a navigation to show.
+          frame.navigationEdge == FoldableNavigationEdge.left
+              ? frame.railWidth
+              : 0.0,
+          frame.navigationEdge == FoldableNavigationEdge.right
+              ? frame.railWidth
+              : 0.0,
         ),
-        Expanded(
-          child: _PaneAreaProbe(
-            onMeasured: _paneAreaMeasured,
-            child: LayoutBuilder(
-              builder: (innerContext, constraints) {
-                return _buildPanes(
-                  context: innerContext,
-                  constraints: constraints,
-                  frame: frame,
-                  padding: padding,
-                  paneAnimationDuration: paneAnimationDuration,
-                );
-              },
+      ),
+      duration: paneAnimationDuration,
+      curve: Curves.fastOutSlowIn,
+      builder: (context, widths, _) {
+        final leftWidth = math.max(widths.dx, 0.0);
+        final rightWidth = math.max(widths.dy, 0.0);
+        // With extendBody, the pane next to a rail reaches the edge of the
+        // scaffold, under the rail.
+        final extendLeft =
+            widget.extendBody && _hasNavigationOn(FoldableNavigationEdge.left)
+            ? leftWidth
+            : 0.0;
+        final extendRight =
+            widget.extendBody && _hasNavigationOn(FoldableNavigationEdge.right)
+            ? rightWidth
+            : 0.0;
+        Widget slot(FoldableNavigationEdge edge, double width) {
+          final navigation = _buildSideNavigation(
+            edge: edge,
+            animatedWidth: width,
+            frame: frame,
+            padding: padding,
+          );
+          // Centred across the height, as the slots of a Row were.
+          return Align(
+            child: widget.extendBody
+                ? NavigationOverPanes(overPanes: true, child: navigation)
+                : navigation,
+          );
+        }
+
+        // The panes come first, so the slots are painted above them and hit
+        // before them, also where a pane extends under a rail.
+        return Stack(
+          children: [
+            Positioned(
+              left: leftWidth,
+              right: rightWidth,
+              top: 0,
+              bottom: 0,
+              child: _PaneAreaProbe(
+                onMeasured: _paneAreaMeasured,
+                child: LayoutBuilder(
+                  builder: (innerContext, constraints) {
+                    return _buildPanes(
+                      context: innerContext,
+                      constraints: constraints,
+                      frame: frame,
+                      padding: padding,
+                      paneAnimationDuration: paneAnimationDuration,
+                      extendLeft: extendLeft,
+                      extendRight: extendRight,
+                    );
+                  },
+                ),
+              ),
             ),
-          ),
-        ),
-        _buildSideNavigation(
-          edge: FoldableNavigationEdge.right,
-          frame: frame,
-          padding: padding,
-          paneAnimationDuration: paneAnimationDuration,
-        ),
-      ],
+            Positioned(
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: leftWidth,
+              child: slot(FoldableNavigationEdge.left, leftWidth),
+            ),
+            Positioned(
+              right: 0,
+              top: 0,
+              bottom: 0,
+              width: rightWidth,
+              child: slot(FoldableNavigationEdge.right, rightWidth),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  /// The navigation built for [edge], under the [navigationKey] when that
+  /// edge is where the navigation is now (see [_KeyedNavigation]).
+  Widget _keyedNavigation(
+    BuildContext context,
+    FoldableNavigationEdge edge,
+    FoldableNavigationPlacement placement,
+    BoxConstraints constraints,
+    EdgeInsets padding,
+  ) {
+    return _KeyedNavigation(
+      edge: edge,
+      child: _navigationFor(context, placement, constraints, padding),
     );
   }
 
   /// The slot of the navigation on the physical [edge], [FoldableNavigationEdge.left]
-  /// or [FoldableNavigationEdge.right]: as wide as the placement says when the
-  /// navigation is on that edge, zero otherwise. Both slots are always in the
-  /// tree, so the panes keep their state when the navigation changes sides.
+  /// or [FoldableNavigationEdge.right], [animatedWidth] wide: as wide as the
+  /// placement says when the navigation is on that edge, zero otherwise, and
+  /// in between while it animates. Both slots are always in the tree, so the
+  /// panes keep their state when the navigation changes sides.
   Widget _buildSideNavigation({
     required FoldableNavigationEdge edge,
+    required double animatedWidth,
     required FrameGeometry frame,
     required EdgeInsets padding,
-    required Duration paneAnimationDuration,
   }) {
     final active = frame.navigationEdge == edge;
     // One slot carries the key, so a test or a driver finds the navigation in
@@ -1318,85 +1454,100 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
     final placement = active
         ? frame.placement
         : FoldableNavigationPlacement(edge);
+    // The slot the navigation is moving to builds it from its first frame,
+    // still zero wide, when it carries the navigationKey: the navigation must
+    // be in the tree on every frame to keep its state. It is laid out at the
+    // width it is growing to then, and not shown.
+    final holdsNavigationKey =
+        active && widget.navigationKey != null && frame.railWidth > 0;
 
-    return TweenAnimationBuilder<double>(
-      tween: Tween(end: active ? frame.navigationWidth : 0.0),
-      duration: paneAnimationDuration,
-      curve: Curves.fastOutSlowIn,
-      builder: (context, animatedWidth, _) {
-        if (animatedWidth == 0 || !_hasNavigationOn(edge)) {
-          return SizedBox.shrink(key: keyed ? key : null);
-        }
-
-        // The slot is the extent plus the system inset of its edge; the
-        // navigation gets the extent only, so its content stays out of the
-        // status bar and the camera strip. The space the cutouts need at the
-        // top and bottom is added around it too, not given to the builder.
-        final isRight = edge == FoldableNavigationEdge.right;
-        final edgeInset = isRight ? padding.right : padding.left;
-        final insideInset = active && placement.insideInset && edgeInset > 0;
-        // Inside the strip the navigation fills the slot: no side padding.
-        final sidePadding = insideInset
-            ? 0.0
-            : math.min(edgeInset, animatedWidth);
-        final cutoutPadding = _railCutoutInsets(
-          context: context,
-          edge: edge,
-          width: animatedWidth,
-          scaffoldWidth: frame.scaffoldWidth,
-          padding: padding,
-          insideInset: insideInset,
-        );
-        // A navigation at the bottom of its edge keeps off the home
-        // indicator; the cutouts below it may need more.
-        final bottomPadding =
-            active && placement.alignment == FoldableNavigationAlignment.end
-            ? math.max(cutoutPadding.bottom, padding.bottom)
-            : cutoutPadding.bottom;
-        // What the scaffold did not apply: the other sides stay as they were.
-        final builderPadding = isRight
-            ? padding.copyWith(right: 0)
-            : padding.copyWith(left: 0);
-        return SizedBox(
-          width: animatedWidth,
-          child: Padding(
-            padding: EdgeInsets.only(
-              left: isRight ? 0 : sidePadding,
-              right: isRight ? sidePadding : 0,
-              top: cutoutPadding.top,
-              bottom: bottomPadding,
+    if (!_hasNavigationOn(edge) ||
+        (animatedWidth == 0 && !holdsNavigationKey)) {
+      return SizedBox.shrink(key: keyed ? key : null);
+    }
+    if (animatedWidth == 0) {
+      return SizedBox(
+        width: 0,
+        child: OverflowBox(
+          minWidth: frame.railWidth,
+          maxWidth: frame.railWidth,
+          child: Offstage(
+            child: _buildSideNavigation(
+              edge: edge,
+              animatedWidth: frame.railWidth,
+              frame: frame,
+              padding: padding,
             ),
-            child: LayoutBuilder(
-              key: keyed ? key : null,
-              // The scaffold applied the system inset of the edge (and the
-              // bottom one when it padded it), so a widget with its own
-              // SafeArea, like NavigationRail, must not take it a second time:
-              // inside the 84 wide strip that leaves it no room at all.
-              builder: (context, constraints) => MediaQuery.removePadding(
-                context: context,
-                removeLeft: !isRight,
-                removeRight: isRight,
-                removeBottom:
-                    padding.bottom > 0 && bottomPadding >= padding.bottom,
-                child: Builder(
-                  builder: (context) => _navigationFor(
-                    context,
-                    placement,
-                    constraints,
-                    builderPadding,
-                  ),
-                ),
+          ),
+        ),
+      );
+    }
+
+    // The slot is the extent plus the system inset of its edge; the
+    // navigation gets the extent only, so its content stays out of the
+    // status bar and the camera strip. The space the cutouts need at the
+    // top and bottom is added around it too, not given to the builder.
+    final isRight = edge == FoldableNavigationEdge.right;
+    final edgeInset = isRight ? padding.right : padding.left;
+    final insideInset = active && placement.insideInset && edgeInset > 0;
+    // Inside the strip the navigation fills the slot: no side padding.
+    final sidePadding = insideInset ? 0.0 : math.min(edgeInset, animatedWidth);
+    final cutoutPadding = _railCutoutInsets(
+      context: context,
+      edge: edge,
+      width: animatedWidth,
+      scaffoldWidth: frame.scaffoldWidth,
+      padding: padding,
+      insideInset: insideInset,
+    );
+    // A navigation at the bottom of its edge keeps off the home
+    // indicator; the cutouts below it may need more.
+    final bottomPadding =
+        active && placement.alignment == FoldableNavigationAlignment.end
+        ? math.max(cutoutPadding.bottom, padding.bottom)
+        : cutoutPadding.bottom;
+    // What the scaffold did not apply: the other sides stay as they were.
+    final builderPadding = isRight
+        ? padding.copyWith(right: 0)
+        : padding.copyWith(left: 0);
+    return SizedBox(
+      width: animatedWidth,
+      child: Padding(
+        padding: EdgeInsets.only(
+          left: isRight ? 0 : sidePadding,
+          right: isRight ? sidePadding : 0,
+          top: cutoutPadding.top,
+          bottom: bottomPadding,
+        ),
+        child: LayoutBuilder(
+          key: keyed ? key : null,
+          // The scaffold applied the system inset of the edge (and the
+          // bottom one when it padded it), so a widget with its own
+          // SafeArea, like NavigationRail, must not take it a second time:
+          // inside the 84 wide strip that leaves it no room at all.
+          builder: (context, constraints) => MediaQuery.removePadding(
+            context: context,
+            removeLeft: !isRight,
+            removeRight: isRight,
+            removeBottom: padding.bottom > 0 && bottomPadding >= padding.bottom,
+            child: Builder(
+              builder: (context) => _keyedNavigation(
+                context,
+                edge,
+                placement,
+                constraints,
+                builderPadding,
               ),
             ),
           ),
-        );
-      },
+        ),
+      ),
     );
   }
 
   /// The navigation above the panes, under the app bar, when the placement
   /// says so. [Scaffold] has no slot for it, so it is the first thing in the
-  /// body.
+  /// body. [FoldableScaffold.extendBody] does not apply to it.
   Widget _buildTopNavigation({
     required FrameGeometry frame,
     required EdgeInsets padding,
@@ -1412,8 +1563,9 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
       child: shown
           ? LayoutBuilder(
               key: const Key('top_navigation_builder'),
-              builder: (context, constraints) => _navigationFor(
+              builder: (context, constraints) => _keyedNavigation(
                 context,
+                FoldableNavigationEdge.top,
                 frame.placement,
                 constraints,
                 padding,
@@ -1425,26 +1577,32 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
 
   /// The navigation below the panes, given to [Scaffold.bottomNavigationBar] so
   /// the floating action button, `extendBody` and the insets work as usual.
+  ///
+  /// With [FoldableScaffold.extendBody] the panes are under it, so it is
+  /// painted from the overlay, above whatever is drawn over them.
   Widget _buildBottomNavigationBar({
     required FrameGeometry frame,
     required EdgeInsets padding,
     required Duration paneAnimationDuration,
   }) {
-    return AnimatedSwitcher(
+    final bar = AnimatedSwitcher(
       duration: paneAnimationDuration,
       switchInCurve: Curves.fastOutSlowIn,
       child: frame.navigationEdge != FoldableNavigationEdge.bottom
           ? const SizedBox.shrink(key: Key('bottom_navigation_hidden'))
           : LayoutBuilder(
               key: const Key('bottom_navigation_builder'),
-              builder: (context, constraints) => _navigationFor(
+              builder: (context, constraints) => _keyedNavigation(
                 context,
+                FoldableNavigationEdge.bottom,
                 frame.placement,
                 constraints,
                 padding,
               ),
             ),
     );
+    if (!widget.extendBody) return bar;
+    return NavigationOverPanes(overPanes: true, child: bar);
   }
 
   Widget _buildPanes({
@@ -1453,6 +1611,8 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
     required FrameGeometry frame,
     required EdgeInsets padding,
     required Duration paneAnimationDuration,
+    required double extendLeft,
+    required double extendRight,
   }) {
     final totalWidth = constraints.maxWidth;
     // Side by side, the panes share the width; stacked around a horizontal
@@ -1577,6 +1737,9 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
                 maxSecondarySize: maxSecondarySize,
                 metrics: metrics,
                 paneMedia: paneMedia,
+                bodyPadding: bodyMedia.padding,
+                extendLeft: extendLeft,
+                extendRight: extendRight,
               );
             },
           );
@@ -1641,8 +1804,31 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
     required double maxSecondarySize,
     required _DividerMetrics metrics,
     required MediaQueryData paneMedia,
+    required EdgeInsets bodyPadding,
+    required double extendLeft,
+    required double extendRight,
   }) {
     final canSplitPanel = frame.canSplit && frame.hasSecondaryBody;
+    // The pane next to a rail reaches under it with extendBody: its padding on
+    // that side is the slot (never less than the system inset, which the slot
+    // covers once it is fully open).
+    final outerEdges = paneOuterEdges(geometry, frame.textDirection);
+    MediaQueryData extended(
+      MediaQueryData media, {
+      required bool left,
+      required bool right,
+    }) {
+      final reachesLeft = left && extendLeft > 0;
+      final reachesRight = right && extendRight > 0;
+      if (!reachesLeft && !reachesRight) return media;
+      return media.copyWith(
+        padding: media.padding.copyWith(
+          left: reachesLeft ? math.max(extendLeft, bodyPadding.left) : null,
+          right: reachesRight ? math.max(extendRight, bodyPadding.right) : null,
+        ),
+      );
+    }
+
     // Stacked, the hinge is between the panes: the one above has no system
     // inset below it, and the one below none above it.
     final stacked =
@@ -1655,6 +1841,8 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
         geometry: geometry,
         textDirection: frame.textDirection,
         minPaneExtent: _minBodySize,
+        extendLeft: extendLeft,
+        extendRight: extendRight,
       ),
       children: [
         LayoutId(
@@ -1662,11 +1850,15 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
           child: _buildPane(
             child: _body(),
             hidden: !geometry.primaryVisible,
-            media: stacked
-                ? paneMedia.copyWith(
-                    padding: paneMedia.padding.copyWith(bottom: 0),
-                  )
-                : paneMedia,
+            media: extended(
+              stacked
+                  ? paneMedia.copyWith(
+                      padding: paneMedia.padding.copyWith(bottom: 0),
+                    )
+                  : paneMedia,
+              left: outerEdges.primaryLeft,
+              right: outerEdges.primaryRight,
+            ),
           ),
         ),
         LayoutId(
@@ -1697,11 +1889,15 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
           child: _buildPane(
             child: _secondaryBody(),
             hidden: !geometry.secondaryVisible,
-            media: stacked
-                ? paneMedia.copyWith(
-                    padding: paneMedia.padding.copyWith(top: 0),
-                  )
-                : paneMedia,
+            media: extended(
+              stacked
+                  ? paneMedia.copyWith(
+                      padding: paneMedia.padding.copyWith(top: 0),
+                    )
+                  : paneMedia,
+              left: outerEdges.secondaryLeft,
+              right: outerEdges.secondaryRight,
+            ),
           ),
         ),
       ],
@@ -1710,13 +1906,19 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
       primaryVisible: paneLayout.primaryVisible,
       secondaryVisible: paneLayout.secondaryVisible,
       axis: paneLayout.geometry.axis,
-      // Keep sliding pages off the navigation rail. The opacity is there all
-      // the time, so the panes keep their state when it changes: it is zero
-      // only for the one frame before a horizontal hinge has been measured.
+      // Keep sliding pages off the navigation rail, except for the part of a
+      // pane that extends under it. The opacity is there all the time, so the
+      // panes keep their state when it changes: it is zero only for the one
+      // frame before a horizontal hinge has been measured.
       child: Opacity(
         opacity: _paneAreaUnmeasured ? 0.0 : 1.0,
         alwaysIncludeSemantics: true,
-        child: ClipRect(child: panes),
+        child: ClipRect(
+          clipper: extendLeft > 0 || extendRight > 0
+              ? _PaneAreaClipper(left: extendLeft, right: extendRight)
+              : null,
+          child: panes,
+        ),
       ),
     );
   }
@@ -2047,5 +2249,71 @@ class _CutoutAvoidingAppBar extends StatelessWidget
       ),
       child: appBar,
     );
+  }
+}
+
+/// The pane area, grown by the parts of the panes that extend under a rail
+/// on the [left] and the [right].
+class _PaneAreaClipper extends CustomClipper<Rect> {
+  const _PaneAreaClipper({required this.left, required this.right});
+
+  final double left;
+  final double right;
+
+  @override
+  Rect getClip(Size size) =>
+      Rect.fromLTRB(-left, 0, size.width + right, size.height);
+
+  // What foldable_router reads to clip its pages to the panes: the default is
+  // the box of the area, without the extension.
+  @override
+  Rect getApproximateClipRect(Size size) => getClip(size);
+
+  @override
+  bool shouldReclip(_PaneAreaClipper oldClipper) =>
+      oldClipper.left != left || oldClipper.right != right;
+}
+
+/// Says which edge the navigation is on now, for [FoldableScaffold.navigationKey].
+///
+/// Every [_KeyedNavigation] depends on it, also the copies of the navigation
+/// that are leaving (a rail still shrinking, a bottom bar fading out), so they
+/// all rebuild in the frame the navigation moves: the old one lets go of the
+/// key in the same frame the new one takes it, and there is never a duplicate
+/// [GlobalKey].
+class _NavigationKeyScope extends InheritedWidget {
+  const _NavigationKeyScope({
+    required this.navigationKey,
+    required this.owner,
+    required super.child,
+  });
+
+  final GlobalKey? navigationKey;
+
+  /// The physical edge whose slot holds [navigationKey], or
+  /// [FoldableNavigationEdge.none].
+  final FoldableNavigationEdge owner;
+
+  @override
+  bool updateShouldNotify(_NavigationKeyScope oldWidget) =>
+      oldWidget.navigationKey != navigationKey || oldWidget.owner != owner;
+}
+
+/// The navigation built for the slot on [edge], keyed with
+/// [FoldableScaffold.navigationKey] when that slot is where the navigation is.
+class _KeyedNavigation extends StatelessWidget {
+  const _KeyedNavigation({required this.edge, required this.child});
+
+  final FoldableNavigationEdge edge;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    final scope = context
+        .dependOnInheritedWidgetOfExactType<_NavigationKeyScope>();
+    final key = scope != null && scope.owner == edge
+        ? scope.navigationKey
+        : null;
+    return KeyedSubtree(key: key, child: child);
   }
 }

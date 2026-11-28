@@ -31,7 +31,7 @@ $F/flutter test                           # package; cũng example/, ../foldable
 $F/dart doc --dry-run; rm -rf doc         # phải 0 warning; xoá doc/ do lệnh tạo ra
 ```
 
-Mốc gần nhất: package 438 test, example 8, foldable_router 236, foldable_core 4, tất cả pass.
+Mốc gần nhất: package 464 test, example 12, foldable_router 238, foldable_core 4, tất cả pass (foldable_router/example: 30 pass, 10 fail sẵn trong `app_test.dart`).
 
 Pane đang co/mở (extent giữa 0 và đích) được layout ít nhất `minBodySize`, neo cạnh phía divider, trượt ra dưới `ClipRect` (`FoldablePaneLayoutDelegate.minPaneExtent`); pane ẩn hẳn vẫn rộng 0. Router cắt trang theo phần frame nhìn thấy (`PaneMetrics.visibleRectFor`).
 
@@ -61,6 +61,9 @@ Khác:
 - `padding` truyền cho builder: cạnh bên = 0, các cạnh khác nguyên (kể cả `bottom`), builder đừng áp lại `padding.bottom` khi `alignment: end`.
 - `avoidCutouts: false` chỉ tắt việc tránh camera; vị trí trong dải và chừa đáy vẫn giữ.
 - Bản lề ngang: pane xếp trên → dưới (`paneAxis`, `stacksAtFold`). Hiện chỉ xếp chồng khi có bản lề ngang đang active.
+- `extendBody`: đáy như `Scaffold.extendBody`; cạnh bên: chỉ pane sát rail (cả hai khi xếp chồng, pane đang hiện khi một pane) kéo dài dưới rail tới mép scaffold, `MediaQuery.padding` phía đó = bề rộng slot (gồm inset hệ thống). Vị trí divider/fold/`FrameGeometry` không đổi (`paneOuterEdges`, `FoldablePaneLayoutDelegate.extendLeft/Right`, `_PaneAreaClipper` có override `getApproximateClipRect` vì router đọc nó trong `visibleRectFor`). Top không bị ảnh hưởng. Hai slot bên nằm trong một `Stack` phía trên pane, bề rộng cùng một `TweenAnimationBuilder<Offset>`.
+- Với `extendBody`, navigation dưới/bên được layout tại chỗ nhưng vẽ và hit-test từ `Overlay` (`foldable_navigation_overlay.dart`, `NavigationOverPanes`): `OverlayPortal` thường (không dùng `overlayChildLayoutBuilder`: nó đánh dấu layout mỗi frame và assert khi `Scaffold` reparent body bằng GlobalKey trong `LayoutBuilder`), painter tính `getTransformTo` lúc paint và vẽ lại mỗi frame. Không có Overlay hoặc TickerMode tắt thì vẽ tại chỗ. Opacity/clip của route không áp lên navigation khi vẽ từ overlay.
+- `navigationKey` (GlobalKey): đặt trên `KeyedSubtree` quanh navigation của slot đang active (`_NavigationKeyScope` + `_KeyedNavigation`, mọi bản sao đang rời đi rebuild cùng frame nên không trùng key). Slot bên đích ở frame đầu (rộng 0) vẫn giữ navigation, layout ở bề rộng đích trong `Offstage`.
 
 ## 6. Dữ liệu iPhone Duo đã đo
 

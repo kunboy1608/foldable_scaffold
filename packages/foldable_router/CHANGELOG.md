@@ -2,6 +2,12 @@
 
 New:
 
+* Example `with_scaffold.dart`: the scaffold of every tab shares one
+  `navigationKey`, so the navigation bar keeps its state (and animates its
+  indicator) across tab switches. `test/with_scaffold_extend_body_test.dart`
+  checks that, with `FoldableScaffold.extendBody`, the pages drawn under the
+  bottom bar or the rail do not take its taps.
+
 * Depends on `foldable_core` and `material_ui`: `FoldableBreakpoints` and
   `FoldableFold` live in `foldable_core` now (both packages still re-export
   them), and the router builds on `material_ui` instead of the SDK's
