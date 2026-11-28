@@ -1,5 +1,21 @@
 ## 0.2.0-dev.2
 
+Fixed:
+
+* Popping the page on the right of a two-pane tab whose layout then goes to
+  one pane (a `FoldableScaffold` closing its secondary pane) no longer
+  shifts the page on the left: the tab became one pane on the first frame of
+  the pop and the page below took the parallax of the running transition
+  (a third of the tab area to the side on iOS, in one frame). A page keeps
+  its outgoing transition off until a secondary animation that started with
+  two panes settles. With the scaffold keeping the closing pane (and its
+  frame) until it has slid out, the popped page leaves from its pane, cut to
+  it, instead of staying over the growing left pane.
+* The page slot reports its clip (`describeApproximatePaintClip`), so what
+  measures the painted part of a page (semantics, tests) sees the screen.
+* `example/test/with_scaffold_pop_test.dart`: frame-by-frame checks of the
+  pop, on a fold narrower than the split and in a wide window.
+
 New:
 
 * Example `with_scaffold.dart`: the scaffold of every tab shares one

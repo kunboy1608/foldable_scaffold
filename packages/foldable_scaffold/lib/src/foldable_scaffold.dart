@@ -698,6 +698,23 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
 
   bool _wasSinglePane = false;
   bool _wasPrimaryVisible = false;
+
+  /// The extent each pane is heading to, as of the last pane layout, or null
+  /// before the first one.
+  PaneGeometry? _lastPaneTarget;
+
+  /// The extent the content of each pane keeps while that pane slides in or
+  /// out (see [FoldablePaneLayoutDelegate.primarySlideExtent]), or zero while
+  /// it follows the extent of the pane.
+  double _primarySlideExtent = 0;
+  double _secondarySlideExtent = 0;
+
+  /// The secondary body the app gave last, kept while its pane slides out
+  /// after the app removed it ([FoldableScaffold.secondaryBody] and
+  /// [FoldableScaffold.secondaryBodyBuilder] both null), so the pane leaves
+  /// with its content instead of empty.
+  Widget? _leavingSecondaryBody;
+  BoxConstraintsNullableWidgetBuilder? _leavingSecondaryBodyBuilder;
   FoldableFold? _fold;
 
   /// Where the pane area is in the window, as the last layout left it. Always
@@ -761,6 +778,15 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
     if (widget.controller != oldWidget.controller) {
       _detachController();
       _attachController();
+    }
+    // The secondary body went away: its pane slides out with it (see
+    // [_secondaryBody], which lets it go once the pane is hidden).
+    if (widget.secondaryBody == null &&
+        widget.secondaryBodyBuilder == null &&
+        (oldWidget.secondaryBody != null ||
+            oldWidget.secondaryBodyBuilder != null)) {
+      _leavingSecondaryBody = oldWidget.secondaryBody;
+      _leavingSecondaryBodyBuilder = oldWidget.secondaryBodyBuilder;
     }
   }
 
@@ -911,12 +937,22 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
     );
   }
 
-  Widget _secondaryBody() {
+  Widget _secondaryBody({required bool visible}) {
+    final hasOwn =
+        widget.secondaryBody != null || widget.secondaryBodyBuilder != null;
+    if (hasOwn || !visible) {
+      _leavingSecondaryBody = null;
+      _leavingSecondaryBodyBuilder = null;
+    }
+    final body = hasOwn ? widget.secondaryBody : _leavingSecondaryBody;
+    final builder = hasOwn
+        ? widget.secondaryBodyBuilder
+        : _leavingSecondaryBodyBuilder;
     return LayoutBuilder(
       key: const Key('secondary_body_builder'),
       builder: (context, constraints) =>
-          widget.secondaryBodyBuilder?.call(context, constraints) ??
-          widget.secondaryBody ??
+          builder?.call(context, constraints) ??
+          body ??
           const SizedBox.shrink(),
     );
   }
@@ -1705,6 +1741,7 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
                   paneLayout.primaryVisible != _wasPrimaryVisible);
           _wasSinglePane = paneLayout.isSinglePane;
           _wasPrimaryVisible = paneLayout.primaryVisible;
+          _updateSlideExtents(paneLayout.geometry);
 
           final metrics = _DividerMetrics(
             scaffoldWidth: frame.scaffoldWidth,
@@ -1726,6 +1763,14 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
                 : paneAnimationDuration,
             curve: Curves.fastOutSlowIn,
             builder: (context, geometry, _) {
+              // A pane that reached its target follows its extent again.
+              final target = paneLayout.geometry;
+              if (geometry.primaryExtent == target.primaryExtent) {
+                _primarySlideExtent = 0;
+              }
+              if (geometry.secondaryExtent == target.secondaryExtent) {
+                _secondarySlideExtent = 0;
+              }
               return _buildPanesContent(
                 geometry: geometry,
                 paneLayout: paneLayout,
@@ -1745,6 +1790,43 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
           );
         },
       ),
+    );
+  }
+
+  /// Keeps the content of a pane that starts sliding out at the extent it had,
+  /// and the content of a pane that starts sliding in at the extent it is
+  /// opening to, from the new [target] of the panes.
+  ///
+  /// Without this a closing pane would first squeeze its content down to
+  /// [FoldableScaffold.minBodySize] and only then slide, and an opening one
+  /// would grow from it: the content changes speed and size halfway through
+  /// the animation. A pane that is resized (the divider, the window) keeps
+  /// following its extent.
+  void _updateSlideExtents(PaneGeometry target) {
+    final last = _lastPaneTarget;
+    _lastPaneTarget = target;
+    if (last == null || last.axis != target.axis) {
+      _primarySlideExtent = 0;
+      _secondarySlideExtent = 0;
+      return;
+    }
+    double next(double slide, double from, double to) {
+      if (to == 0) return from > 0 ? from : slide;
+      // Opening, or retargeted while it slides: the content takes the extent
+      // the pane is heading to.
+      if (from == 0 || slide > 0) return to;
+      return 0;
+    }
+
+    _primarySlideExtent = next(
+      _primarySlideExtent,
+      last.primaryExtent,
+      target.primaryExtent,
+    );
+    _secondarySlideExtent = next(
+      _secondarySlideExtent,
+      last.secondaryExtent,
+      target.secondaryExtent,
     );
   }
 
@@ -1812,19 +1894,36 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
     // The pane next to a rail reaches under it with extendBody: its padding on
     // that side is the slot (never less than the system inset, which the slot
     // covers once it is fully open).
-    final outerEdges = paneOuterEdges(geometry, frame.textDirection);
+    //
+    // While a pane slides away from the rail, the pane behind it gets the room
+    // under the rail (and the padding that goes with it) progressively, as
+    // [paneReaches] says, so nothing jumps when the animation ends.
+    final reaches = paneReaches(
+      geometry,
+      frame.textDirection,
+      left: extendLeft,
+      right: extendRight,
+    );
+    // The padding for a reach of [reach] out of [extend]: the slot, or the
+    // system inset when it is wider, in proportion.
+    double reachPadding(double reach, double extend, double inset) =>
+        reach >= extend
+        ? math.max(extend, inset)
+        : reach * math.max(extend, inset) / extend;
     MediaQueryData extended(
       MediaQueryData media, {
-      required bool left,
-      required bool right,
+      required double left,
+      required double right,
     }) {
-      final reachesLeft = left && extendLeft > 0;
-      final reachesRight = right && extendRight > 0;
-      if (!reachesLeft && !reachesRight) return media;
+      if (left <= 0 && right <= 0) return media;
       return media.copyWith(
         padding: media.padding.copyWith(
-          left: reachesLeft ? math.max(extendLeft, bodyPadding.left) : null,
-          right: reachesRight ? math.max(extendRight, bodyPadding.right) : null,
+          left: left > 0
+              ? reachPadding(left, extendLeft, bodyPadding.left)
+              : null,
+          right: right > 0
+              ? reachPadding(right, extendRight, bodyPadding.right)
+              : null,
         ),
       );
     }
@@ -1841,6 +1940,8 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
         geometry: geometry,
         textDirection: frame.textDirection,
         minPaneExtent: _minBodySize,
+        primarySlideExtent: _primarySlideExtent,
+        secondarySlideExtent: _secondarySlideExtent,
         extendLeft: extendLeft,
         extendRight: extendRight,
       ),
@@ -1856,8 +1957,8 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
                       padding: paneMedia.padding.copyWith(bottom: 0),
                     )
                   : paneMedia,
-              left: outerEdges.primaryLeft,
-              right: outerEdges.primaryRight,
+              left: reaches.primaryLeft,
+              right: reaches.primaryRight,
             ),
           ),
         ),
@@ -1887,7 +1988,7 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
         LayoutId(
           id: PaneSlot.secondary,
           child: _buildPane(
-            child: _secondaryBody(),
+            child: _secondaryBody(visible: geometry.secondaryVisible),
             hidden: !geometry.secondaryVisible,
             media: extended(
               stacked
@@ -1895,8 +1996,8 @@ class _FoldableScaffoldState extends State<FoldableScaffold>
                       padding: paneMedia.padding.copyWith(top: 0),
                     )
                   : paneMedia,
-              left: outerEdges.secondaryLeft,
-              right: outerEdges.secondaryRight,
+              left: reaches.secondaryLeft,
+              right: reaches.secondaryRight,
             ),
           ),
         ),

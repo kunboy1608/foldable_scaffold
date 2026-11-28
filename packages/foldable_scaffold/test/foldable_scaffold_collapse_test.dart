@@ -91,6 +91,9 @@ void main() {
           ),
         );
         await tester.pumpAndSettle();
+        final double splitWidth = tester
+            .getSize(find.byKey(const Key('body')))
+            .width;
 
         // One pane from now on: the body animates out.
         tester.view.physicalSize = const Size(800, 720);
@@ -101,9 +104,10 @@ void main() {
         final Rect secondary = tester.getRect(
           find.byKey(const Key('secondary')),
         );
-        // Mid-way: the body keeps its minimum width and touches the secondary
-        // body on the side of the divider, overflowing past the outer edge.
-        expect(body.width, 200);
+        // Mid-way: the body keeps the width it had (it slides out instead of
+        // squeezing its content first) and touches the secondary body on the
+        // side of the divider, overflowing past the outer edge.
+        expect(body.width, moreOrLessEquals(splitWidth));
         if (direction == TextDirection.ltr) {
           expect(body.left, lessThan(0));
           expect(body.right, lessThanOrEqualTo(secondary.left));

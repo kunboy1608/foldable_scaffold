@@ -1434,6 +1434,13 @@ class _RenderPaneSlot extends RenderShiftedBox {
     return _visible;
   }
 
+  // What the page was cut to when it last painted (its frame, cut by the clips
+  // of the layout), so that what reads the visible part of the page
+  // (semantics, tests) sees the same thing as the screen.
+  @override
+  Rect? describeApproximatePaintClip(RenderObject child) =>
+      _clip && _visible ? _paintClip : null;
+
   @override
   void applyPaintTransform(RenderBox child, Matrix4 transform) {
     final Offset origin = _childOrigin();

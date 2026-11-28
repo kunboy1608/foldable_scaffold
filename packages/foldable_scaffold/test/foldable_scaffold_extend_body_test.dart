@@ -531,7 +531,7 @@ void main() {
     });
   });
 
-  group('paneOuterEdges', () {
+  group('paneReaches', () {
     const ltr = TextDirection.ltr;
     const rtl = TextDirection.rtl;
     const split = PaneGeometry(
@@ -541,17 +541,17 @@ void main() {
     );
 
     test('side by side: the outer pane of each side', () {
-      expect(paneOuterEdges(split, ltr), (
-        primaryLeft: true,
-        primaryRight: false,
-        secondaryLeft: false,
-        secondaryRight: true,
+      expect(paneReaches(split, ltr, left: 80, right: 60), (
+        primaryLeft: 80.0,
+        primaryRight: 0.0,
+        secondaryLeft: 0.0,
+        secondaryRight: 60.0,
       ));
-      expect(paneOuterEdges(split, rtl), (
-        primaryLeft: false,
-        primaryRight: true,
-        secondaryLeft: true,
-        secondaryRight: false,
+      expect(paneReaches(split, rtl, left: 80, right: 60), (
+        primaryLeft: 0.0,
+        primaryRight: 60.0,
+        secondaryLeft: 80.0,
+        secondaryRight: 0.0,
       ));
     });
 
@@ -561,22 +561,44 @@ void main() {
         dividerExtent: 0,
         secondaryExtent: 1024,
       );
-      expect(paneOuterEdges(secondaryOnly, ltr), (
-        primaryLeft: false,
-        primaryRight: false,
-        secondaryLeft: true,
-        secondaryRight: true,
+      expect(paneReaches(secondaryOnly, ltr, left: 80, right: 60), (
+        primaryLeft: 0.0,
+        primaryRight: 0.0,
+        secondaryLeft: 80.0,
+        secondaryRight: 60.0,
       ));
       const primaryOnly = PaneGeometry(
         primaryExtent: 1024,
         dividerExtent: 0,
         secondaryExtent: 0,
       );
-      expect(paneOuterEdges(primaryOnly, rtl), (
-        primaryLeft: true,
-        primaryRight: true,
-        secondaryLeft: false,
-        secondaryRight: false,
+      expect(paneReaches(primaryOnly, rtl, left: 80, right: 60), (
+        primaryLeft: 80.0,
+        primaryRight: 60.0,
+        secondaryLeft: 0.0,
+        secondaryRight: 0.0,
+      ));
+    });
+
+    test('a pane sliding out hands the edge over progressively', () {
+      // The secondary body is 30 wide on its way out, the divider gone: the
+      // body reaches the part of the right slot that nothing covers.
+      const leaving = PaneGeometry(
+        primaryExtent: 994,
+        dividerExtent: 0,
+        secondaryExtent: 30,
+      );
+      expect(paneReaches(leaving, ltr, left: 0, right: 80), (
+        primaryLeft: 0.0,
+        primaryRight: 50.0,
+        secondaryLeft: 0.0,
+        secondaryRight: 80.0,
+      ));
+      expect(paneReaches(leaving, rtl, left: 80, right: 0), (
+        primaryLeft: 50.0,
+        primaryRight: 0.0,
+        secondaryLeft: 80.0,
+        secondaryRight: 0.0,
       ));
     });
 
@@ -587,11 +609,11 @@ void main() {
         dividerExtent: 20,
         secondaryExtent: 300,
       );
-      expect(paneOuterEdges(stacked, ltr), (
-        primaryLeft: true,
-        primaryRight: true,
-        secondaryLeft: true,
-        secondaryRight: true,
+      expect(paneReaches(stacked, ltr, left: 80, right: 60), (
+        primaryLeft: 80.0,
+        primaryRight: 60.0,
+        secondaryLeft: 80.0,
+        secondaryRight: 60.0,
       ));
     });
   });

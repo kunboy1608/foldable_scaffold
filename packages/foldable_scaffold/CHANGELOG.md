@@ -17,6 +17,19 @@ Changed (behaviour, breaking in the pre-release):
   through every width down to a few pixels, and content such as a `ListTile`
   with a `leading` failed its layout assertions. A hidden pane is still laid
   out at zero.
+* Closing (or opening) the secondary pane is continuous, frame by frame:
+  * the closing pane keeps its content at the width it had and slides it out
+    whole, and an opening pane slides in at the width it opens to; before,
+    a closing pane first squeezed its content down to `minBodySize` and only
+    then slid, so the content changed size and speed halfway through. A pane
+    that is resized (divider, window) still follows its extent;
+  * a `secondaryBody` (or `secondaryBodyBuilder`) set to null while split is
+    kept until its pane has slid out, instead of leaving an empty pane on the
+    first frame;
+  * with `extendBody` and a rail on the side of the closing pane, the room
+    under the rail (and the `MediaQuery.padding` that goes with it) goes to
+    the other pane progressively as the closing pane uncovers it, instead of
+    in one jump of the slot width on the last frame.
 
 * `extendBody` also applies to a navigation beside the panes: the pane next
   to the rail (both when they are stacked around a horizontal fold, the one

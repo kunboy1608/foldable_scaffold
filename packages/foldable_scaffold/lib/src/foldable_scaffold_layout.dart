@@ -632,36 +632,68 @@ class PaneGeometryTween extends Tween<PaneGeometry> {
   }
 }
 
-/// Which pane is on the left and on the right edge of the pane area, for a
-/// navigation beside it that the panes extend under
-/// (`FoldableScaffold.extendBody`).
+/// How far each pane reaches past the left and the right edge of the pane
+/// area, under a navigation beside it that the panes extend under
+/// (`FoldableScaffold.extendBody`): [left] and [right] are how far the area
+/// can be reached past on each side (the width of the navigation slot there).
 ///
-/// Side by side, the left edge goes to the first shown pane from the left (the
-/// body in left-to-right text, the secondary body in right-to-left text, the
-/// other one when that one is hidden), and the right edge to the first one
-/// from the right. Stacked around a horizontal fold both panes span the width,
-/// so both have both edges. A hidden pane (zero extent) has none.
-({bool primaryLeft, bool primaryRight, bool secondaryLeft, bool secondaryRight})
-paneOuterEdges(PaneGeometry geometry, TextDirection textDirection) {
+/// A pane reaches past an edge as far as nothing of the other pane (or of the
+/// divider) lies between it and that edge: side by side, the pane on a side
+/// gets all of it and the other one none, as long as the pane between them is
+/// at least that wide. While a pane slides out (or in), the room it leaves
+/// goes to the other pane progressively, so the content of that pane, and the
+/// padding it sees, grow under the navigation with the animation instead of in
+/// one frame when the animation ends. Stacked around a horizontal fold both
+/// panes span the width, so both reach both edges. A hidden pane (zero
+/// extent) reaches nothing.
+({
+  double primaryLeft,
+  double primaryRight,
+  double secondaryLeft,
+  double secondaryRight,
+})
+paneReaches(
+  PaneGeometry geometry,
+  TextDirection textDirection, {
+  required double left,
+  required double right,
+}) {
   final primary = geometry.primaryVisible;
   final secondary = geometry.secondaryVisible;
   if (geometry.axis == Axis.vertical) {
     return (
-      primaryLeft: primary,
-      primaryRight: primary,
-      secondaryLeft: secondary,
-      secondaryRight: secondary,
+      primaryLeft: primary ? left : 0.0,
+      primaryRight: primary ? right : 0.0,
+      secondaryLeft: secondary ? left : 0.0,
+      secondaryRight: secondary ? right : 0.0,
     );
   }
+  // What lies between each pane and the far side of the area.
+  final besidePrimary = geometry.dividerExtent + geometry.secondaryExtent;
+  final besideSecondary = geometry.dividerExtent + geometry.primaryExtent;
+  double past(double reach, double covered) => math.max(0.0, reach - covered);
   final primaryOnLeft = textDirection == TextDirection.ltr;
-  // The pane on a side, or the other one when it is hidden.
-  final leftIsPrimary = primaryOnLeft ? primary : !secondary && primary;
-  final rightIsPrimary = primaryOnLeft ? !secondary && primary : primary;
   return (
-    primaryLeft: leftIsPrimary,
-    primaryRight: rightIsPrimary,
-    secondaryLeft: !leftIsPrimary && secondary,
-    secondaryRight: !rightIsPrimary && secondary,
+    primaryLeft: !primary
+        ? 0.0
+        : primaryOnLeft
+        ? left
+        : past(left, besidePrimary),
+    primaryRight: !primary
+        ? 0.0
+        : primaryOnLeft
+        ? past(right, besidePrimary)
+        : right,
+    secondaryLeft: !secondary
+        ? 0.0
+        : primaryOnLeft
+        ? past(left, besideSecondary)
+        : left,
+    secondaryRight: !secondary
+        ? 0.0
+        : primaryOnLeft
+        ? right
+        : past(right, besideSecondary),
   );
 }
 
@@ -676,21 +708,25 @@ paneOuterEdges(PaneGeometry geometry, TextDirection textDirection) {
 /// The content of a visible pane is never laid out narrower (or, stacked,
 /// shorter) than [minPaneExtent], capped by the extent of the whole pane area.
 /// A pane that is collapsing or expanding (its extent animating between zero
-/// and its target) keeps that extent and is aligned on its edge facing the
-/// divider: it slides out under the edge of the pane area, which clips it,
-/// instead of squeezing its content down to a few pixels. The other pane is
-/// not covered. A hidden pane (zero extent) is laid out at zero.
+/// and its target) keeps that extent, or the larger [primarySlideExtent] or
+/// [secondarySlideExtent] (the extent it had before it started closing, or the
+/// one it is opening to), and is aligned on its edge facing the divider: it
+/// slides out under the edge of the pane area, which clips it, instead of
+/// squeezing its content down first. The other pane is not covered. A hidden
+/// pane (zero extent) is laid out at zero.
 ///
 /// [extendLeft] and [extendRight] make the panes on the outer edges of the
-/// area (see [paneOuterEdges]) reach that much further on the left and the
-/// right, outside the area, under a navigation beside it
-/// (`FoldableScaffold.extendBody`). Only the content grows: where each pane
-/// and the divider are does not change.
+/// area reach that much further on the left and the right, outside the area,
+/// under a navigation beside it (`FoldableScaffold.extendBody`), as
+/// [paneReaches] says. Only the content grows: where each pane and the divider
+/// are does not change.
 class FoldablePaneLayoutDelegate extends MultiChildLayoutDelegate {
   FoldablePaneLayoutDelegate({
     required this.geometry,
     required this.textDirection,
     this.minPaneExtent = 0,
+    this.primarySlideExtent = 0,
+    this.secondarySlideExtent = 0,
     this.extendLeft = 0,
     this.extendRight = 0,
   });
@@ -702,6 +738,14 @@ class FoldablePaneLayoutDelegate extends MultiChildLayoutDelegate {
   /// laid out at: [FoldableScaffold.minBodySize].
   final double minPaneExtent;
 
+  /// The extent the content of the primary pane keeps while it slides in or
+  /// out, or zero when it follows the extent of the pane.
+  final double primarySlideExtent;
+
+  /// The extent the content of the secondary pane keeps while it slides in or
+  /// out, or zero when it follows the extent of the pane.
+  final double secondarySlideExtent;
+
   /// How far the pane on the left edge of the area reaches past it.
   final double extendLeft;
 
@@ -710,7 +754,12 @@ class FoldablePaneLayoutDelegate extends MultiChildLayoutDelegate {
 
   @override
   void performLayout(Size size) {
-    final outerEdges = paneOuterEdges(geometry, textDirection);
+    final reaches = paneReaches(
+      geometry,
+      textDirection,
+      left: extendLeft,
+      right: extendRight,
+    );
     final axis = geometry.axis;
     final isHorizontal = axis == Axis.horizontal;
     final extent = isHorizontal ? size.width : size.height;
@@ -737,20 +786,18 @@ class FoldablePaneLayoutDelegate extends MultiChildLayoutDelegate {
       double paneExtent, {
       double minExtent = 0,
       bool facesDividerAtPlacementEnd = false,
-      bool reachesLeft = false,
-      bool reachesRight = false,
+      double growLeft = 0,
+      double growRight = 0,
     }) {
       if (!hasChild(slot)) return;
       // A hidden pane (zero extent) stays laid out at zero, as documented on
       // [PaneGeometry.primaryVisible]; only a pane on its way out or in keeps
-      // the minimum.
+      // the minimum (or the extent it slides at).
       final contentExtent = paneExtent > 0 && paneExtent < minExtent
           ? minExtent
           : paneExtent;
-      // What a pane on an outer edge adds under a navigation beside the area,
-      // on the left and on the right.
-      final growLeft = reachesLeft ? extendLeft : 0.0;
-      final growRight = reachesRight ? extendRight : 0.0;
+      // [growLeft] and [growRight]: what a pane on an outer edge adds under a
+      // navigation beside the area, on the left and on the right.
       layoutChild(
         slot,
         isHorizontal
@@ -784,18 +831,24 @@ class FoldablePaneLayoutDelegate extends MultiChildLayoutDelegate {
     place(
       PaneSlot.primary,
       geometry.primaryExtent * scale,
-      minExtent: minContentExtent,
+      minExtent: math.max(
+        minContentExtent,
+        primarySlideExtent.clamp(0.0, extent),
+      ),
       facesDividerAtPlacementEnd: true,
-      reachesLeft: outerEdges.primaryLeft,
-      reachesRight: outerEdges.primaryRight,
+      growLeft: reaches.primaryLeft,
+      growRight: reaches.primaryRight,
     );
     place(PaneSlot.divider, geometry.dividerExtent * scale);
     place(
       PaneSlot.secondary,
       geometry.secondaryExtent * scale,
-      minExtent: minContentExtent,
-      reachesLeft: outerEdges.secondaryLeft,
-      reachesRight: outerEdges.secondaryRight,
+      minExtent: math.max(
+        minContentExtent,
+        secondarySlideExtent.clamp(0.0, extent),
+      ),
+      growLeft: reaches.secondaryLeft,
+      growRight: reaches.secondaryRight,
     );
   }
 
@@ -806,6 +859,8 @@ class FoldablePaneLayoutDelegate extends MultiChildLayoutDelegate {
         geometry.dividerExtent != oldDelegate.geometry.dividerExtent ||
         geometry.secondaryExtent != oldDelegate.geometry.secondaryExtent ||
         minPaneExtent != oldDelegate.minPaneExtent ||
+        primarySlideExtent != oldDelegate.primarySlideExtent ||
+        secondarySlideExtent != oldDelegate.secondarySlideExtent ||
         extendLeft != oldDelegate.extendLeft ||
         extendRight != oldDelegate.extendRight ||
         textDirection != oldDelegate.textDirection;

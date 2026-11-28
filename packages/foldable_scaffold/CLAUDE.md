@@ -31,9 +31,9 @@ $F/flutter test                           # package; cũng example/, ../foldable
 $F/dart doc --dry-run; rm -rf doc         # phải 0 warning; xoá doc/ do lệnh tạo ra
 ```
 
-Mốc gần nhất: package 464 test, example 12, foldable_router 238, foldable_core 4, tất cả pass (foldable_router/example: 30 pass, 10 fail sẵn trong `app_test.dart`).
+Mốc gần nhất: package 486 test, example 12, foldable_router 238, foldable_core 4, tất cả pass (foldable_router/example: 34 pass, 10 fail sẵn trong `app_test.dart`, cùng tập với trước).
 
-Pane đang co/mở (extent giữa 0 và đích) được layout ít nhất `minBodySize`, neo cạnh phía divider, trượt ra dưới `ClipRect` (`FoldablePaneLayoutDelegate.minPaneExtent`); pane ẩn hẳn vẫn rộng 0. Router cắt trang theo phần frame nhìn thấy (`PaneMetrics.visibleRectFor`).
+Pane đang co/mở (extent giữa 0 và đích) được layout ít nhất `minBodySize` và giữ bề rộng lúc bắt đầu đóng / bề rộng đích lúc mở (`_updateSlideExtents` → `FoldablePaneLayoutDelegate.primary/secondarySlideExtent`), neo cạnh phía divider, trượt ra dưới `ClipRect`; pane ẩn hẳn vẫn rộng 0. `secondaryBody` bị gỡ (null) được giữ (`_leavingSecondaryBody`) tới khi pane trượt hết. Với `extendBody`, phần dưới rail chuyển dần sang pane còn lại (`paneReaches` thay `paneOuterEdges`). Router cắt trang theo phần frame nhìn thấy (`PaneMetrics.visibleRectFor`); trang dưới giữ tắt parallax tới khi secondary animation bắt đầu lúc còn hai pane dừng (`_BranchPageRoute._holdsParallax`). Test liên tục từng khung: `test/foldable_scaffold_close_secondary_test.dart`, `foldable_router/example/test/with_scaffold_pop_test.dart`.
 
 ## 4. Cấu trúc code (`lib/src`)
 
@@ -97,3 +97,4 @@ Khoảng trống đã biết:
 - Widget có `SafeArea` riêng (NavigationRail, AppBar) bị ảnh hưởng bởi `MediaQuery.padding` còn sót: luôn kiểm tra khi scaffold đã tự áp padding.
 - Đừng nhầm "chạy bản cũ": người dùng chạy code đã push; tìm nguyên nhân bằng tái hiện.
 - Khi tìm tài liệu Apple, WebFetch chỉ trả tiêu đề (trang render bằng JS): dùng browser tích hợp.
+- "Animation giật/nhảy": lấy mẫu từng khung nhỏ (4–16 ms) rect + clip + opacity + padding, chạy cả `TargetPlatform.iOS` (transition Cupertino có parallax mà Android không có). `FoldablePaneLayout` báo visibility theo *đích*, nên router đổi chế độ một pane ngay khung đầu của animation pane.

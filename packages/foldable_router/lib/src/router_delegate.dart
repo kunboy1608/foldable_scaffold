@@ -379,7 +379,13 @@ class _BranchPageRoute<T> extends PageRoute<T> with FoldablePageRouteMixin<T> {
       bool allowSnapshotting,
       Widget? child,
     ) {
-      if (_metrics.twoPane.value) return null;
+      // The route below decides: it keeps its parallax off until a
+      // transition that started with two panes is over.
+      final ModalRoute<Object?>? below = ModalRoute.of(context);
+      final bool noParallax = below is _BranchPageRoute<Object?>
+          ? below._holdsParallax()
+          : _metrics.twoPane.value;
+      if (noParallax) return null;
       return onePane(
         context,
         animation,
@@ -433,13 +439,12 @@ class _BranchPageRoute<T> extends PageRoute<T> with FoldablePageRouteMixin<T> {
       ]),
       child: child,
       builder: (BuildContext context, Widget? child) {
-        final bool twoPane = _metrics.twoPane.value;
         final Widget transitioned = pageTransitionsResolver(context)
             .buildTransitions<T>(
               this,
               context,
               animation,
-              twoPane ? kAlwaysDismissedAnimation : secondaryAnimation,
+              _holdsParallax() ? kAlwaysDismissedAnimation : secondaryAnimation,
               child!,
             );
         return PaneSlot(
@@ -451,6 +456,28 @@ class _BranchPageRoute<T> extends PageRoute<T> with FoldablePageRouteMixin<T> {
       },
     );
   }
+
+  /// Whether the outgoing (parallax) transition of this page is off: always
+  /// in a two-pane tab, and in a one-pane tab until the secondary animation
+  /// that was running when the tab had two panes settles.
+  ///
+  /// Popping the page on the right of a two-pane tab often turns the tab into
+  /// one pane on the very first frame of the pop (the layout closes the right
+  /// pane). Without the hold, this page (on the left, not moved so far) would
+  /// take the parallax offset of the running secondary animation in that
+  /// frame: a third of the tab area to the side on iOS, a jump.
+  ///
+  /// Evaluated whenever the transitions are built, which the route does on
+  /// every tick of its animations.
+  bool _holdsParallax() {
+    if (_metrics.twoPane.value) return _parallaxHeld = true;
+    if (_parallaxHeld && !(secondaryAnimation?.isAnimating ?? false)) {
+      _parallaxHeld = false;
+    }
+    return _parallaxHeld;
+  }
+
+  bool _parallaxHeld = false;
 
   /// Keeps the framework's idea of the opacity of the page in sync with the
   /// current mode (the mode changes without any transition running).
